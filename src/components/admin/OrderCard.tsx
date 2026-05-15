@@ -112,7 +112,7 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
-      className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-shadow ${
+      className={`bg-white rounded-2xl border shadow-sm transition-shadow ${
         selected ? 'border-indigo-400 ring-2 ring-indigo-100' : isPending ? 'border-amber-200' : 'border-slate-100'
       }`}
     >

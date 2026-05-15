@@ -1,0 +1,2 @@
+ALTER TABLE vendors ADD COLUMN IF NOT EXISTS email text;
+ALTER TABLE vendors ADD COLUMN IF NOT EXISTS phone text;

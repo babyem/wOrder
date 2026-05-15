@@ -32,8 +32,9 @@ export default function OrderModal({ open, onClose, locationId, employeeId }: Pr
         onClose()
         toast.success('Order submitted successfully!')
       }, 1800)
-    } catch {
-      toast.error('Failed to submit order. Please try again.')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error(`Failed to submit order: ${msg}`)
     }
   }
 

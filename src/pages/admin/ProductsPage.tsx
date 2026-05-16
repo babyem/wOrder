@@ -205,9 +205,15 @@ function InlineEditRow({ product: p, onDelete, onDuplicate }: {
   const [name, setName] = useState(p.name)
   const [editingVendorName, setEditingVendorName] = useState(false)
   const [vendorName, setVendorName] = useState(p.vendor_name ?? '')
+  const [editingChefsId, setEditingChefsId] = useState(false)
+  const [chefsId, setChefsId] = useState(p.chefsculinar_id ?? '')
+  const [editingChefsUnit, setEditingChefsUnit] = useState(false)
+  const [chefsUnit, setChefsUnit] = useState(p.chefsculinar_unit ?? '')
 
   useEffect(() => { setName(p.name) }, [p.name])
   useEffect(() => { setVendorName(p.vendor_name ?? '') }, [p.vendor_name])
+  useEffect(() => { setChefsId(p.chefsculinar_id ?? '') }, [p.chefsculinar_id])
+  useEffect(() => { setChefsUnit(p.chefsculinar_unit ?? '') }, [p.chefsculinar_unit])
 
   const toggleField = (field: Exclude<OpenField, null>) =>
     setOpenField(prev => prev === field ? null : field)
@@ -227,6 +233,20 @@ function InlineEditRow({ product: p, onDelete, onDuplicate }: {
     if (trimmed !== (p.vendor_name ?? '')) save({ vendor_name: trimmed || null })
     else setVendorName(p.vendor_name ?? '')
     setEditingVendorName(false)
+  }
+
+  const saveChefsId = () => {
+    const trimmed = chefsId.trim()
+    if (trimmed !== (p.chefsculinar_id ?? '')) save({ chefsculinar_id: trimmed || null })
+    else setChefsId(p.chefsculinar_id ?? '')
+    setEditingChefsId(false)
+  }
+
+  const saveChefsUnit = () => {
+    const trimmed = chefsUnit.trim()
+    if (trimmed !== (p.chefsculinar_unit ?? '')) save({ chefsculinar_unit: trimmed || null })
+    else setChefsUnit(p.chefsculinar_unit ?? '')
+    setEditingChefsUnit(false)
   }
 
   const toggleLoc = (id: string) => {
@@ -269,6 +289,32 @@ function InlineEditRow({ product: p, onDelete, onDuplicate }: {
           <button onClick={() => setEditingVendorName(true)}
             className={`text-xs truncate text-left leading-tight ${p.vendor_name ? 'text-amber-600 hover:text-amber-700' : 'text-slate-300 hover:text-slate-400'}`}>
             {p.vendor_name ?? '+ vendor name'}
+          </button>
+        )}
+      </div>
+
+      {/* ChefsCulinar article ID + unit */}
+      <div className="flex flex-col shrink-0 w-20">
+        {editingChefsId ? (
+          <input value={chefsId} onChange={e => setChefsId(e.target.value)} onBlur={saveChefsId}
+            onKeyDown={e => { if (e.key === 'Enter') saveChefsId(); if (e.key === 'Escape') { setChefsId(p.chefsculinar_id ?? ''); setEditingChefsId(false) } }}
+            placeholder="Art.nr…"
+            className="w-full px-1.5 py-0.5 rounded border border-blue-300 text-xs focus:outline-none bg-white" autoFocus />
+        ) : (
+          <button onClick={() => setEditingChefsId(true)}
+            className={`text-xs truncate text-left leading-tight ${p.chefsculinar_id ? 'text-blue-600 hover:text-blue-700' : 'text-slate-300 hover:text-slate-400'}`}>
+            {p.chefsculinar_id ?? '+ art.nr'}
+          </button>
+        )}
+        {editingChefsUnit ? (
+          <input value={chefsUnit} onChange={e => setChefsUnit(e.target.value)} onBlur={saveChefsUnit}
+            onKeyDown={e => { if (e.key === 'Enter') saveChefsUnit(); if (e.key === 'Escape') { setChefsUnit(p.chefsculinar_unit ?? ''); setEditingChefsUnit(false) } }}
+            placeholder="Enhet…"
+            className="w-full px-1.5 py-0.5 rounded border border-blue-300 text-xs focus:outline-none bg-white" autoFocus />
+        ) : (
+          <button onClick={() => setEditingChefsUnit(true)}
+            className={`text-xs truncate text-left leading-tight ${p.chefsculinar_unit ? 'text-blue-400 hover:text-blue-600' : 'text-slate-300 hover:text-slate-400'}`}>
+            {p.chefsculinar_unit ?? '+ enhet'}
           </button>
         )}
       </div>

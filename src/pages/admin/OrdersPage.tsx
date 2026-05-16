@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Search, RefreshCw, GitMerge, Bell, X, Mail, Phone, GripVertical, Loader2 } from 'lucide-react'
+import { Search, RefreshCw, GitMerge, Bell, X, Mail, Phone, GripVertical, Loader2, ShoppingBag } from 'lucide-react'
 import { useOrders, useMergeOrders } from '../../hooks/useOrders'
 import { useLocations } from '../../hooks/useLocations'
 import { useVendors } from '../../hooks/useMetadata'
@@ -61,6 +61,7 @@ export default function OrdersPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [showBatchNotify, setShowBatchNotify] = useState(false)
   const [batchSending, setBatchSending] = useState<string | null>(null)
+  const [sendingChefs, setSendingChefs] = useState(false)
   const [columnOrder, setColumnOrder] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('orders-column-order') ?? '[]') } catch { return [] }
   })
@@ -169,6 +170,44 @@ export default function OrdersPage() {
     }
   }
 
+  const handleSendToChefsCulinar = async () => {
+    const webhookUrl = import.meta.env.VITE_N8N_CHEFSCULINAR_WEBHOOK
+    if (!webhookUrl) { toast.error('Webhook URL saknas — sätt VITE_N8N_CHEFSCULINAR_WEBHOOK i .env'); return }
+
+    const pendingOrders = (orders ?? []).filter(o => o.status === 'pending')
+    const aggregated = new Map<string, { quantity: number; unit: string }>()
+    for (const order of pendingOrders) {
+      for (const item of order.items) {
+        const id = item.product?.chefsculinar_id
+        if (!id) continue
+        const existing = aggregated.get(id)
+        if (existing) existing.quantity += item.quantity
+        else aggregated.set(id, { quantity: item.quantity, unit: item.product?.chefsculinar_unit ?? 'st' })
+      }
+    }
+
+    if (aggregated.size === 0) { toast.error('Inga produkter med ChefsCulinar-artikelnummer hittades'); return }
+
+    const products = Array.from(aggregated.entries()).map(([chefsculinar_id, { quantity, unit }]) => ({
+      chefsculinar_id, quantity, unit,
+    }))
+
+    setSendingChefs(true)
+    try {
+      const res = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ products }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      toast.success(`${products.length} produkter skickade till ChefsCulinar`)
+    } catch (err) {
+      toast.error(`Misslyckades: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setSendingChefs(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4 h-full pb-20">
       {/* Top bar */}
@@ -196,6 +235,14 @@ export default function OrdersPage() {
           className="p-2 rounded-xl hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-700"
         >
           <RefreshCw size={17} />
+        </button>
+        <button
+          onClick={handleSendToChefsCulinar}
+          disabled={sendingChefs}
+          className="flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+        >
+          {sendingChefs ? <Loader2 size={15} className="animate-spin" /> : <ShoppingBag size={15} />}
+          Skicka till ChefsCulinar
         </button>
       </div>
 

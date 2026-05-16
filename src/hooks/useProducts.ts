@@ -33,7 +33,7 @@ export function useProducts(activeOnly = false, locationId?: string) {
 export function useCreateProduct() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (product: Omit<Product, 'id' | 'created_at'>) => {
+    mutationFn: async (product: Omit<Product, 'id' | 'created_at' | 'chefsculinar_id' | 'chefsculinar_unit'> & { chefsculinar_id?: string | null; chefsculinar_unit?: string | null }) => {
       const { data, error } = await supabase.from('products').insert(product).select().single()
       if (error) throw error
       return data

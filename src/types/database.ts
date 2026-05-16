@@ -13,7 +13,7 @@ export interface Database {
       }
       products: {
         Row: Product
-        Insert: Omit<Product, 'id' | 'created_at'>
+        Insert: Omit<Product, 'id' | 'created_at' | 'chefsculinar_id' | 'chefsculinar_unit'> & { chefsculinar_id?: string | null; chefsculinar_unit?: string | null }
         Update: Partial<Omit<Product, 'id' | 'created_at'>>
       }
       orders: {

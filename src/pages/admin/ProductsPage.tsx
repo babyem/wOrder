@@ -209,11 +209,14 @@ function InlineEditRow({ product: p, onDelete, onDuplicate }: {
   const [chefsId, setChefsId] = useState(p.chefsculinar_id ?? '')
   const [editingChefsUnit, setEditingChefsUnit] = useState(false)
   const [chefsUnit, setChefsUnit] = useState(p.chefsculinar_unit ?? '')
+  const [editingChefsQty, setEditingChefsQty] = useState(false)
+  const [chefsQty, setChefsQty] = useState(String(p.chefsculinar_unit_qty ?? ''))
 
   useEffect(() => { setName(p.name) }, [p.name])
   useEffect(() => { setVendorName(p.vendor_name ?? '') }, [p.vendor_name])
   useEffect(() => { setChefsId(p.chefsculinar_id ?? '') }, [p.chefsculinar_id])
   useEffect(() => { setChefsUnit(p.chefsculinar_unit ?? '') }, [p.chefsculinar_unit])
+  useEffect(() => { setChefsQty(String(p.chefsculinar_unit_qty ?? '')) }, [p.chefsculinar_unit_qty])
 
   const toggleField = (field: Exclude<OpenField, null>) =>
     setOpenField(prev => prev === field ? null : field)
@@ -247,6 +250,14 @@ function InlineEditRow({ product: p, onDelete, onDuplicate }: {
     if (trimmed !== (p.chefsculinar_unit ?? '')) save({ chefsculinar_unit: trimmed || null })
     else setChefsUnit(p.chefsculinar_unit ?? '')
     setEditingChefsUnit(false)
+  }
+
+  const saveChefsQty = () => {
+    const num = parseFloat(chefsQty)
+    const val = isNaN(num) ? null : num
+    if (val !== (p.chefsculinar_unit_qty ?? null)) save({ chefsculinar_unit_qty: val })
+    else setChefsQty(String(p.chefsculinar_unit_qty ?? ''))
+    setEditingChefsQty(false)
   }
 
   const toggleLoc = (id: string) => {
@@ -306,17 +317,32 @@ function InlineEditRow({ product: p, onDelete, onDuplicate }: {
             {p.chefsculinar_id ?? '+ art.nr'}
           </button>
         )}
-        {editingChefsUnit ? (
-          <input value={chefsUnit} onChange={e => setChefsUnit(e.target.value)} onBlur={saveChefsUnit}
-            onKeyDown={e => { if (e.key === 'Enter') saveChefsUnit(); if (e.key === 'Escape') { setChefsUnit(p.chefsculinar_unit ?? ''); setEditingChefsUnit(false) } }}
-            placeholder="Enhet…"
-            className="w-full px-1.5 py-0.5 rounded border border-blue-300 text-xs focus:outline-none bg-white" autoFocus />
-        ) : (
-          <button onClick={() => setEditingChefsUnit(true)}
-            className={`text-xs truncate text-left leading-tight ${p.chefsculinar_unit ? 'text-blue-400 hover:text-blue-600' : 'text-slate-300 hover:text-slate-400'}`}>
-            {p.chefsculinar_unit ?? '+ enhet'}
-          </button>
-        )}
+        <div className="flex gap-1">
+          {editingChefsUnit ? (
+            <input value={chefsUnit} onChange={e => setChefsUnit(e.target.value)} onBlur={saveChefsUnit}
+              onKeyDown={e => { if (e.key === 'Enter') saveChefsUnit(); if (e.key === 'Escape') { setChefsUnit(p.chefsculinar_unit ?? ''); setEditingChefsUnit(false) } }}
+              placeholder="Enhet…"
+              className="w-10 px-1.5 py-0.5 rounded border border-blue-300 text-xs focus:outline-none bg-white" autoFocus />
+          ) : (
+            <button onClick={() => setEditingChefsUnit(true)}
+              className={`text-xs truncate text-left leading-tight ${p.chefsculinar_unit ? 'text-blue-400 hover:text-blue-600' : 'text-slate-300 hover:text-slate-400'}`}>
+              {p.chefsculinar_unit ?? '+ enhet'}
+            </button>
+          )}
+          {editingChefsQty ? (
+            <input value={chefsQty} onChange={e => setChefsQty(e.target.value)} onBlur={saveChefsQty}
+              onKeyDown={e => { if (e.key === 'Enter') saveChefsQty(); if (e.key === 'Escape') { setChefsQty(String(p.chefsculinar_unit_qty ?? '')); setEditingChefsQty(false) } }}
+              placeholder="1"
+              className="w-8 px-1.5 py-0.5 rounded border border-blue-300 text-xs focus:outline-none bg-white" autoFocus />
+          ) : (p.chefsculinar_unit_qty && p.chefsculinar_unit_qty !== 1) ? (
+            <button onClick={() => setEditingChefsQty(true)}
+              className="text-xs text-blue-300 hover:text-blue-500 leading-tight">
+              ×{p.chefsculinar_unit_qty}
+            </button>
+          ) : (
+            <button onClick={() => setEditingChefsQty(true)} className="text-xs text-slate-200 hover:text-slate-400 leading-tight">×1</button>
+          )}
+        </div>
       </div>
 
       {/* Field dropdowns: vendor, category, unit */}

@@ -13,7 +13,7 @@ export interface Database {
       }
       products: {
         Row: Product
-        Insert: Omit<Product, 'id' | 'created_at' | 'chefsculinar_id' | 'chefsculinar_unit'> & { chefsculinar_id?: string | null; chefsculinar_unit?: string | null }
+        Insert: Omit<Product, 'id' | 'created_at' | 'chefsculinar_id' | 'chefsculinar_unit' | 'chefsculinar_unit_qty'> & { chefsculinar_id?: string | null; chefsculinar_unit?: string | null; chefsculinar_unit_qty?: number | null }
         Update: Partial<Omit<Product, 'id' | 'created_at'>>
       }
       orders: {
@@ -57,6 +57,7 @@ export interface Product {
   created_at: string
   chefsculinar_id: string | null
   chefsculinar_unit: string | null
+  chefsculinar_unit_qty: number | null
 }
 
 export interface Order {

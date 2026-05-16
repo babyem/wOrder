@@ -182,7 +182,7 @@ export default function OrdersPage() {
         if (!id) continue
         const existing = aggregated.get(id)
         if (existing) existing.quantity += item.quantity
-        else aggregated.set(id, { quantity: item.quantity, unit: item.product?.chefsculinar_unit ?? 'st' })
+        else aggregated.set(id, { quantity: item.quantity, unit: item.product?.chefsculinar_unit ?? 'st', unit_qty: item.product?.chefsculinar_unit_qty ?? 1 } as { quantity: number; unit: string; unit_qty: number })
       }
     }
 

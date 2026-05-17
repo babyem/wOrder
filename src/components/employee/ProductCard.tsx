@@ -25,10 +25,11 @@ export default function ProductCard({ product }: Props) {
   const onQtyPointerMove = (e: React.PointerEvent<HTMLSpanElement>) => {
     if (!dragState.current) return
     const delta = dragState.current.startY - e.clientY
-    const next = Math.max(1, dragState.current.startQty + Math.round(delta / 18))
+    const next = Math.max(0, dragState.current.startQty + Math.round(delta / 18))
     if (next !== dragState.current.last) {
       dragState.current.last = next
-      updateQuantity(product.id, next)
+      if (next === 0) removeItem(product.id)
+      else updateQuantity(product.id, next)
     }
     setScrubber(s => s ? { ...s, qty: next } : null)
   }

@@ -31,10 +31,11 @@ export default function OrderModal({ open, onClose, locationId, employeeId }: Pr
   const onQtyPointerMove = (e: React.PointerEvent<HTMLSpanElement>) => {
     if (!dragState.current) return
     const delta = dragState.current.startY - e.clientY
-    const next = Math.max(1, dragState.current.startQty + Math.round(delta / 18))
+    const next = Math.max(0, dragState.current.startQty + Math.round(delta / 18))
     if (next !== dragState.current.last) {
       dragState.current.last = next
-      updateQuantity(dragState.current.productId, next)
+      if (next === 0) updateQuantity(dragState.current.productId, 0)
+      else updateQuantity(dragState.current.productId, next)
     }
     setScrubber(s => s ? { ...s, qty: next } : null)
   }

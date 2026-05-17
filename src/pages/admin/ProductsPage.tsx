@@ -912,19 +912,36 @@ export default function ProductsPage() {
         <div className="flex justify-center py-16"><Spinner size={32} /></div>
       ) : !products.length ? (
         <EmptyState icon={Package} title={hasFilters ? 'No products match filters' : 'No products yet'} description={hasFilters ? 'Try clearing filters' : "Click 'Add' to get started."} />
-      ) : (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={products.map(p => p.id)} strategy={verticalListSortingStrategy}>
-              <div className="divide-y divide-slate-100">
-                {products.map(p => (
-                  <InlineEditRow key={p.id} product={p} onDelete={handleDelete} onDuplicate={handleDuplicate} />
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
-        </div>
-      )}
+      ) : (() => {
+          const groups: [string, Product[]][] = []
+          for (const p of products) {
+            const v = p.vendor || 'No Vendor'
+            const last = groups[groups.length - 1]
+            if (last && last[0] === v) last[1].push(p)
+            else groups.push([v, [p]])
+          }
+          return (
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={products.map(p => p.id)} strategy={verticalListSortingStrategy}>
+                <div className="space-y-3">
+                  {groups.map(([vendor, prods]) => (
+                    <div key={vendor} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                      <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">{vendor}</span>
+                        <span className="text-xs text-slate-400">{prods.length}</span>
+                      </div>
+                      <div className="divide-y divide-slate-100">
+                        {prods.map(p => (
+                          <InlineEditRow key={p.id} product={p} onDelete={handleDelete} onDuplicate={handleDuplicate} />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+          )
+      })()}
 
       <BatchAddModal
         open={batchModalOpen}

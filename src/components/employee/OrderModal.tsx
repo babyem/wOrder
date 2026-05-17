@@ -26,7 +26,8 @@ export default function OrderModal({ open, onClose, locationId, employeeId }: Pr
     e.currentTarget.setPointerCapture(e.pointerId)
     const rect = e.currentTarget.getBoundingClientRect()
     dragState.current = { startY: e.clientY, startQty: qty, last: qty, productId }
-    setScrubber({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, qty })
+    const cx = Math.max(36, Math.min(rect.left + rect.width / 2, window.innerWidth - 36))
+    setScrubber({ x: cx, y: rect.top + rect.height / 2, qty })
   }
   const onQtyPointerMove = (e: React.PointerEvent<HTMLSpanElement>) => {
     if (!dragState.current) return
@@ -75,25 +76,29 @@ export default function OrderModal({ open, onClose, locationId, employeeId }: Pr
       className="fixed z-[300] pointer-events-none"
       style={{ left: scrubber.x, top: scrubber.y, transform: 'translate(-50%, -50%)' }}
     >
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden w-14">
-        {scrubberOffsets.map(offset => {
-          const n = scrubber.qty + offset
-          const isCenter = offset === 0
-          return (
-            <div
-              key={offset}
-              className={`text-center py-1 leading-tight ${
-                isCenter
-                  ? 'text-indigo-600 font-bold text-xl bg-indigo-50'
-                  : Math.abs(offset) === 1
-                    ? 'text-slate-400 text-sm'
-                    : 'text-slate-200 text-xs'
-              }`}
-            >
-              {n >= 0 ? n : ''}
-            </div>
-          )
-        })}
+      <div className="relative w-14">
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+          {scrubberOffsets.map(offset => {
+            const n = scrubber.qty + offset
+            const isCenter = offset === 0
+            return (
+              <div
+                key={offset}
+                className={`text-center py-1 leading-tight ${
+                  isCenter
+                    ? 'text-indigo-600 font-bold text-xl bg-indigo-50'
+                    : Math.abs(offset) === 1
+                      ? 'text-slate-400 text-sm'
+                      : 'text-slate-200 text-xs'
+                }`}
+              >
+                {n >= 0 ? n : ''}
+              </div>
+            )
+          })}
+        </div>
+        <div className="absolute inset-x-0 top-0 h-9 bg-gradient-to-b from-white to-transparent rounded-t-2xl pointer-events-none" />
+        <div className="absolute inset-x-0 bottom-0 h-9 bg-gradient-to-t from-white to-transparent rounded-b-2xl pointer-events-none" />
       </div>
     </div>
   )

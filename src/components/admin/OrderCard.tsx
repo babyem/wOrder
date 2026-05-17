@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CheckCircle, RotateCcw, Trash2, Clock, MapPin, User, FileText, Mail, Phone, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag } from 'lucide-react'
+import { CheckCircle, RotateCcw, Trash2, Clock, MapPin, User, FileText, Mail, Phone, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag, AlertTriangle } from 'lucide-react'
 import type { OrderWithDetails } from '../../types'
 import { useUpdateOrderStatus, useDeleteOrder, useUpdateOrderItem } from '../../hooks/useOrders'
 import { useVendors, useUnits } from '../../hooks/useMetadata'
@@ -43,6 +43,9 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
   const [editingQtyItem, setEditingQtyItem] = useState<string | null>(null)
   const [qtyDraft, setQtyDraft] = useState('')
   const [sendingChefs, setSendingChefs] = useState(false)
+  const [chefsOrderFailed, setChefsOrderFailed] = useState<boolean>(
+    () => localStorage.getItem(`chefs_failed_${order.id}`) === 'true'
+  )
 
   // Local state for instant feedback — initialised from server, persisted to DB in background
   const [excluded, setExcluded] = useState<Set<string>>(
@@ -162,8 +165,12 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       await updateStatus.mutateAsync({ id: order.id, status: 'done' })
+      setChefsOrderFailed(false)
+      localStorage.removeItem(`chefs_failed_${order.id}`)
       toast.success('Beställning lagd hos ChefsCulinar!')
     } catch (err) {
+      setChefsOrderFailed(true)
+      localStorage.setItem(`chefs_failed_${order.id}`, 'true')
       toast.error(`Misslyckades: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setSendingChefs(false)
@@ -276,7 +283,11 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
     </div>
   )
 
-  const cardBorder = selected ? 'border-indigo-400 ring-2 ring-indigo-100' : isPending ? 'border-amber-200' : 'border-slate-100'
+  const cardBorder = chefsOrderFailed
+    ? 'border-red-400 ring-2 ring-red-100'
+    : selected ? 'border-indigo-400 ring-2 ring-indigo-100'
+    : isPending ? 'border-amber-200'
+    : 'border-slate-100'
   const statusBarClass = selected ? 'bg-indigo-50 text-indigo-700' : isPending ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
 
   return (
@@ -316,8 +327,8 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
             <div className="flex items-center gap-1 shrink-0">
               {chefsItems.length > 0 && isPending && (
                 <button onClick={handleSendToChefs} disabled={sendingChefs} title="Skicka till ChefsCulinar"
-                  className="p-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 disabled:opacity-50 transition-colors">
-                  {sendingChefs ? <Loader2 size={14} className="animate-spin" /> : <ShoppingBag size={14} />}
+                  className={`p-1.5 rounded-lg disabled:opacity-50 transition-colors ${chefsOrderFailed ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}>
+                  {sendingChefs ? <Loader2 size={14} className="animate-spin" /> : chefsOrderFailed ? <AlertTriangle size={14} /> : <ShoppingBag size={14} />}
                 </button>
               )}
               {orderVendors.length > 0 && (
@@ -343,6 +354,23 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
               </button>
             </div>
           </div>
+
+          {chefsOrderFailed && (
+            <div className="flex items-center justify-between gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2 text-xs text-red-600">
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={13} className="shrink-0" />
+                <span className="font-medium">ChefsCulinar order failed — not yet placed</span>
+              </div>
+              <button
+                onClick={handleSendToChefs}
+                disabled={sendingChefs}
+                className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg bg-red-100 hover:bg-red-200 font-medium disabled:opacity-50 transition-colors"
+              >
+                {sendingChefs ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />}
+                Retry
+              </button>
+            </div>
+          )}
 
           <div className="border-t border-slate-50 pt-2">
             {isMultiVendor && (

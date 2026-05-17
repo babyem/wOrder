@@ -133,10 +133,40 @@
       }
     },
     {
+      "name": "Submit Order",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1440, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.chefsculinar.se/api/checkout/weborder",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {"name": "basketId", "value": "={{ $('Get Basket').item.json.Model.Id }}"},
+            {"name": "_n", "value": "1"},
+            {"name": "_u", "value": "1"}
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Cookie", "value": "={{ $('Change Customer').item.json.headers['set-cookie'].join('; ') }}"},
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "{\"Message\":{\"Text\":null}}",
+        "options": {}
+      }
+    },
+    {
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1440, 300],
+      "position": [1680, 300],
       "parameters": {
         "respondWith": "json",
         "responseBody": "={ \"ok\": true }"
@@ -148,6 +178,7 @@
     "Login": {"main": [[{"node": "Change Customer", "type": "main", "index": 0}]]},
     "Change Customer": {"main": [[{"node": "Get Basket", "type": "main", "index": 0}]]},
     "Get Basket": {"main": [[{"node": "Put Basket", "type": "main", "index": 0}]]},
-    "Put Basket": {"main": [[{"node": "Respond", "type": "main", "index": 0}]]}
+    "Put Basket": {"main": [[{"node": "Submit Order", "type": "main", "index": 0}]]},
+    "Submit Order": {"main": [[{"node": "Respond", "type": "main", "index": 0}]]}
   }
 }

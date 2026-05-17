@@ -124,7 +124,8 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
         }),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      toast.success(`${products.length} produkter skickade till ChefsCulinar`)
+      await updateStatus.mutateAsync({ id: order.id, status: 'done' })
+      toast.success('Beställning lagd hos ChefsCulinar!')
     } catch (err) {
       toast.error(`Misslyckades: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
@@ -178,7 +179,7 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            {chefsItems.length > 0 && (
+            {chefsItems.length > 0 && isPending && (
               <button
                 onClick={handleSendToChefs}
                 disabled={sendingChefs}

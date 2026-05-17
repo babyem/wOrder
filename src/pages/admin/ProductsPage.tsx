@@ -107,51 +107,6 @@ function ImageUploadThumb({ product, size = 10 }: { product: Product; size?: num
   )
 }
 
-// ── Sortable row (normal mode) ───────────────────────────────────────────────
-
-interface RowProps {
-  product: Product
-  onToggleActive: (p: Product) => void
-  onDelete: (p: Product) => void
-  onDuplicate: (p: Product) => void
-}
-
-function SortableRow({ product: p, onToggleActive, onDelete, onDuplicate }: RowProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: p.id })
-  const style = { transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 10 : undefined, opacity: isDragging ? 0.85 : 1 }
-
-  return (
-    <div ref={setNodeRef} style={style}
-      className={`flex items-center gap-3 px-4 py-3 bg-white transition-colors ${isDragging ? 'shadow-lg rounded-xl' : ''}`}
-    >
-      <button {...attributes} {...listeners}
-        className="text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing touch-none p-1 -ml-1 shrink-0">
-        <GripVertical size={16} />
-      </button>
-
-      <ImageUploadThumb product={p} size={10} />
-
-      <div className="flex-1 min-w-0">
-        <p className="font-medium text-slate-900 text-sm truncate">{p.name}</p>
-        <p className="text-xs text-slate-400">{p.vendor || '—'} · {p.category} · {p.unit}</p>
-      </div>
-
-      <div className="flex items-center gap-1 shrink-0">
-        <button onClick={() => onToggleActive(p)}
-          className={`p-1.5 rounded-lg transition-colors ${p.active ? 'text-emerald-500 hover:bg-emerald-50' : 'text-slate-300 hover:bg-slate-100'}`}>
-          {p.active ? <Eye size={16} /> : <EyeOff size={16} />}
-        </button>
-        <button onClick={() => onDuplicate(p)} className="p-1.5 rounded-lg text-slate-300 hover:text-indigo-500 hover:bg-indigo-50 transition-colors">
-          <Copy size={16} />
-        </button>
-        <button onClick={() => onDelete(p)} className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors">
-          <Trash2 size={16} />
-        </button>
-      </div>
-    </div>
-  )
-}
-
 // ── Field dropdown (popover anchored to tag) ─────────────────────────────────
 
 function FieldDropdown({ label, open, onToggle, onClose, children }: {
@@ -729,11 +684,6 @@ export default function ProductsPage() {
     const newOrder = arrayMove(ids, ids.indexOf(active.id as string), ids.indexOf(over.id as string))
     setLocalOrder(newOrder)
     await Promise.all(newOrder.map((id, idx) => supabase.from('products').update({ sort_order: idx }).eq('id', id)))
-  }
-
-  const handleToggleActive = async (p: Product) => {
-    try { await updateProduct.mutateAsync({ id: p.id, active: !p.active }) }
-    catch { toast.error('Failed') }
   }
 
   const handleDelete = async (p: Product) => {

@@ -242,8 +242,15 @@ function InlineEditRow({ product: p, onDelete, onDuplicate }: {
       active ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
     }`
 
+  if (isDragging) {
+    return (
+      <div ref={setNodeRef} style={style}
+           className="h-11 mx-2 my-0.5 rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/30" />
+    )
+  }
+
   return (
-    <div ref={setNodeRef} style={style} className={`flex items-center gap-2 px-3 py-1.5 bg-white ${isDragging ? 'shadow-lg rounded-xl' : ''}`}>
+    <div ref={setNodeRef} style={style} className="flex items-center gap-2 px-3 py-1.5 bg-white">
       {/* Drag handle */}
       <button {...attributes} {...listeners}
         className="text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing touch-none p-0.5 shrink-0">

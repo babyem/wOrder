@@ -703,20 +703,26 @@ export default function ProductsPage() {
 
     const activeProduct = serverProducts.find(p => p.id === active.id)
     const overProduct = serverProducts.find(p => p.id === over.id)
+    const vendorChanged = !!(activeProduct && overProduct && activeProduct.vendor !== overProduct.vendor)
 
     const ids = products.map(p => p.id)
     const newOrder = arrayMove(ids, ids.indexOf(active.id as string), ids.indexOf(over.id as string))
     setLocalOrder(newOrder)
 
-    // Batch all DB writes, then invalidate once — avoids mid-drag refetch flickering
+    // Patch cache instantly so no stale data flicker during refetch
+    if (vendorChanged) {
+      qc.setQueryData(['products'], (old: Product[] | undefined) =>
+        old ? old.map(p => p.id === active.id ? { ...p, vendor: overProduct!.vendor } : p) : old
+      )
+    }
+
     const ops: Promise<unknown>[] = newOrder.map((id, idx) =>
       supabase.from('products').update({ sort_order: idx }).eq('id', id)
     )
-    if (activeProduct && overProduct && activeProduct.vendor !== overProduct.vendor) {
-      ops.push(supabase.from('products').update({ vendor: overProduct.vendor }).eq('id', active.id as string))
+    if (vendorChanged) {
+      ops.push(supabase.from('products').update({ vendor: overProduct!.vendor }).eq('id', active.id as string))
     }
     await Promise.all(ops)
-    qc.invalidateQueries({ queryKey: ['products'] })
   }
 
   const handleDelete = async (p: Product) => {

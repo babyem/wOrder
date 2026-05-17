@@ -36,6 +36,8 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
     () => Object.fromEntries(order.items.filter(i => i.unit_override).map(i => [i.id, i.unit_override!]))
   )
   const [editingUnitItem, setEditingUnitItem] = useState<string | null>(null)
+  const [unitDropUp, setUnitDropUp] = useState<Record<string, boolean>>({})
+  const [vendorDropUp, setVendorDropUp] = useState<Record<string, boolean>>({})
 
   const { data: unitList } = useUnits()
   const vendorMap = Object.fromEntries((vendorList ?? []).map(v => [v.name, v]))
@@ -301,7 +303,7 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
                             )}
                             <div className="relative">
                               <button
-                                onClick={e => { e.stopPropagation(); setEditingUnitItem(prev => prev === item.id ? null : item.id) }}
+                                onClick={e => { e.stopPropagation(); if (editingUnitItem !== item.id) { const rect = e.currentTarget.getBoundingClientRect(); setUnitDropUp(prev => ({ ...prev, [item.id]: rect.bottom + 150 > window.innerHeight })) } setEditingUnitItem(prev => prev === item.id ? null : item.id) }}
                                 className={`text-xs transition-colors ${
                                   unitOverrides[item.id]
                                     ? 'text-indigo-500 font-medium'
@@ -313,7 +315,7 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
                             {editingUnitItem === item.id && (
                               <>
                                 <div className="fixed inset-0 z-40" onClick={() => setEditingUnitItem(null)} />
-                                <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 flex flex-col gap-0.5 min-w-[80px]">
+                                <div className={`absolute right-0 ${unitDropUp[item.id] ? 'bottom-full mb-1' : 'top-full mt-1'} z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 flex flex-col gap-0.5 min-w-[80px]`}>
                                   {(unitList ?? []).map(u => (
                                     <button
                                       key={u.id}
@@ -344,7 +346,7 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
                           </div>
                           <div className="relative">
                             <button
-                              onClick={e => { e.stopPropagation(); setEditingVendorItem(prev => prev === item.id ? null : item.id) }}
+                              onClick={e => { e.stopPropagation(); if (editingVendorItem !== item.id) { const rect = e.currentTarget.getBoundingClientRect(); setVendorDropUp(prev => ({ ...prev, [item.id]: rect.bottom + 180 > window.innerHeight })) } setEditingVendorItem(prev => prev === item.id ? null : item.id) }}
                               title="Change vendor"
                               className={`p-0.5 rounded transition-all ${
                                 isOverridden
@@ -357,7 +359,7 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
                             {editingVendorItem === item.id && (
                               <>
                                 <div className="fixed inset-0 z-40" onClick={() => setEditingVendorItem(null)} />
-                                <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 flex flex-col gap-0.5 min-w-[130px]">
+                                <div className={`absolute right-0 ${vendorDropUp[item.id] ? 'bottom-full mb-1' : 'top-full mt-1'} z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 flex flex-col gap-0.5 min-w-[130px]`}>
                                   {(vendorList ?? []).map(v => (
                                     <button
                                       key={v.id}

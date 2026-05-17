@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, Minus, Package, X, Trash2 } from 'lucide-react'
 import { useCartStore } from '../../store/cartStore'
@@ -13,9 +13,58 @@ export default function ProductCard({ product }: Props) {
   const cartItem = items.find(i => i.product_id === product.id)
   const quantity = cartItem?.quantity ?? 0
   const [lightboxOpen, setLightboxOpen] = useState(false)
+  const [scrubber, setScrubber] = useState<{ x: number; y: number; qty: number } | null>(null)
+  const dragState = useRef<{ startY: number; startQty: number; last: number } | null>(null)
+
+  const onQtyPointerDown = (e: React.PointerEvent<HTMLSpanElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId)
+    const rect = e.currentTarget.getBoundingClientRect()
+    dragState.current = { startY: e.clientY, startQty: quantity, last: quantity }
+    setScrubber({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, qty: quantity })
+  }
+  const onQtyPointerMove = (e: React.PointerEvent<HTMLSpanElement>) => {
+    if (!dragState.current) return
+    const delta = dragState.current.startY - e.clientY
+    const next = Math.max(1, dragState.current.startQty + Math.round(delta / 18))
+    if (next !== dragState.current.last) {
+      dragState.current.last = next
+      updateQuantity(product.id, next)
+    }
+    setScrubber(s => s ? { ...s, qty: next } : null)
+  }
+  const onQtyPointerUp = () => { dragState.current = null; setScrubber(null) }
+
+  const scrubberOffsets = [2, 1, 0, -1, -2]
 
   return (
     <>
+      {scrubber && (
+        <div
+          className="fixed z-[200] pointer-events-none"
+          style={{ left: scrubber.x, top: scrubber.y, transform: 'translate(-50%, -50%)' }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden w-14">
+            {scrubberOffsets.map(offset => {
+              const n = Math.max(1, scrubber.qty + offset)
+              const isCenter = offset === 0
+              return (
+                <div
+                  key={offset}
+                  className={`text-center py-1 leading-tight ${
+                    isCenter
+                      ? 'text-indigo-600 font-bold text-xl bg-indigo-50'
+                      : Math.abs(offset) === 1
+                        ? 'text-slate-400 text-sm'
+                        : 'text-slate-200 text-xs'
+                  }`}
+                >
+                  {n}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
       <motion.div
         layout
         initial={{ opacity: 0, y: 6 }}
@@ -87,7 +136,14 @@ export default function ProductCard({ product }: Props) {
                 >
                   <Minus size={14} className="text-slate-600" />
                 </button>
-                <span className="text-sm font-bold text-slate-900 w-5 text-center tabular-nums">{quantity}</span>
+                <span
+                  className="text-sm font-bold text-slate-900 w-5 text-center tabular-nums cursor-ns-resize select-none touch-none"
+                  onPointerDown={onQtyPointerDown}
+                  onPointerMove={onQtyPointerMove}
+                  onPointerUp={onQtyPointerUp}
+                  onPointerCancel={onQtyPointerUp}
+                  title="Drag up/down to change quantity"
+                >{quantity}</span>
                 <button
                   onClick={() => addItem(product)}
                   className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center hover:bg-indigo-700 transition-colors"

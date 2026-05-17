@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Minus, Plus, Trash2, Send, CheckCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -19,6 +19,26 @@ export default function OrderModal({ open, onClose, locationId, employeeId }: Pr
   const [submitted, setSubmitted] = useState(false)
   const { items, updateQuantity, clearCart } = useCartStore()
   const submit = useSubmitOrder()
+  const [scrubber, setScrubber] = useState<{ x: number; y: number; qty: number } | null>(null)
+  const dragState = useRef<{ startY: number; startQty: number; last: number; productId: string } | null>(null)
+
+  const onQtyPointerDown = (e: React.PointerEvent<HTMLSpanElement>, productId: string, qty: number) => {
+    e.currentTarget.setPointerCapture(e.pointerId)
+    const rect = e.currentTarget.getBoundingClientRect()
+    dragState.current = { startY: e.clientY, startQty: qty, last: qty, productId }
+    setScrubber({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, qty })
+  }
+  const onQtyPointerMove = (e: React.PointerEvent<HTMLSpanElement>) => {
+    if (!dragState.current) return
+    const delta = dragState.current.startY - e.clientY
+    const next = Math.max(1, dragState.current.startQty + Math.round(delta / 18))
+    if (next !== dragState.current.last) {
+      dragState.current.last = next
+      updateQuantity(dragState.current.productId, next)
+    }
+    setScrubber(s => s ? { ...s, qty: next } : null)
+  }
+  const onQtyPointerUp = () => { dragState.current = null; setScrubber(null) }
 
   const handleSubmit = async () => {
     if (!items.length) return
@@ -40,6 +60,35 @@ export default function OrderModal({ open, onClose, locationId, employeeId }: Pr
     }
   }
 
+  const scrubberOffsets = [2, 1, 0, -1, -2]
+  const scrubberOverlay = scrubber && (
+    <div
+      className="fixed z-[300] pointer-events-none"
+      style={{ left: scrubber.x, top: scrubber.y, transform: 'translate(-50%, -50%)' }}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden w-14">
+        {scrubberOffsets.map(offset => {
+          const n = Math.max(1, scrubber.qty + offset)
+          const isCenter = offset === 0
+          return (
+            <div
+              key={offset}
+              className={`text-center py-1 leading-tight ${
+                isCenter
+                  ? 'text-indigo-600 font-bold text-xl bg-indigo-50'
+                  : Math.abs(offset) === 1
+                    ? 'text-slate-400 text-sm'
+                    : 'text-slate-200 text-xs'
+              }`}
+            >
+              {n}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+
   if (submitted) {
     return (
       <Modal open={open} onClose={() => {}} title="Order Submitted">
@@ -58,30 +107,52 @@ export default function OrderModal({ open, onClose, locationId, employeeId }: Pr
     )
   }
 
+  const byVendor = items.reduce<Record<string, typeof items>>((acc, item) => {
+    const v = item.product.vendor ?? 'Övrigt'
+    acc[v] = [...(acc[v] ?? []), item]
+    return acc
+  }, {})
+
   return (
+    <>
+    {scrubberOverlay}
     <Modal open={open} onClose={onClose} title="Your Order">
       <div className="space-y-4">
-        <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-          {items.map(item => (
-            <div key={item.product_id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-slate-900 text-sm truncate">{item.product.name}</p>
-                <p className="text-xs text-slate-400">{item.product.unit}</p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={() => updateQuantity(item.product_id, item.quantity - 1)}
-                  className="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-100 transition-colors"
-                >
-                  {item.quantity === 1 ? <Trash2 size={13} className="text-red-400" /> : <Minus size={13} className="text-slate-600" />}
-                </button>
-                <span className="text-sm font-semibold w-5 text-center text-slate-900">{item.quantity}</span>
-                <button
-                  onClick={() => updateQuantity(item.product_id, item.quantity + 1)}
-                  className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center hover:bg-indigo-700 transition-colors"
-                >
-                  <Plus size={13} className="text-white" />
-                </button>
+        <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+          {Object.entries(byVendor).map(([vendor, vendorItems]) => (
+            <div key={vendor}>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1 px-0.5">{vendor}</p>
+              <div className="space-y-0.5">
+                {vendorItems.map(item => (
+                  <div key={item.product_id} className="flex items-center gap-2 py-1 px-2 rounded-lg hover:bg-slate-50">
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm text-slate-900 truncate block">{item.product.name}</span>
+                    </div>
+                    <span className="text-xs text-slate-400 shrink-0">{item.product.unit}</span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        onClick={() => updateQuantity(item.product_id, item.quantity - 1)}
+                        className="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-100 transition-colors"
+                      >
+                        {item.quantity === 1 ? <Trash2 size={11} className="text-red-400" /> : <Minus size={11} className="text-slate-600" />}
+                      </button>
+                      <span
+                        className="text-sm font-semibold w-5 text-center text-slate-900 cursor-ns-resize select-none touch-none"
+                        onPointerDown={e => onQtyPointerDown(e, item.product_id, item.quantity)}
+                        onPointerMove={onQtyPointerMove}
+                        onPointerUp={onQtyPointerUp}
+                        onPointerCancel={onQtyPointerUp}
+                        title="Drag up/down to change quantity"
+                      >{item.quantity}</span>
+                      <button
+                        onClick={() => updateQuantity(item.product_id, item.quantity + 1)}
+                        className="w-6 h-6 rounded-md bg-indigo-600 flex items-center justify-center hover:bg-indigo-700 transition-colors"
+                      >
+                        <Plus size={11} className="text-white" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           ))}
@@ -108,5 +179,6 @@ export default function OrderModal({ open, onClose, locationId, employeeId }: Pr
         </button>
       </div>
     </Modal>
+    </>
   )
 }

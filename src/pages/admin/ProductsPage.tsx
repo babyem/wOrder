@@ -112,10 +112,22 @@ function ImageUploadThumb({ product, size = 10 }: { product: Product; size?: num
 function FieldDropdown({ label, open, onToggle, onClose, children }: {
   label: React.ReactNode; open: boolean; onToggle: () => void; onClose: () => void; children: React.ReactNode
 }) {
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const [openUp, setOpenUp] = useState(false)
+
+  const handleToggle = () => {
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect()
+      setOpenUp(rect.bottom + 200 > window.innerHeight)
+    }
+    onToggle()
+  }
+
   return (
     <div className="relative">
       <button
-        onClick={onToggle}
+        ref={btnRef}
+        onClick={handleToggle}
         className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs border transition-all whitespace-nowrap ${
           open
             ? 'bg-indigo-600 text-white border-indigo-600'
@@ -128,7 +140,7 @@ function FieldDropdown({ label, open, onToggle, onClose, children }: {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={onClose} />
-          <div className="absolute top-full left-0 mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-2 flex flex-wrap gap-1.5 min-w-[160px] max-w-[260px]">
+          <div className={`absolute ${openUp ? 'bottom-full mb-1' : 'top-full mt-1'} left-0 z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-2 flex flex-wrap gap-1.5 min-w-[160px] max-w-[260px]`}>
             {children}
           </div>
         </>

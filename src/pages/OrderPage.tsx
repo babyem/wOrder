@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChefHat, Bell, MapPin, X } from 'lucide-react'
+import { ChefHat, Bell, MapPin, X, ChevronDown } from 'lucide-react'
 import LocationSelector from '../components/employee/LocationSelector'
 import EmployeeSelector from '../components/employee/EmployeeSelector'
 import ProductGrid from '../components/employee/ProductGrid'
@@ -203,6 +203,7 @@ export default function OrderPage() {
   const [locationId, setLocationId] = useState('')
   const [employeeId, setEmployeeId] = useState('')
   const [cartOpen, setCartOpen] = useState(false)
+  const [showLocationPicker, setShowLocationPicker] = useState(false)
 
   // Set locationId once locations load (needed for slug-based pages)
   useEffect(() => {
@@ -237,10 +238,13 @@ export default function OrderPage() {
           </div>
           <div className="flex-1 min-w-0">
             <h1 className="font-bold text-slate-900 leading-tight">Staff Orders</h1>
-            {fixedLocation && locationName ? (
-              <p className="text-xs text-indigo-500 flex items-center gap-1">
-                <MapPin size={10} /> {locationName}
-              </p>
+            {locationId && locationName ? (
+              <button
+                onClick={() => setShowLocationPicker(true)}
+                className="text-xs text-indigo-500 flex items-center gap-1 hover:text-indigo-700 transition-colors"
+              >
+                <MapPin size={10} /> {locationName} <ChevronDown size={10} />
+              </button>
             ) : (
               <p className="text-xs text-slate-400">Internal supply ordering</p>
             )}
@@ -307,6 +311,39 @@ export default function OrderPage() {
           />
         </>
       )}
+
+      {/* Location picker bottom sheet */}
+      <AnimatePresence>
+        {showLocationPicker && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center">
+            <motion.div
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowLocationPicker(false)}
+            />
+            <motion.div
+              className="relative bg-white rounded-t-3xl p-6 w-full max-w-lg shadow-2xl"
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+            >
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="font-semibold text-slate-900">Change Location</h2>
+                <button onClick={() => setShowLocationPicker(false)} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
+                  <X size={16} />
+                </button>
+              </div>
+              <LocationSelector
+                selected={locationId}
+                onSelect={id => { handleLocationChange(id); setShowLocationPicker(false) }}
+              />
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

@@ -231,6 +231,10 @@ export default function OrderPage() {
     <div className="min-h-screen bg-slate-50">
       {locationId && <AlarmModal locationId={locationId} />}
 
+      {/* Scroll gradient fades */}
+      <div className="fixed top-[69px] left-0 right-0 h-10 bg-gradient-to-b from-slate-50 to-transparent pointer-events-none z-20" />
+      <div className="fixed bottom-0 left-0 right-0 h-28 bg-gradient-to-t from-slate-50 to-transparent pointer-events-none z-20" />
+
       <header className="bg-white border-b border-slate-100 sticky top-0 z-30">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center gap-3">
           <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center shrink-0">

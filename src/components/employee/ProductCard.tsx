@@ -168,7 +168,8 @@ export default function ProductCard({ product }: Props) {
                   <Minus size={14} className="text-slate-600" />
                 </button>
                 <span
-                  className="text-sm font-bold text-slate-900 w-5 text-center tabular-nums cursor-ns-resize select-none touch-none"
+                  className="text-sm font-bold text-slate-900 w-5 text-center tabular-nums cursor-ns-resize select-none touch-none transition-opacity"
+                  style={{ opacity: scrubber ? 0 : 1 }}
                   onPointerDown={onQtyPointerDown}
                   onPointerMove={onQtyPointerMove}
                   onPointerUp={onQtyPointerUp}

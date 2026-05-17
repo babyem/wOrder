@@ -113,12 +113,16 @@ function FieldDropdown({ label, open, onToggle, onClose, children }: {
   label: React.ReactNode; open: boolean; onToggle: () => void; onClose: () => void; children: React.ReactNode
 }) {
   const btnRef = useRef<HTMLButtonElement>(null)
-  const [openUp, setOpenUp] = useState(false)
+  const [dropStyle, setDropStyle] = useState<React.CSSProperties>({})
 
   const handleToggle = () => {
     if (!open && btnRef.current) {
       const rect = btnRef.current.getBoundingClientRect()
-      setOpenUp(rect.bottom + 200 > window.innerHeight)
+      const openUp = rect.bottom + 220 > window.innerHeight
+      setDropStyle(openUp
+        ? { position: 'fixed', bottom: window.innerHeight - rect.top + 4, left: rect.left, zIndex: 50 }
+        : { position: 'fixed', top: rect.bottom + 4, left: rect.left, zIndex: 50 }
+      )
     }
     onToggle()
   }
@@ -140,7 +144,7 @@ function FieldDropdown({ label, open, onToggle, onClose, children }: {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={onClose} />
-          <div className={`absolute ${openUp ? 'bottom-full mb-1' : 'top-full mt-1'} left-0 z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-2 flex flex-wrap gap-1.5 min-w-[160px] max-w-[260px]`}>
+          <div style={dropStyle} className="bg-white border border-slate-200 rounded-xl shadow-lg p-2 flex flex-wrap gap-1.5 min-w-[160px] max-w-[260px]">
             {children}
           </div>
         </>
@@ -694,6 +698,15 @@ export default function ProductsPage() {
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event
     if (!over || active.id === over.id || !serverProducts) return
+
+    const activeProduct = serverProducts.find(p => p.id === active.id)
+    const overProduct = serverProducts.find(p => p.id === over.id)
+
+    // Change vendor if dropped into a different vendor group
+    if (activeProduct && overProduct && activeProduct.vendor !== overProduct.vendor) {
+      await updateProduct.mutateAsync({ id: active.id as string, vendor: overProduct.vendor })
+    }
+
     const ids = products.map(p => p.id)
     const newOrder = arrayMove(ids, ids.indexOf(active.id as string), ids.indexOf(over.id as string))
     setLocalOrder(newOrder)

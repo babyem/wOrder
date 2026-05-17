@@ -913,13 +913,19 @@ export default function ProductsPage() {
       ) : !products.length ? (
         <EmptyState icon={Package} title={hasFilters ? 'No products match filters' : 'No products yet'} description={hasFilters ? 'Try clearing filters' : "Click 'Add' to get started."} />
       ) : (() => {
-          const groups: [string, Product[]][] = []
+          // Group ALL products per vendor, preserving vendor order from the vendors list
+          const vendorOrder = (vendors ?? []).map(v => v.name)
+          const map = new Map<string, Product[]>()
           for (const p of products) {
             const v = p.vendor || 'No Vendor'
-            const last = groups[groups.length - 1]
-            if (last && last[0] === v) last[1].push(p)
-            else groups.push([v, [p]])
+            map.set(v, [...(map.get(v) ?? []), p])
           }
+          const seenVendors = [...map.keys()]
+          const orderedVendors = [
+            ...vendorOrder.filter(v => map.has(v)),
+            ...seenVendors.filter(v => !vendorOrder.includes(v)),
+          ]
+          const groups: [string, Product[]][] = orderedVendors.map(v => [v, map.get(v)!])
           return (
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <SortableContext items={products.map(p => p.id)} strategy={verticalListSortingStrategy}>

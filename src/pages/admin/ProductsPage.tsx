@@ -700,29 +700,10 @@ export default function ProductsPage() {
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event
     if (!over || active.id === over.id || !serverProducts) return
-
-    const activeProduct = serverProducts.find(p => p.id === active.id)
-    const overProduct = serverProducts.find(p => p.id === over.id)
-    const vendorChanged = !!(activeProduct && overProduct && activeProduct.vendor !== overProduct.vendor)
-
     const ids = products.map(p => p.id)
     const newOrder = arrayMove(ids, ids.indexOf(active.id as string), ids.indexOf(over.id as string))
     setLocalOrder(newOrder)
-
-    // Patch cache instantly so no stale data flicker during refetch
-    if (vendorChanged) {
-      qc.setQueryData(['products'], (old: Product[] | undefined) =>
-        old ? old.map(p => p.id === active.id ? { ...p, vendor: overProduct!.vendor } : p) : old
-      )
-    }
-
-    const ops: Promise<unknown>[] = newOrder.map((id, idx) =>
-      supabase.from('products').update({ sort_order: idx }).eq('id', id)
-    )
-    if (vendorChanged) {
-      ops.push(supabase.from('products').update({ vendor: overProduct!.vendor }).eq('id', active.id as string))
-    }
-    await Promise.all(ops)
+    await Promise.all(newOrder.map((id, idx) => supabase.from('products').update({ sort_order: idx }).eq('id', id)))
   }
 
   const handleDelete = async (p: Product) => {

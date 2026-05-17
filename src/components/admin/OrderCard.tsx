@@ -152,6 +152,13 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
     hour: '2-digit', minute: '2-digit', hour12: false,
   })
 
+  const byVendor = new Map<string, typeof order.items>()
+  for (const item of order.items) {
+    const v = effectiveVendor(item)
+    byVendor.set(v, [...(byVendor.get(v) ?? []), item])
+  }
+  const isMultiVendor = byVendor.size > 1
+
   return (
     <motion.div
       layout
@@ -163,7 +170,7 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
       }`}
     >
       {/* Status bar — with time on right */}
-      <div className={`px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 ${
+      <div className={`px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 rounded-t-2xl ${
         selected ? 'bg-indigo-50 text-indigo-700' : isPending ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
       }`}>
         {onToggle && (
@@ -178,7 +185,7 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
         <span className="ml-auto font-normal opacity-60 tabular-nums">{time}</span>
       </div>
 
-      <div className="p-3 space-y-2.5">
+      <div className="p-3 space-y-2">
         <div className="flex items-start justify-between gap-2">
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-1.5 text-sm text-slate-600">
@@ -245,24 +252,30 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
           </div>
         </div>
 
-        <div className="border-t border-slate-50 pt-2.5 space-y-2.5">
-          {(() => {
-            const byVendor = new Map<string, typeof order.items>()
-            for (const item of order.items) {
-              const v = effectiveVendor(item)
-              byVendor.set(v, [...(byVendor.get(v) ?? []), item])
-            }
-            return Array.from(byVendor.entries()).map(([vendor, items]) => (
-              <div key={vendor}>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">{vendor}</p>
-                <div className="space-y-1.5">
-                  {items.map(item => {
+        {/* Product list — per-vendor mini-cards when multi-vendor */}
+        <div className={`border-t border-slate-50 pt-2 ${isMultiVendor ? 'space-y-1.5' : 'space-y-0'}`}>
+          {Array.from(byVendor.entries()).map(([vendor, items]) => (
+            <div key={vendor} className={isMultiVendor
+              ? 'border border-slate-100 rounded-xl overflow-hidden'
+              : ''
+            }>
+              {isMultiVendor && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50 border-b border-slate-100">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{vendor}</p>
+                </div>
+              )}
+              <div className={isMultiVendor ? 'px-2.5 py-1.5 space-y-0.5' : 'space-y-0.5'}>
+                {!isMultiVendor && byVendor.size === 1 && (
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">{vendor}</p>
+                )}
+                {items.map(item => {
                     const excluded_ = isExcluded(item.id)
                     const isOverridden = !!vendorOverrides[item.id]
                     return (
                       <div
                         key={item.id}
-                        className="flex items-center justify-between text-sm group cursor-default select-none"
+                        className="flex items-center justify-between text-sm group cursor-default select-none py-0.5"
                         onDoubleClick={() => toggleExclude(item)}
                         title="Double-click to exclude from notification"
                       >
@@ -381,10 +394,9 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
                       </div>
                     )
                   })}
-                </div>
               </div>
-            ))
-          })()}
+            </div>
+          ))}
         </div>
 
         {order.note && (

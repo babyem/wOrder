@@ -9,7 +9,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct } from '../../hooks/useProducts'
 import { useVendors, useCategories, useUnits } from '../../hooks/useMetadata'
 import { useAdminLocations } from '../../hooks/useAdminData'
-import { useProductLocations, useSetProductLocations } from '../../hooks/useProductLocations'
+import { useProductLocations, useSetProductLocations, useAllProductLocations } from '../../hooks/useProductLocations'
 import { supabase } from '../../lib/supabase'
 import Modal from '../../components/ui/Modal'
 import Spinner from '../../components/ui/Spinner'
@@ -656,6 +656,8 @@ export default function ProductsPage() {
   const deleteProduct = useDeleteProduct()
   const createProduct = useCreateProduct()
   const setProductLocations = useSetProductLocations()
+  const { data: allLocations } = useAdminLocations()
+  const { data: allProductLocations } = useAllProductLocations()
   const { data: vendors } = useVendors()
   const { data: categories } = useCategories()
 
@@ -718,24 +720,54 @@ export default function ProductsPage() {
 
   const handleExport = () => {
     if (!serverProducts?.length) { toast.error('No products to export'); return }
-    const rows = serverProducts.map(p => ({
-      ID: p.id,
-      'Display Name': p.name,
-      'Vendor Name (notifications)': p.vendor_name ?? '',
-      Vendor: p.vendor,
-      Category: p.category,
-      Unit: p.unit,
-      Active: p.active ? 'TRUE' : 'FALSE',
-      'Sort Order': p.sort_order,
-      'Image URL': p.image_url ?? '',
-      'ChefsCulinar ID': p.chefsculinar_id ?? '',
-      'ChefsCulinar Unit': p.chefsculinar_unit ?? '',
-      'ChefsCulinar Unit Qty': p.chefsculinar_unit_qty ?? '',
-    }))
-    const ws = XLSX.utils.json_to_sheet(rows)
-    ws['!cols'] = [{ wch: 36 }, { wch: 28 }, { wch: 28 }, { wch: 18 }, { wch: 18 }, { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 60 }, { wch: 18 }, { wch: 18 }, { wch: 20 }]
+    const locs = allLocations ?? []
+    const excluded = new Set((allProductLocations ?? []).map(pl => `${pl.product_id}:${pl.location_id}`))
+
+    const makeRow = (p: Product) => {
+      const locCols: Record<string, string> = {}
+      for (const loc of locs) {
+        locCols[loc.name] = excluded.has(`${p.id}:${loc.id}`) ? 'HIDDEN' : 'ACTIVE'
+      }
+      return {
+        ID: p.id,
+        'Display Name': p.name,
+        'Vendor Name (notifications)': p.vendor_name ?? '',
+        Category: p.category,
+        Unit: p.unit,
+        Active: p.active ? 'TRUE' : 'FALSE',
+        'Sort Order': p.sort_order,
+        'Image URL': p.image_url ?? '',
+        'ChefsCulinar ID': p.chefsculinar_id ?? '',
+        'ChefsCulinar Unit': p.chefsculinar_unit ?? '',
+        'ChefsCulinar Unit Qty': p.chefsculinar_unit_qty ?? '',
+        ...locCols,
+      }
+    }
+
+    const colWidths = [{ wch: 36 }, { wch: 28 }, { wch: 28 }, { wch: 18 }, { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 60 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, ...locs.map(() => ({ wch: 18 }))]
+
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Products')
+
+    // One sheet per vendor + one "All" sheet
+    const vendorGroups = new Map<string, Product[]>()
+    for (const p of serverProducts) {
+      const v = p.vendor || 'No Vendor'
+      vendorGroups.set(v, [...(vendorGroups.get(v) ?? []), p])
+    }
+
+    // All products sheet
+    const allWs = XLSX.utils.json_to_sheet(serverProducts.map(makeRow))
+    allWs['!cols'] = colWidths
+    XLSX.utils.book_append_sheet(wb, allWs, 'All')
+
+    // Per-vendor sheets
+    for (const [vendor, prods] of vendorGroups) {
+      const ws = XLSX.utils.json_to_sheet(prods.map(makeRow))
+      ws['!cols'] = colWidths
+      const sheetName = vendor.slice(0, 31) // Excel max 31 chars
+      XLSX.utils.book_append_sheet(wb, ws, sheetName)
+    }
+
     XLSX.writeFile(wb, 'products.xlsx')
   }
 
@@ -772,12 +804,24 @@ export default function ProductsPage() {
           chefsculinar_unit_qty: unitQtyRaw ? parseFloat(unitQtyRaw) : null,
         }
         const id = row['ID']?.toString().trim()
+        let productId: string
         if (id && existingIds.has(id)) {
           await updateProduct.mutateAsync({ id, ...fields })
+          productId = id
           updated++
         } else {
-          await createProduct.mutateAsync(fields)
+          const newProduct = await createProduct.mutateAsync(fields)
+          productId = newProduct.id
           created++
+        }
+
+        // Apply location visibility from columns
+        const locs = allLocations ?? []
+        if (locs.length) {
+          const hiddenIds = locs
+            .filter(loc => row[loc.name]?.toString().toUpperCase() === 'HIDDEN')
+            .map(loc => loc.id)
+          await setProductLocations.mutateAsync({ productId, locationIds: hiddenIds })
         }
       }
       const parts = []

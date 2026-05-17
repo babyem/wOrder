@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CheckCircle, RotateCcw, Trash2, Clock, MapPin, User, FileText, Mail, Phone, X, Bell, CheckSquare, Square, Loader2, Tag } from 'lucide-react'
+import { CheckCircle, RotateCcw, Trash2, Clock, MapPin, User, FileText, Mail, Phone, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag } from 'lucide-react'
 import type { OrderWithDetails } from '../../types'
 import { useUpdateOrderStatus, useDeleteOrder, useUpdateOrderItem } from '../../hooks/useOrders'
 import { useVendors } from '../../hooks/useMetadata'
@@ -21,6 +21,7 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
   const [showNotify, setShowNotify] = useState(false)
   const [sending, setSending] = useState<string | null>(null)
   const [editingVendorItem, setEditingVendorItem] = useState<string | null>(null)
+  const [sendingChefs, setSendingChefs] = useState(false)
 
   // Local state for instant feedback — initialised from server, persisted to DB in background
   const [excluded, setExcluded] = useState<Set<string>>(
@@ -99,6 +100,37 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
     }
   }
 
+  const chefsItems = order.items.filter(i => i.product?.chefsculinar_id)
+
+  const handleSendToChefs = async () => {
+    const webhookUrl = import.meta.env.VITE_N8N_CHEFSCULINAR_WEBHOOK
+    if (!webhookUrl) { toast.error('Webhook URL saknas'); return }
+    const products = chefsItems.map(i => ({
+      chefsculinar_id: i.product!.chefsculinar_id,
+      quantity: i.quantity,
+      unit: i.product!.chefsculinar_unit ?? 'st',
+      unit_qty: i.product!.chefsculinar_unit_qty ?? 1,
+    }))
+    setSendingChefs(true)
+    try {
+      const res = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location_id: order.location_id,
+          location_name: order.location?.name ?? '',
+          products,
+        }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      toast.success(`${products.length} produkter skickade till ChefsCulinar`)
+    } catch (err) {
+      toast.error(`Misslyckades: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setSendingChefs(false)
+    }
+  }
+
   const isPending = order.status === 'pending'
 
   const time = new Date(order.created_at).toLocaleString([], {
@@ -145,6 +177,16 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-1 shrink-0">
+            {chefsItems.length > 0 && (
+              <button
+                onClick={handleSendToChefs}
+                disabled={sendingChefs}
+                title="Skicka till ChefsCulinar"
+                className="p-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 disabled:opacity-50 transition-colors"
+              >
+                {sendingChefs ? <Loader2 size={14} className="animate-spin" /> : <ShoppingBag size={14} />}
+              </button>
+            )}
             {orderVendors.length > 0 && (
               <button
                 onClick={() => setShowNotify(v => !v)}

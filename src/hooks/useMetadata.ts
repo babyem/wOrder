@@ -48,7 +48,7 @@ export function useDeleteVendor() { return useDeleteMeta('vendors') }
 export function useUpdateVendor() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ id, ...fields }: { id: string; email?: string; phone?: string }) => {
+    mutationFn: async ({ id, ...fields }: { id: string; email?: string | null; phone?: string | null }) => {
       const { error } = await supabase.from('vendors').update(fields).eq('id', id)
       if (error) throw error
     },

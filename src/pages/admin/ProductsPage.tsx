@@ -695,7 +695,6 @@ export default function ProductsPage() {
   const [localOrder, setLocalOrder] = useState<string[]>([])
   const [modalOpen, setModalOpen] = useState(false)
   const [batchModalOpen, setBatchModalOpen] = useState(false)
-  const [editMode, setEditMode] = useState(false)
   const [importing, setImporting] = useState(false)
   const importRef = useRef<HTMLInputElement>(null)
 
@@ -825,15 +824,9 @@ export default function ProductsPage() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Products</h1>
-          <p className="text-slate-400 text-sm mt-0.5">
-            {editMode ? `${products.length} products — click to edit inline` : `${products.length} shown · drag to reorder`}
-          </p>
+          <p className="text-slate-400 text-sm mt-0.5">{products.length} products · drag to reorder</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setEditMode(m => !m)}
-            className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${editMode ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
-            {editMode ? 'Done' : 'Edit'}
-          </button>
           <button onClick={handleExport} title="Export to Excel"
             className="p-2.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 transition-colors">
             <Download size={17} />
@@ -901,31 +894,13 @@ export default function ProductsPage() {
         <div className="flex justify-center py-16"><Spinner size={32} /></div>
       ) : !products.length ? (
         <EmptyState icon={Package} title={hasFilters ? 'No products match filters' : 'No products yet'} description={hasFilters ? 'Try clearing filters' : "Click 'Add' to get started."} />
-      ) : editMode ? (
+      ) : (
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={products.map(p => p.id)} strategy={verticalListSortingStrategy}>
               <div className="divide-y divide-slate-100">
                 {products.map(p => (
                   <InlineEditRow key={p.id} product={p} onDelete={handleDelete} onDuplicate={handleDuplicate} />
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
-        </div>
-      ) : (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={products.map(p => p.id)} strategy={verticalListSortingStrategy}>
-              <div className="divide-y divide-slate-50">
-                {products.map(p => (
-                  <SortableRow
-                    key={p.id}
-                    product={p}
-                    onToggleActive={handleToggleActive}
-                    onDelete={handleDelete}
-                    onDuplicate={handleDuplicate}
-                  />
                 ))}
               </div>
             </SortableContext>

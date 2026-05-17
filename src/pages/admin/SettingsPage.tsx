@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Trash2, MapPin, Users, Pencil, Tag, Layers, Ruler, ChevronRight, Link2, GripVertical, Mail, Phone } from 'lucide-react'
+import { Plus, Trash2, MapPin, Users, Pencil, Tag, Layers, Ruler, ChevronRight, Link2, GripVertical, Mail, Phone, X } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent,
 } from '@dnd-kit/core'
@@ -211,10 +211,17 @@ function SortableVendorRow({ id, name, email, phone, onDelete }: {
               autoFocus
             />
           ) : (
-            <button onClick={() => setEditEmail(true)} className="flex items-center gap-1 text-xs text-slate-400 hover:text-indigo-600 transition-colors">
-              <Mail size={10} />
-              {email || <span className="italic">Add email</span>}
-            </button>
+            <span className="flex items-center gap-0.5">
+              <button onClick={() => setEditEmail(true)} className="flex items-center gap-1 text-xs text-slate-400 hover:text-indigo-600 transition-colors">
+                <Mail size={10} />
+                {email || <span className="italic">Add email</span>}
+              </button>
+              {email && (
+                <button onClick={() => { updateVendor.mutate({ id, email: null }); setEmailVal('') }} className="text-slate-300 hover:text-red-500 transition-colors ml-0.5">
+                  <X size={9} />
+                </button>
+              )}
+            </span>
           )}
           {/* Phone */}
           {editPhone ? (
@@ -228,10 +235,17 @@ function SortableVendorRow({ id, name, email, phone, onDelete }: {
               autoFocus
             />
           ) : (
-            <button onClick={() => setEditPhone(true)} className="flex items-center gap-1 text-xs text-slate-400 hover:text-indigo-600 transition-colors">
-              <Phone size={10} />
-              {phone || <span className="italic">Add phone</span>}
-            </button>
+            <span className="flex items-center gap-0.5">
+              <button onClick={() => setEditPhone(true)} className="flex items-center gap-1 text-xs text-slate-400 hover:text-indigo-600 transition-colors">
+                <Phone size={10} />
+                {phone || <span className="italic">Add phone</span>}
+              </button>
+              {phone && (
+                <button onClick={() => { updateVendor.mutate({ id, phone: null }); setPhoneVal('') }} className="text-slate-300 hover:text-red-500 transition-colors ml-0.5">
+                  <X size={9} />
+                </button>
+              )}
+            </span>
           )}
         </div>
       </div>

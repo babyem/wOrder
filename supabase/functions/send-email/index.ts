@@ -22,6 +22,7 @@ serve(async (req) => {
 
     const apiKey = Deno.env.get('RESEND_API_KEY')
     const from = Deno.env.get('EMAIL_FROM') ?? 'orders@resend.dev'
+    const bcc = Deno.env.get('EMAIL_BCC')
 
     if (!apiKey) {
       return new Response(JSON.stringify({ error: 'RESEND_API_KEY not set' }), {
@@ -36,7 +37,7 @@ serve(async (req) => {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ from, to, subject, text }),
+      body: JSON.stringify({ from, to, subject, text, ...(bcc ? { bcc } : {}) }),
     })
 
     const data = await res.json()

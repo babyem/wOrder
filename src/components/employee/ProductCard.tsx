@@ -4,6 +4,10 @@ import { Plus, Minus, Package, X, Trash2 } from 'lucide-react'
 import { useCartStore } from '../../store/cartStore'
 import type { Product } from '../../types'
 
+function thumbUrl(url: string, px = 96) {
+  return url.replace('/storage/v1/object/public/', '/storage/v1/render/image/public/') + `?width=${px}&height=${px}&resize=cover&quality=80`
+}
+
 interface Props {
   product: Product
 }
@@ -102,7 +106,7 @@ export default function ProductCard({ product }: Props) {
           >
             {product.image_url ? (
               <img
-                src={product.image_url}
+                src={thumbUrl(product.image_url)}
                 alt={product.name}
                 className="w-full h-full object-cover"
                 loading="lazy"

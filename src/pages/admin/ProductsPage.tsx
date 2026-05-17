@@ -35,6 +35,10 @@ function TagBtn({ label, active, onClick }: { label: string; active: boolean; on
 
 // ── Image thumbnail with click-to-upload ────────────────────────────────────
 
+function thumbUrl(url: string, px = 64) {
+  return url.replace('/storage/v1/object/public/', `/storage/v1/render/image/public/`) + `?width=${px}&height=${px}&resize=cover&quality=80`
+}
+
 function ImageUploadThumb({ product, size = 10 }: { product: Product; size?: number }) {
   const updateProduct = useUpdateProduct()
   const [uploading, setUploading] = useState(false)
@@ -87,7 +91,7 @@ function ImageUploadThumb({ product, size = 10 }: { product: Product; size?: num
         <div className="w-full h-full flex items-center justify-center"><Spinner size={14} /></div>
       ) : product.image_url ? (
         <>
-          <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+          <img src={thumbUrl(product.image_url)} alt={product.name} className="w-full h-full object-cover" />
           <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
             <Upload size={11} className="text-white" />
           </div>
@@ -950,7 +954,7 @@ export default function ProductsPage() {
               <SortableContext items={products.map(p => p.id)} strategy={verticalListSortingStrategy}>
                 <div className="space-y-3">
                   {groups.map(([vendor, prods]) => (
-                    <div key={vendor} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div key={vendor} className="bg-white rounded-2xl border border-slate-100 shadow-sm">
                       <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
                         <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">{vendor}</span>
                         <span className="text-xs text-slate-400">{prods.length}</span>
@@ -972,7 +976,7 @@ export default function ProductsPage() {
                     <div className="bg-white border border-indigo-200 rounded-xl shadow-2xl px-4 py-3 flex items-center gap-3 opacity-95">
                       <div className="w-8 h-8 rounded-lg bg-slate-100 overflow-hidden shrink-0">
                         {p.image_url
-                          ? <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
+                          ? <img src={thumbUrl(p.image_url)} alt={p.name} className="w-full h-full object-cover" />
                           : <div className="w-full h-full flex items-center justify-center"><Package size={14} className="text-slate-300" /></div>}
                       </div>
                       <div className="min-w-0">

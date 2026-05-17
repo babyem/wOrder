@@ -188,8 +188,8 @@ export default function OrdersPage() {
 
     if (aggregated.size === 0) { toast.error('Inga produkter med ChefsCulinar-artikelnummer hittades'); return }
 
-    const products = Array.from(aggregated.entries()).map(([chefsculinar_id, { quantity, unit }]) => ({
-      chefsculinar_id, quantity, unit,
+    const products = Array.from(aggregated.entries()).map(([chefsculinar_id, { quantity, unit, unit_qty }]) => ({
+      chefsculinar_id, quantity, unit, unit_qty,
     }))
 
     setSendingChefs(true)

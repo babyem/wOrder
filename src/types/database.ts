@@ -77,6 +77,7 @@ export interface OrderItem {
   product_id: string
   quantity: number
   vendor_override: string | null
+  unit_override: string | null
   notify_excluded: boolean
 }
 

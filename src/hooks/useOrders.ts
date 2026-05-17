@@ -94,7 +94,7 @@ export function useUpdateOrderStatus() {
 export function useUpdateOrderItem() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ id, ...updates }: { id: string; vendor_override?: string | null; notify_excluded?: boolean; quantity?: number }) => {
+    mutationFn: async ({ id, ...updates }: { id: string; vendor_override?: string | null; unit_override?: string | null; notify_excluded?: boolean; quantity?: number }) => {
       const { data, error } = await supabase.from('order_items').update(updates).eq('id', id).select('id')
       if (error) throw error
       if (!data?.length) throw new Error('RLS blocked the update — add an update policy for order_items')

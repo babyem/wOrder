@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { CheckCircle, RotateCcw, Trash2, Clock, MapPin, User, FileText, Mail, Phone, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag } from 'lucide-react'
 import type { OrderWithDetails } from '../../types'
 import { useUpdateOrderStatus, useDeleteOrder, useUpdateOrderItem } from '../../hooks/useOrders'
-import { useVendors } from '../../hooks/useMetadata'
+import { useVendors, useUnits } from '../../hooks/useMetadata'
 import { sendEmail } from '../../lib/sendEmail'
 import toast from 'react-hot-toast'
 
@@ -32,11 +32,19 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
   const [vendorOverrides, setVendorOverrides] = useState<Record<string, string>>(
     () => Object.fromEntries(order.items.filter(i => i.vendor_override).map(i => [i.id, i.vendor_override!]))
   )
+  const [unitOverrides, setUnitOverrides] = useState<Record<string, string>>(
+    () => Object.fromEntries(order.items.filter(i => i.unit_override).map(i => [i.id, i.unit_override!]))
+  )
+  const [editingUnitItem, setEditingUnitItem] = useState<string | null>(null)
 
+  const { data: unitList } = useUnits()
   const vendorMap = Object.fromEntries((vendorList ?? []).map(v => [v.name, v]))
 
   const effectiveVendor = (item: typeof order.items[0]) =>
     vendorOverrides[item.id] ?? item.product?.vendor ?? '—'
+
+  const effectiveUnit = (item: typeof order.items[0]) =>
+    unitOverrides[item.id] ?? item.product?.unit ?? ''
 
   const isExcluded = (itemId: string) => excluded.has(itemId)
 
@@ -51,7 +59,7 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
     const items = order.items.filter(i =>
       effectiveVendor(i) === vendorName && !isExcluded(i.id)
     )
-    const lines = items.map(i => `${i.product?.vendor_name ?? i.product?.name ?? '?'}: ${i.quantity} ${i.product?.unit ?? ''}`)
+    const lines = items.map(i => `${i.product?.vendor_name ?? i.product?.name ?? '?'}: ${i.quantity} ${effectiveUnit(i)}`)
     return `${order.location?.name ?? ''}\n\n${lines.join('\n')}`
   }
 
@@ -263,6 +271,7 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
                           {editingQtyItem === item.id ? (
                             <input
                               type="number"
+                              min={1}
                               value={qtyDraft}
                               onChange={e => setQtyDraft(e.target.value)}
                               onBlur={() => {
@@ -276,7 +285,8 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
                                 if (e.key === 'Escape') setEditingQtyItem(null)
                               }}
                               onClick={e => e.stopPropagation()}
-                              className="w-14 px-1.5 py-0.5 rounded border border-indigo-300 text-xs tabular-nums text-right focus:outline-none bg-white"
+                              onDoubleClick={e => e.stopPropagation()}
+                              className="w-12 px-1.5 py-0.5 rounded border border-indigo-300 text-xs tabular-nums text-right focus:outline-none bg-white"
                               autoFocus
                             />
                           ) : (
@@ -285,9 +295,51 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
                               onDoubleClick={e => { e.stopPropagation(); setQtyDraft(String(item.quantity)); setEditingQtyItem(item.id) }}
                               title="Double-click to edit quantity"
                             >
-                              {item.quantity} {item.product?.unit ?? ''}
+                              {item.quantity}
                             </span>
                           )}
+                          <div className="relative">
+                            <button
+                              onClick={e => { e.stopPropagation(); setEditingUnitItem(prev => prev === item.id ? null : item.id) }}
+                              className={`text-xs px-1 py-0.5 rounded transition-colors ${
+                                unitOverrides[item.id]
+                                  ? 'text-indigo-500 font-medium'
+                                  : 'text-slate-400 hover:text-slate-600'
+                              } ${excluded_ ? 'line-through text-red-300' : ''}`}
+                            >
+                              {effectiveUnit(item)}
+                            </button>
+                            {editingUnitItem === item.id && (
+                              <>
+                                <div className="fixed inset-0 z-40" onClick={() => setEditingUnitItem(null)} />
+                                <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 flex flex-col gap-0.5 min-w-[80px]">
+                                  {(unitList ?? []).map(u => (
+                                    <button
+                                      key={u.id}
+                                      onClick={() => {
+                                        const override = u.name === item.product?.unit ? null : u.name
+                                        setUnitOverrides(prev => {
+                                          const next = { ...prev }
+                                          if (override === null) delete next[item.id]
+                                          else next[item.id] = u.name
+                                          return next
+                                        })
+                                        updateOrderItem.mutate({ id: item.id, unit_override: override })
+                                        setEditingUnitItem(null)
+                                      }}
+                                      className={`px-2.5 py-1 rounded-lg text-xs text-left transition-colors ${
+                                        effectiveUnit(item) === u.name
+                                          ? 'bg-indigo-600 text-white'
+                                          : 'hover:bg-slate-50 text-slate-700'
+                                      }`}
+                                    >
+                                      {u.name}
+                                    </button>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+                          </div>
                           <div className="relative">
                             <button
                               onClick={e => { e.stopPropagation(); setEditingVendorItem(prev => prev === item.id ? null : item.id) }}

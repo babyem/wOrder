@@ -6,7 +6,6 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { useQueryClient } from '@tanstack/react-query'
 import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct } from '../../hooks/useProducts'
 import { useVendors, useCategories, useUnits } from '../../hooks/useMetadata'
 import { useAdminLocations } from '../../hooks/useAdminData'
@@ -162,8 +161,9 @@ function FieldDropdown({ label, open, onToggle, onClose, children }: {
 
 type OpenField = 'vendor' | 'category' | 'unit' | null
 
-function InlineEditRow({ product: p, onDelete, onDuplicate }: {
+function InlineEditRow({ product: p, onDelete, onDuplicate, showVendorHeader, vendorCount }: {
   product: Product; onDelete: (p: Product) => void; onDuplicate: (p: Product) => void
+  showVendorHeader?: boolean; vendorCount?: number
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: p.id })
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1, zIndex: isDragging ? 10 : undefined }
@@ -248,13 +248,24 @@ function InlineEditRow({ product: p, onDelete, onDuplicate }: {
 
   if (isDragging) {
     return (
-      <div ref={setNodeRef} style={style}
-           className="h-11 mx-2 my-0.5 rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/30" />
+      <div ref={setNodeRef} style={style}>
+        {showVendorHeader && <div className="h-9" />}
+        <div className="h-11 mx-2 my-0.5 rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/30" />
+      </div>
     )
   }
 
+  const vendorHeader = showVendorHeader && (
+    <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
+      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">{p.vendor || 'No Vendor'}</span>
+      {vendorCount !== undefined && <span className="text-xs text-slate-400">{vendorCount}</span>}
+    </div>
+  )
+
   return (
-    <div ref={setNodeRef} style={style} className="flex items-center gap-2 px-3 py-1.5 bg-white">
+    <div ref={setNodeRef} style={style}>
+      {vendorHeader}
+      <div className="flex items-center gap-2 px-3 py-1.5 bg-white border-b border-slate-100 last:border-0">
       {/* Drag handle */}
       <button {...attributes} {...listeners}
         className="text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing touch-none p-0.5 shrink-0">
@@ -378,6 +389,7 @@ function InlineEditRow({ product: p, onDelete, onDuplicate }: {
         <button onClick={() => onDelete(p)} className="p-1 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors">
           <Trash2 size={14} />
         </button>
+      </div>
       </div>
     </div>
   )
@@ -667,7 +679,6 @@ function ProductFormModal({ open, onClose, onSaved }: FormModalProps) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function ProductsPage() {
-  const qc = useQueryClient()
   const { data: serverProducts, isLoading } = useProducts()
   const updateProduct = useUpdateProduct()
   const deleteProduct = useDeleteProduct()
@@ -709,6 +720,22 @@ export default function ProductsPage() {
     })
   }, [serverProducts, localOrder, search, filterVendor, filterCategory, filterStatus])
 
+  // Vendor-grouped flat list — all sortable items stay siblings so DnD transforms work
+  const flatProducts = useMemo(() => {
+    const vendorOrder = (vendors ?? []).map(v => v.name)
+    const map = new Map<string, Product[]>()
+    for (const p of products) {
+      const v = p.vendor || 'No Vendor'
+      map.set(v, [...(map.get(v) ?? []), p])
+    }
+    const seenVendors = [...map.keys()]
+    const orderedVendors = [
+      ...vendorOrder.filter(v => map.has(v)),
+      ...seenVendors.filter(v => !vendorOrder.includes(v)),
+    ]
+    return orderedVendors.flatMap(v => map.get(v)!)
+  }, [products, vendors])
+
   const handleDragStart = (event: DragStartEvent) => {
     setDraggingId(event.active.id as string)
   }
@@ -717,7 +744,7 @@ export default function ProductsPage() {
     setDraggingId(null)
     const { active, over } = event
     if (!over || active.id === over.id || !serverProducts) return
-    const ids = products.map(p => p.id)
+    const ids = flatProducts.map(p => p.id)
     const newOrder = arrayMove(ids, ids.indexOf(active.id as string), ids.indexOf(over.id as string))
     setLocalOrder(newOrder)
     await Promise.all(newOrder.map((id, idx) => supabase.from('products').update({ sort_order: idx }).eq('id', id)))
@@ -936,51 +963,36 @@ export default function ProductsPage() {
       ) : !products.length ? (
         <EmptyState icon={Package} title={hasFilters ? 'No products match filters' : 'No products yet'} description={hasFilters ? 'Try clearing filters' : "Click 'Add' to get started."} />
       ) : (() => {
-          // Flatten into a single list with vendor header markers so all sortable rows
-          // are siblings — this prevents CSS transforms from being clipped or painted
-          // over by neighbouring vendor group containers.
-          const vendorOrder = (vendors ?? []).map(v => v.name)
-          const map = new Map<string, Product[]>()
-          for (const p of products) {
+          // Vendor counts for headers
+          const vendorCounts = new Map<string, number>()
+          for (const p of flatProducts) {
             const v = p.vendor || 'No Vendor'
-            map.set(v, [...(map.get(v) ?? []), p])
+            vendorCounts.set(v, (vendorCounts.get(v) ?? 0) + 1)
           }
-          const seenVendors = [...map.keys()]
-          const orderedVendors = [
-            ...vendorOrder.filter(v => map.has(v)),
-            ...seenVendors.filter(v => !vendorOrder.includes(v)),
-          ]
-          type Row =
-            | { type: 'header'; vendor: string; count: number }
-            | { type: 'product'; product: Product }
-          const rows: Row[] = orderedVendors.flatMap(v => {
-            const prods = map.get(v)!
-            return [
-              { type: 'header' as const, vendor: v, count: prods.length },
-              ...prods.map(p => ({ type: 'product' as const, product: p })),
-            ]
-          })
           return (
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-              <SortableContext items={products.map(p => p.id)} strategy={verticalListSortingStrategy}>
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
-                  {rows.map(row =>
-                    row.type === 'header' ? (
-                      <div key={`h-${row.vendor}`} className="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center gap-2 first:rounded-t-2xl">
-                        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">{row.vendor}</span>
-                        <span className="text-xs text-slate-400">{row.count}</span>
-                      </div>
-                    ) : (
-                      <div key={row.product.id} className="border-b border-slate-100 last:border-0">
-                        <InlineEditRow product={row.product} onDelete={handleDelete} onDuplicate={handleDuplicate} />
-                      </div>
+              <SortableContext items={flatProducts.map(p => p.id)} strategy={verticalListSortingStrategy}>
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                  {flatProducts.map((p, idx) => {
+                    const prevVendor = idx > 0 ? (flatProducts[idx - 1].vendor || 'No Vendor') : null
+                    const thisVendor = p.vendor || 'No Vendor'
+                    const showVendorHeader = thisVendor !== prevVendor
+                    return (
+                      <InlineEditRow
+                        key={p.id}
+                        product={p}
+                        onDelete={handleDelete}
+                        onDuplicate={handleDuplicate}
+                        showVendorHeader={showVendorHeader}
+                        vendorCount={showVendorHeader ? vendorCounts.get(thisVendor) : undefined}
+                      />
                     )
-                  )}
+                  })}
                 </div>
               </SortableContext>
               <DragOverlay dropAnimation={null}>
                 {draggingId ? (() => {
-                  const p = products.find(x => x.id === draggingId)
+                  const p = flatProducts.find(x => x.id === draggingId)
                   if (!p) return null
                   return (
                     <div className="bg-white border border-indigo-200 rounded-xl shadow-2xl px-4 py-3 flex items-center gap-3 opacity-95">

@@ -34,12 +34,20 @@ export default function OrderModal({ open, onClose, locationId, employeeId }: Pr
     const next = Math.max(0, dragState.current.startQty + Math.round(delta / 18))
     if (next !== dragState.current.last) {
       dragState.current.last = next
-      if (next === 0) updateQuantity(dragState.current.productId, 0)
-      else updateQuantity(dragState.current.productId, next)
+      if (next > 0) updateQuantity(dragState.current.productId, next)
     }
     setScrubber(s => s ? { ...s, qty: next } : null)
   }
-  const onQtyPointerUp = () => { dragState.current = null; setScrubber(null) }
+  const onQtyPointerUp = () => {
+    const last = dragState.current?.last ?? 1
+    const pid = dragState.current?.productId
+    dragState.current = null
+    if (last === 0 && pid) {
+      setTimeout(() => { updateQuantity(pid, 0); setScrubber(null) }, 350)
+    } else {
+      setTimeout(() => setScrubber(null), 300)
+    }
+  }
 
   const handleSubmit = async () => {
     if (!items.length) return

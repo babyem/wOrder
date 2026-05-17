@@ -28,12 +28,20 @@ export default function ProductCard({ product }: Props) {
     const next = Math.max(0, dragState.current.startQty + Math.round(delta / 18))
     if (next !== dragState.current.last) {
       dragState.current.last = next
-      if (next === 0) removeItem(product.id)
-      else updateQuantity(product.id, next)
+      // Keep qty ≥ 1 in cart during drag so the span stays mounted; handle 0 on release
+      if (next > 0) updateQuantity(product.id, next)
     }
     setScrubber(s => s ? { ...s, qty: next } : null)
   }
-  const onQtyPointerUp = () => { dragState.current = null; setScrubber(null) }
+  const onQtyPointerUp = () => {
+    const last = dragState.current?.last ?? quantity
+    dragState.current = null
+    if (last === 0) {
+      setTimeout(() => { removeItem(product.id); setScrubber(null) }, 350)
+    } else {
+      setTimeout(() => setScrubber(null), 300)
+    }
+  }
 
   const scrubberOffsets = [2, 1, 0, -1, -2]
 

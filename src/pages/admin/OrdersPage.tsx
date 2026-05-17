@@ -175,7 +175,7 @@ export default function OrdersPage() {
     if (!webhookUrl) { toast.error('Webhook URL saknas — sätt VITE_N8N_CHEFSCULINAR_WEBHOOK i .env'); return }
 
     const pendingOrders = (orders ?? []).filter(o => o.status === 'pending')
-    const aggregated = new Map<string, { quantity: number; unit: string }>()
+    const aggregated = new Map<string, { quantity: number; unit: string; unit_qty: number }>()
     for (const order of pendingOrders) {
       for (const item of order.items) {
         const id = item.product?.chefsculinar_id

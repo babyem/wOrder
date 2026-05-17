@@ -19,7 +19,21 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
   const { data: vendorList } = useVendors()
   const updateOrderItem = useUpdateOrderItem()
   const [showNotify, setShowNotify] = useState(false)
-  const [doneVendors, setDoneVendors] = useState<Set<string>>(new Set())
+  const [doneVendors, setDoneVendors] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(`done_vendors_${order.id}`)
+      return stored ? new Set(JSON.parse(stored)) : new Set()
+    } catch { return new Set() }
+  })
+
+  const markVendorDone = (vendor: string, done: boolean) => {
+    setDoneVendors(prev => {
+      const next = new Set(prev)
+      done ? next.add(vendor) : next.delete(vendor)
+      localStorage.setItem(`done_vendors_${order.id}`, JSON.stringify([...next]))
+      return next
+    })
+  }
   const [sending, setSending] = useState<string | null>(null)
   const [editingVendorItem, setEditingVendorItem] = useState<string | null>(null)
   const [editingQtyItem, setEditingQtyItem] = useState<string | null>(null)
@@ -255,7 +269,8 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
   const statusBarClass = selected ? 'bg-indigo-50 text-indigo-700' : isPending ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
 
   return (
-    <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className={`relative transition-opacity ${!isPending ? 'opacity-50 hover:opacity-100' : ''}`}>
+    <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="relative">
+    <div className={`transition-opacity duration-200 ${!isPending ? 'opacity-50 hover:opacity-100' : ''}`}>
 
       {/* Green connecting line — centered, visible in the gaps between vendor cards */}
       {isMultiVendor && (
@@ -323,7 +338,7 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
               <div className="flex items-center justify-between mb-1">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{vendorEntries[0][0]}</p>
                 <button
-                  onClick={() => setDoneVendors(prev => { const s = new Set(prev); s.has(vendorEntries[0][0]) ? s.delete(vendorEntries[0][0]) : s.add(vendorEntries[0][0]); return s })}
+                  onClick={() => markVendorDone(vendorEntries[0][0], !doneVendors.has(vendorEntries[0][0]))}
                   className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium transition-colors ${doneVendors.has(vendorEntries[0][0]) ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600'}`}
                 >
                   <CheckCircle size={10} /> {doneVendors.has(vendorEntries[0][0]) ? 'Done' : 'Mark done'}
@@ -360,7 +375,7 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
                           try {
                             await sendEmail(v.email!, `Order – ${order.location?.name ?? ''}`, buildBody(v.name))
                             toast.success(`Email sent to ${v.name}`)
-                            setDoneVendors(prev => new Set(prev).add(v.name))
+                            markVendorDone(v.name, true)
                             if (isPending) await updateStatus.mutateAsync({ id: order.id, status: 'done' })
                           } catch (err) {
                             toast.error(`${v.name}: ${err instanceof Error ? err.message : 'Failed to send'}`)
@@ -371,7 +386,7 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
                       )}
                       {v.phone && (
                         <a href={`sms:${v.phone}?body=${encodeURIComponent(buildBody(v.name))}`}
-                          onClick={() => { setDoneVendors(prev => new Set(prev).add(v.name)); if (isPending) updateStatus.mutateAsync({ id: order.id, status: 'done' }) }}
+                          onClick={() => { markVendorDone(v.name, true); if (isPending) updateStatus.mutateAsync({ id: order.id, status: 'done' }) }}
                           className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 transition-colors">
                           <Phone size={11} /> SMS
                         </a>
@@ -394,7 +409,7 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
             <div className="px-3 py-2 border-b border-slate-50 flex items-center justify-between">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{vendor}</p>
               <button
-                onClick={() => setDoneVendors(prev => { const s = new Set(prev); s.has(vendor) ? s.delete(vendor) : s.add(vendor); return s })}
+                onClick={() => markVendorDone(vendor, !doneVendors.has(vendor))}
                 className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium transition-colors ${isVendorDone ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600'}`}
               >
                 <CheckCircle size={10} /> {isVendorDone ? 'Done' : 'Mark done'}
@@ -406,6 +421,7 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
           </div>
         )
       })}
+    </div>
     </motion.div>
   )
 }

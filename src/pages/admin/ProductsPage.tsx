@@ -6,6 +6,7 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { useQueryClient } from '@tanstack/react-query'
 import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct } from '../../hooks/useProducts'
 import { useVendors, useCategories, useUnits } from '../../hooks/useMetadata'
 import { useAdminLocations } from '../../hooks/useAdminData'
@@ -655,6 +656,7 @@ function ProductFormModal({ open, onClose, onSaved }: FormModalProps) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function ProductsPage() {
+  const qc = useQueryClient()
   const { data: serverProducts, isLoading } = useProducts()
   const updateProduct = useUpdateProduct()
   const deleteProduct = useDeleteProduct()
@@ -702,15 +704,19 @@ export default function ProductsPage() {
     const activeProduct = serverProducts.find(p => p.id === active.id)
     const overProduct = serverProducts.find(p => p.id === over.id)
 
-    // Change vendor if dropped into a different vendor group
-    if (activeProduct && overProduct && activeProduct.vendor !== overProduct.vendor) {
-      await updateProduct.mutateAsync({ id: active.id as string, vendor: overProduct.vendor })
-    }
-
     const ids = products.map(p => p.id)
     const newOrder = arrayMove(ids, ids.indexOf(active.id as string), ids.indexOf(over.id as string))
     setLocalOrder(newOrder)
-    await Promise.all(newOrder.map((id, idx) => supabase.from('products').update({ sort_order: idx }).eq('id', id)))
+
+    // Batch all DB writes, then invalidate once — avoids mid-drag refetch flickering
+    const ops: Promise<unknown>[] = newOrder.map((id, idx) =>
+      supabase.from('products').update({ sort_order: idx }).eq('id', id)
+    )
+    if (activeProduct && overProduct && activeProduct.vendor !== overProduct.vendor) {
+      ops.push(supabase.from('products').update({ vendor: overProduct.vendor }).eq('id', active.id as string))
+    }
+    await Promise.all(ops)
+    qc.invalidateQueries({ queryKey: ['products'] })
   }
 
   const handleDelete = async (p: Product) => {

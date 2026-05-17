@@ -159,318 +159,229 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
   }
   const isMultiVendor = byVendor.size > 1
 
-  return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8 }}
-      className={`bg-white rounded-2xl border shadow-sm transition-shadow ${
-        selected ? 'border-indigo-400 ring-2 ring-indigo-100' : isPending ? 'border-amber-200' : 'border-slate-100'
-      }`}
-    >
-      {/* Status bar — with time on right */}
-      <div className={`px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 rounded-t-2xl ${
-        selected ? 'bg-indigo-50 text-indigo-700' : isPending ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
-      }`}>
-        {onToggle && (
-          <button onClick={e => { e.stopPropagation(); onToggle() }} className="shrink-0 mr-0.5">
-            {selected
-              ? <CheckSquare size={13} className="text-indigo-600" />
-              : <Square size={13} className="text-slate-400" />}
-          </button>
-        )}
-        {isPending ? <Clock size={12} /> : <CheckCircle size={12} />}
-        {isPending ? 'Pending' : 'Completed'}
-        <span className="ml-auto font-normal opacity-60 tabular-nums">{time}</span>
-      </div>
+  const vendorEntries = Array.from(byVendor.entries())
 
-      <div className="p-3 space-y-2">
-        <div className="flex items-start justify-between gap-2">
-          <div className="space-y-1 min-w-0">
-            <div className="flex items-center gap-1.5 text-sm text-slate-600">
-              <User size={13} className="text-slate-400 shrink-0" />
-              <span className="font-medium text-slate-900 truncate">{order.employee?.name ?? 'Unknown'}</span>
-            </div>
-            <div className="flex items-center gap-1.5 text-xs text-slate-400">
-              <MapPin size={11} className="shrink-0" />
-              <span className="truncate">{order.location?.name ?? 'Unknown location'}</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            {chefsItems.length > 0 && isPending && (
-              <button
-                onClick={handleSendToChefs}
-                disabled={sendingChefs}
-                title="Skicka till ChefsCulinar"
-                className="p-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 disabled:opacity-50 transition-colors"
-              >
-                {sendingChefs ? <Loader2 size={14} className="animate-spin" /> : <ShoppingBag size={14} />}
-              </button>
-            )}
-            {orderVendors.length > 0 && (
-              <button
-                onClick={() => setShowNotify(v => !v)}
-                title="Notify vendors"
-                className={`p-1.5 rounded-lg text-xs transition-colors ${
-                  showNotify
-                    ? 'bg-indigo-100 text-indigo-700'
-                    : 'bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600'
-                }`}
-              >
-                <Bell size={14} />
-              </button>
-            )}
-            {isPending ? (
-              <button
-                onClick={handleComplete}
-                disabled={updateStatus.isPending}
-                title="Mark as done"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors"
-              >
-                <CheckCircle size={13} />
-                Done
-              </button>
-            ) : (
-              <button
-                onClick={handleReopen}
-                disabled={updateStatus.isPending}
-                title="Reopen order"
-                className="p-1.5 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200 disabled:opacity-50 transition-colors"
-              >
-                <RotateCcw size={14} />
-              </button>
-            )}
-            <button
-              onClick={handleDelete}
-              disabled={deleteOrder.isPending}
-              title="Delete order"
-              className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 disabled:opacity-50 transition-colors"
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
-        </div>
-
-        {/* Product list — per-vendor mini-cards when multi-vendor */}
-        <div className={`border-t border-slate-50 pt-2 ${isMultiVendor ? 'space-y-1.5' : 'space-y-0'}`}>
-          {Array.from(byVendor.entries()).map(([vendor, items]) => (
-            <div key={vendor} className={isMultiVendor
-              ? 'border border-slate-100 rounded-xl overflow-hidden'
-              : ''
-            }>
-              {isMultiVendor && (
-                <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50 border-b border-slate-100">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{vendor}</p>
-                </div>
-              )}
-              <div className={isMultiVendor ? 'px-2.5 py-1.5 space-y-0.5' : 'space-y-0.5'}>
-                {!isMultiVendor && byVendor.size === 1 && (
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">{vendor}</p>
+  const renderItems = (items: typeof order.items) => (
+    <div className="space-y-0.5">
+      {items.map(item => {
+        const excluded_ = isExcluded(item.id)
+        const isOverridden = !!vendorOverrides[item.id]
+        return (
+          <div
+            key={item.id}
+            className="flex items-center justify-between text-sm group cursor-default select-none py-0.5"
+            onDoubleClick={() => toggleExclude(item)}
+            title="Double-click to exclude from notification"
+          >
+            <span className={excluded_ ? 'line-through text-red-400' : 'text-slate-700'}>
+              {item.product?.name ?? 'Deleted product'}
+            </span>
+            <div className="flex items-center gap-1 shrink-0">
+              <div className={`flex items-center rounded-lg px-1.5 py-0.5 gap-1 ${excluded_ ? 'bg-red-50' : 'bg-slate-100'}`}>
+                {editingQtyItem === item.id ? (
+                  <input
+                    type="number" min={1} value={qtyDraft}
+                    onChange={e => setQtyDraft(e.target.value)}
+                    onBlur={() => {
+                      const n = parseFloat(qtyDraft)
+                      if (!isNaN(n) && n > 0 && n !== item.quantity)
+                        updateOrderItem.mutate({ id: item.id, quantity: n })
+                      setEditingQtyItem(null)
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                      if (e.key === 'Escape') setEditingQtyItem(null)
+                    }}
+                    onClick={e => e.stopPropagation()}
+                    onDoubleClick={e => e.stopPropagation()}
+                    className="w-10 text-xs tabular-nums text-right focus:outline-none bg-transparent font-medium text-slate-700"
+                    autoFocus
+                  />
+                ) : (
+                  <span
+                    className={`text-xs tabular-nums font-medium cursor-pointer ${excluded_ ? 'line-through text-red-400' : 'text-slate-600 hover:text-indigo-600'}`}
+                    onDoubleClick={e => { e.stopPropagation(); setQtyDraft(String(item.quantity)); setEditingQtyItem(item.id) }}
+                    title="Double-click to edit"
+                  >{item.quantity}</span>
                 )}
-                {items.map(item => {
-                    const excluded_ = isExcluded(item.id)
-                    const isOverridden = !!vendorOverrides[item.id]
-                    return (
-                      <div
-                        key={item.id}
-                        className="flex items-center justify-between text-sm group cursor-default select-none py-0.5"
-                        onDoubleClick={() => toggleExclude(item)}
-                        title="Double-click to exclude from notification"
-                      >
-                        <span className={excluded_ ? 'line-through text-red-400' : 'text-slate-700'}>
-                          {item.product?.name ?? 'Deleted product'}
-                        </span>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <div className={`flex items-center rounded-lg px-1.5 py-0.5 gap-1 ${excluded_ ? 'bg-red-50' : 'bg-slate-100'}`}>
-                            {editingQtyItem === item.id ? (
-                              <input
-                                type="number"
-                                min={1}
-                                value={qtyDraft}
-                                onChange={e => setQtyDraft(e.target.value)}
-                                onBlur={() => {
-                                  const n = parseFloat(qtyDraft)
-                                  if (!isNaN(n) && n > 0 && n !== item.quantity)
-                                    updateOrderItem.mutate({ id: item.id, quantity: n })
-                                  setEditingQtyItem(null)
-                                }}
-                                onKeyDown={e => {
-                                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-                                  if (e.key === 'Escape') setEditingQtyItem(null)
-                                }}
-                                onClick={e => e.stopPropagation()}
-                                onDoubleClick={e => e.stopPropagation()}
-                                className="w-10 text-xs tabular-nums text-right focus:outline-none bg-transparent font-medium text-slate-700"
-                                autoFocus
-                              />
-                            ) : (
-                              <span
-                                className={`text-xs tabular-nums font-medium cursor-pointer ${excluded_ ? 'line-through text-red-400' : 'text-slate-600 hover:text-indigo-600'}`}
-                                onDoubleClick={e => { e.stopPropagation(); setQtyDraft(String(item.quantity)); setEditingQtyItem(item.id) }}
-                                title="Double-click to edit"
-                              >
-                                {item.quantity}
-                              </span>
-                            )}
-                            <div className="relative">
-                              <button
-                                onClick={e => { e.stopPropagation(); if (editingUnitItem !== item.id) { const rect = e.currentTarget.getBoundingClientRect(); setUnitDropUp(prev => ({ ...prev, [item.id]: rect.bottom + 150 > window.innerHeight })) } setEditingUnitItem(prev => prev === item.id ? null : item.id) }}
-                                className={`text-xs transition-colors ${
-                                  unitOverrides[item.id]
-                                    ? 'text-indigo-500 font-medium'
-                                    : excluded_ ? 'line-through text-red-300' : 'text-slate-400 hover:text-slate-600'
-                                }`}
-                              >
-                                {effectiveUnit(item)}
-                              </button>
-                            {editingUnitItem === item.id && (
-                              <>
-                                <div className="fixed inset-0 z-40" onClick={() => setEditingUnitItem(null)} />
-                                <div className={`absolute right-0 ${unitDropUp[item.id] ? 'bottom-full mb-1' : 'top-full mt-1'} z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 flex flex-col gap-0.5 min-w-[80px]`}>
-                                  {(unitList ?? []).map(u => (
-                                    <button
-                                      key={u.id}
-                                      onClick={() => {
-                                        const override = u.name === item.product?.unit ? null : u.name
-                                        setUnitOverrides(prev => {
-                                          const next = { ...prev }
-                                          if (override === null) delete next[item.id]
-                                          else next[item.id] = u.name
-                                          return next
-                                        })
-                                        updateOrderItem.mutate({ id: item.id, unit_override: override })
-                                        setEditingUnitItem(null)
-                                      }}
-                                      className={`px-2.5 py-1 rounded-lg text-xs text-left transition-colors ${
-                                        effectiveUnit(item) === u.name
-                                          ? 'bg-indigo-600 text-white'
-                                          : 'hover:bg-slate-50 text-slate-700'
-                                      }`}
-                                    >
-                                      {u.name}
-                                    </button>
-                                  ))}
-                                </div>
-                              </>
-                            )}
-                            </div>
-                          </div>
-                          <div className="relative">
-                            <button
-                              onClick={e => { e.stopPropagation(); if (editingVendorItem !== item.id) { const rect = e.currentTarget.getBoundingClientRect(); setVendorDropUp(prev => ({ ...prev, [item.id]: rect.bottom + 180 > window.innerHeight })) } setEditingVendorItem(prev => prev === item.id ? null : item.id) }}
-                              title="Change vendor"
-                              className={`p-0.5 rounded transition-all ${
-                                isOverridden
-                                  ? 'text-amber-500 opacity-100'
-                                  : 'text-slate-300 opacity-0 group-hover:opacity-100 hover:text-slate-500'
-                              }`}
-                            >
-                              <Tag size={10} />
-                            </button>
-                            {editingVendorItem === item.id && (
-                              <>
-                                <div className="fixed inset-0 z-40" onClick={() => setEditingVendorItem(null)} />
-                                <div className={`absolute right-0 ${vendorDropUp[item.id] ? 'bottom-full mb-1' : 'top-full mt-1'} z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 flex flex-col gap-0.5 min-w-[130px]`}>
-                                  {(vendorList ?? []).map(v => (
-                                    <button
-                                      key={v.id}
-                                      onClick={() => setItemVendor(item, v.name)}
-                                      className={`px-2.5 py-1 rounded-lg text-xs text-left transition-colors ${
-                                        effectiveVendor(item) === v.name
-                                          ? 'bg-indigo-600 text-white'
-                                          : 'hover:bg-slate-50 text-slate-700'
-                                      }`}
-                                    >
-                                      {v.name}
-                                    </button>
-                                  ))}
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        </div>
+                <div className="relative">
+                  <button
+                    onClick={e => { e.stopPropagation(); if (editingUnitItem !== item.id) { const rect = e.currentTarget.getBoundingClientRect(); setUnitDropUp(prev => ({ ...prev, [item.id]: rect.bottom + 150 > window.innerHeight })) } setEditingUnitItem(prev => prev === item.id ? null : item.id) }}
+                    className={`text-xs transition-colors ${unitOverrides[item.id] ? 'text-indigo-500 font-medium' : excluded_ ? 'line-through text-red-300' : 'text-slate-400 hover:text-slate-600'}`}
+                  >{effectiveUnit(item)}</button>
+                  {editingUnitItem === item.id && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setEditingUnitItem(null)} />
+                      <div className={`absolute right-0 ${unitDropUp[item.id] ? 'bottom-full mb-1' : 'top-full mt-1'} z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 flex flex-col gap-0.5 min-w-[80px]`}>
+                        {(unitList ?? []).map(u => (
+                          <button key={u.id} onClick={() => {
+                            const override = u.name === item.product?.unit ? null : u.name
+                            setUnitOverrides(prev => { const next = { ...prev }; if (override === null) delete next[item.id]; else next[item.id] = u.name; return next })
+                            updateOrderItem.mutate({ id: item.id, unit_override: override })
+                            setEditingUnitItem(null)
+                          }} className={`px-2.5 py-1 rounded-lg text-xs text-left transition-colors ${effectiveUnit(item) === u.name ? 'bg-indigo-600 text-white' : 'hover:bg-slate-50 text-slate-700'}`}>{u.name}</button>
+                        ))}
                       </div>
-                    )
-                  })}
+                    </>
+                  )}
+                </div>
+              </div>
+              <div className="relative">
+                <button
+                  onClick={e => { e.stopPropagation(); if (editingVendorItem !== item.id) { const rect = e.currentTarget.getBoundingClientRect(); setVendorDropUp(prev => ({ ...prev, [item.id]: rect.bottom + 180 > window.innerHeight })) } setEditingVendorItem(prev => prev === item.id ? null : item.id) }}
+                  title="Change vendor"
+                  className={`p-0.5 rounded transition-all ${isOverridden ? 'text-amber-500 opacity-100' : 'text-slate-300 opacity-0 group-hover:opacity-100 hover:text-slate-500'}`}
+                ><Tag size={10} /></button>
+                {editingVendorItem === item.id && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setEditingVendorItem(null)} />
+                    <div className={`absolute right-0 ${vendorDropUp[item.id] ? 'bottom-full mb-1' : 'top-full mt-1'} z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 flex flex-col gap-0.5 min-w-[130px]`}>
+                      {(vendorList ?? []).map(v => (
+                        <button key={v.id} onClick={() => setItemVendor(item, v.name)} className={`px-2.5 py-1 rounded-lg text-xs text-left transition-colors ${effectiveVendor(item) === v.name ? 'bg-indigo-600 text-white' : 'hover:bg-slate-50 text-slate-700'}`}>{v.name}</button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
-          ))}
+          </div>
+        )
+      })}
+    </div>
+  )
+
+  const cardBorder = selected ? 'border-indigo-400 ring-2 ring-indigo-100' : isPending ? 'border-amber-200' : 'border-slate-100'
+  const statusBarClass = selected ? 'bg-indigo-50 text-indigo-700' : isPending ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
+
+  return (
+    <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="relative">
+
+      {/* Green connecting line — visible in the gaps between vendor cards */}
+      {isMultiVendor && (
+        <div className="absolute left-[14px] top-3 bottom-3 w-0.5 bg-emerald-400 rounded-full z-0" />
+      )}
+
+      {/* Main card — order header + first vendor */}
+      <div className={`relative z-10 bg-white rounded-2xl border shadow-sm transition-shadow ${cardBorder}`}>
+        <div className={`px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 rounded-t-2xl ${statusBarClass}`}>
+          {onToggle && (
+            <button onClick={e => { e.stopPropagation(); onToggle() }} className="shrink-0 mr-0.5">
+              {selected ? <CheckSquare size={13} className="text-indigo-600" /> : <Square size={13} className="text-slate-400" />}
+            </button>
+          )}
+          {isPending ? <Clock size={12} /> : <CheckCircle size={12} />}
+          {isPending ? 'Pending' : 'Completed'}
+          <span className="ml-auto font-normal opacity-60 tabular-nums">{time}</span>
         </div>
 
-        {order.note && (
-          <div className="flex items-start gap-2 bg-slate-50 rounded-xl p-2.5 text-xs text-slate-600">
-            <FileText size={12} className="text-slate-400 mt-0.5 shrink-0" />
-            {order.note}
+        <div className="p-3 space-y-2">
+          <div className="flex items-start justify-between gap-2">
+            <div className="space-y-1 min-w-0">
+              <div className="flex items-center gap-1.5 text-sm text-slate-600">
+                <User size={13} className="text-slate-400 shrink-0" />
+                <span className="font-medium text-slate-900 truncate">{order.employee?.name ?? 'Unknown'}</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                <MapPin size={11} className="shrink-0" />
+                <span className="truncate">{order.location?.name ?? 'Unknown location'}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              {chefsItems.length > 0 && isPending && (
+                <button onClick={handleSendToChefs} disabled={sendingChefs} title="Skicka till ChefsCulinar"
+                  className="p-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 disabled:opacity-50 transition-colors">
+                  {sendingChefs ? <Loader2 size={14} className="animate-spin" /> : <ShoppingBag size={14} />}
+                </button>
+              )}
+              {orderVendors.length > 0 && (
+                <button onClick={() => setShowNotify(v => !v)} title="Notify vendors"
+                  className={`p-1.5 rounded-lg text-xs transition-colors ${showNotify ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600'}`}>
+                  <Bell size={14} />
+                </button>
+              )}
+              {isPending ? (
+                <button onClick={handleComplete} disabled={updateStatus.isPending} title="Mark as done"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+                  <CheckCircle size={13} /> Done
+                </button>
+              ) : (
+                <button onClick={handleReopen} disabled={updateStatus.isPending} title="Reopen order"
+                  className="p-1.5 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200 disabled:opacity-50 transition-colors">
+                  <RotateCcw size={14} />
+                </button>
+              )}
+              <button onClick={handleDelete} disabled={deleteOrder.isPending} title="Delete order"
+                className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 disabled:opacity-50 transition-colors">
+                <Trash2 size={14} />
+              </button>
+            </div>
           </div>
-        )}
 
-        {/* Vendor notification panel */}
-        <AnimatePresence>
-          {showNotify && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="overflow-hidden"
-            >
-              <div className="border-t border-slate-100 pt-3 space-y-1.5">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Notify vendors</span>
-                  <button onClick={() => setShowNotify(false)} className="text-slate-300 hover:text-slate-500 transition-colors">
-                    <X size={13} />
-                  </button>
-                </div>
-                {orderVendors.map(v => (
-                  <div key={v.name} className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs text-slate-600 font-medium flex-1 truncate">{v.name}</span>
-                    {v.email && (
-                      <button
-                        disabled={sending === v.name}
-                        onClick={async () => {
+          <div className="border-t border-slate-50 pt-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">{vendorEntries[0][0]}</p>
+            {renderItems(vendorEntries[0][1])}
+          </div>
+
+          {order.note && (
+            <div className="flex items-start gap-2 bg-slate-50 rounded-xl p-2.5 text-xs text-slate-600">
+              <FileText size={12} className="text-slate-400 mt-0.5 shrink-0" />
+              {order.note}
+            </div>
+          )}
+
+          <AnimatePresence>
+            {showNotify && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+                <div className="border-t border-slate-100 pt-3 space-y-1.5">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Notify vendors</span>
+                    <button onClick={() => setShowNotify(false)} className="text-slate-300 hover:text-slate-500 transition-colors"><X size={13} /></button>
+                  </div>
+                  {orderVendors.map(v => (
+                    <div key={v.name} className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs text-slate-600 font-medium flex-1 truncate">{v.name}</span>
+                      {v.email && (
+                        <button disabled={sending === v.name} onClick={async () => {
                           setSending(v.name)
                           try {
-                            await sendEmail(
-                              v.email!,
-                              `Order – ${order.location?.name ?? ''}`,
-                              buildBody(v.name),
-                            )
+                            await sendEmail(v.email!, `Order – ${order.location?.name ?? ''}`, buildBody(v.name))
                             toast.success(`Email sent to ${v.name}`)
                             if (isPending) await updateStatus.mutateAsync({ id: order.id, status: 'done' })
                           } catch (err) {
                             toast.error(`${v.name}: ${err instanceof Error ? err.message : 'Failed to send'}`)
-                          } finally {
-                            setSending(null)
-                          }
-                        }}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-medium hover:bg-indigo-100 disabled:opacity-50 transition-colors"
-                      >
-                        {sending === v.name
-                          ? <Loader2 size={11} className="animate-spin" />
-                          : <Mail size={11} />}
-                        Email
-                      </button>
-                    )}
-                    {v.phone && (
-                      <a
-                        href={`sms:${v.phone}?body=${encodeURIComponent(buildBody(v.name))}`}
-                        onClick={() => { if (isPending) updateStatus.mutateAsync({ id: order.id, status: 'done' }) }}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 transition-colors"
-                      >
-                        <Phone size={11} /> SMS
-                      </a>
-                    )}
-                    {!v.email && !v.phone && (
-                      <span className="text-[10px] text-slate-300 italic">No contact info</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+                          } finally { setSending(null) }
+                        }} className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-medium hover:bg-indigo-100 disabled:opacity-50 transition-colors">
+                          {sending === v.name ? <Loader2 size={11} className="animate-spin" /> : <Mail size={11} />} Email
+                        </button>
+                      )}
+                      {v.phone && (
+                        <a href={`sms:${v.phone}?body=${encodeURIComponent(buildBody(v.name))}`}
+                          onClick={() => { if (isPending) updateStatus.mutateAsync({ id: order.id, status: 'done' }) }}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 transition-colors">
+                          <Phone size={11} /> SMS
+                        </a>
+                      )}
+                      {!v.email && !v.phone && <span className="text-[10px] text-slate-300 italic">No contact info</span>}
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
+
+      {/* Additional vendor cards — one per extra vendor, connected by the green line */}
+      {isMultiVendor && vendorEntries.slice(1).map(([vendor, items]) => (
+        <div key={vendor} className="relative z-10 mt-2 bg-white rounded-2xl border border-slate-100 shadow-sm">
+          <div className="px-3 py-2 border-b border-slate-50">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{vendor}</p>
+          </div>
+          <div className="p-3">
+            {renderItems(items)}
+          </div>
+        </div>
+      ))}
     </motion.div>
   )
 }

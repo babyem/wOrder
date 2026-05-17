@@ -128,7 +128,7 @@ export default function AdminLayout() {
           )}
         </AnimatePresence>
 
-        <main className="flex-1 p-4 md:p-6 overflow-auto">
+        <main className="flex-1 p-4 md:p-6 pb-16 overflow-auto">
           <Outlet />
         </main>
       </div>

@@ -37,9 +37,9 @@ export default function ProductCard({ product }: Props) {
     const last = dragState.current?.last ?? quantity
     dragState.current = null
     if (last === 0) {
-      setTimeout(() => { removeItem(product.id); setScrubber(null) }, 350)
+      setTimeout(() => { removeItem(product.id); setScrubber(null) }, 500)
     } else {
-      setTimeout(() => setScrubber(null), 300)
+      setTimeout(() => setScrubber(null), 500)
     }
   }
 
@@ -47,33 +47,39 @@ export default function ProductCard({ product }: Props) {
 
   return (
     <>
-      {scrubber && (
-        <div
-          className="fixed z-[200] pointer-events-none"
-          style={{ left: scrubber.x, top: scrubber.y, transform: 'translate(-50%, -50%)' }}
-        >
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden w-14">
-            {scrubberOffsets.map(offset => {
-              const n = scrubber.qty + offset
-              const isCenter = offset === 0
-              return (
-                <div
-                  key={offset}
-                  className={`text-center py-1 leading-tight ${
-                    isCenter
-                      ? 'text-indigo-600 font-bold text-xl bg-indigo-50'
-                      : Math.abs(offset) === 1
-                        ? 'text-slate-400 text-sm'
-                        : 'text-slate-200 text-xs'
-                  }`}
-                >
-                  {n >= 0 ? n : ''}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
+      <AnimatePresence>
+        {scrubber && (
+          <motion.div
+            className="fixed z-[200] pointer-events-none"
+            style={{ left: scrubber.x, top: scrubber.y, transform: 'translate(-50%, -50%)' }}
+            initial={{ opacity: 0, scale: 0.85 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.85 }}
+            transition={{ type: 'spring', damping: 20, stiffness: 300, duration: 0.2 }}
+          >
+            <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden w-14">
+              {scrubberOffsets.map(offset => {
+                const n = scrubber.qty + offset
+                const isCenter = offset === 0
+                return (
+                  <div
+                    key={offset}
+                    className={`text-center py-1 leading-tight ${
+                      isCenter
+                        ? 'text-indigo-600 font-bold text-xl bg-indigo-50'
+                        : Math.abs(offset) === 1
+                          ? 'text-slate-400 text-sm'
+                          : 'text-slate-200 text-xs'
+                    }`}
+                  >
+                    {n >= 0 ? n : ''}
+                  </div>
+                )
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <motion.div
         layout
         initial={{ opacity: 0, y: 6 }}
@@ -81,26 +87,43 @@ export default function ProductCard({ product }: Props) {
         className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors group"
         onClick={() => addItem(product)}
       >
-        {/* Thumbnail — click opens lightbox, not cart */}
-        <div
-          className="w-12 h-12 rounded-xl bg-slate-100 overflow-hidden shrink-0 cursor-zoom-in"
-          onClick={e => {
-            e.stopPropagation()
-            if (product.image_url) setLightboxOpen(true)
-          }}
-        >
-          {product.image_url ? (
-            <img
-              src={product.image_url}
-              alt={product.name}
-              className="w-full h-full object-cover"
-              loading="lazy"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <Package size={18} className="text-slate-300" />
-            </div>
-          )}
+        {/* Thumbnail — trash overlaid when item is in cart */}
+        <div className="relative w-12 h-12 shrink-0">
+          <div
+            className="w-12 h-12 rounded-xl bg-slate-100 overflow-hidden cursor-zoom-in"
+            onClick={e => {
+              e.stopPropagation()
+              if (product.image_url) setLightboxOpen(true)
+            }}
+          >
+            {product.image_url ? (
+              <img
+                src={product.image_url}
+                alt={product.name}
+                className="w-full h-full object-cover"
+                loading="lazy"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <Package size={18} className="text-slate-300" />
+              </div>
+            )}
+          </div>
+          <AnimatePresence>
+            {quantity > 0 && (
+              <motion.button
+                key="trash"
+                initial={{ opacity: 0, scale: 0.7 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.7 }}
+                transition={{ duration: 0.15 }}
+                onClick={e => { e.stopPropagation(); removeItem(product.id) }}
+                className="absolute inset-0 w-full h-full rounded-xl bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <Trash2 size={16} className="text-white" />
+              </motion.button>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Info */}
@@ -133,12 +156,6 @@ export default function ProductCard({ product }: Props) {
                 transition={{ duration: 0.15 }}
                 className="flex items-center gap-2"
               >
-                <button
-                  onClick={() => removeItem(product.id)}
-                  className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center hover:bg-red-50 transition-colors group/trash"
-                >
-                  <Trash2 size={13} className="text-slate-400 group-hover/trash:text-red-500 transition-colors" />
-                </button>
                 <button
                   onClick={() => updateQuantity(product.id, quantity - 1)}
                   className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors"

@@ -267,48 +267,49 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
                         <span className={excluded_ ? 'line-through text-red-400' : 'text-slate-700'}>
                           {item.product?.name ?? 'Deleted product'}
                         </span>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {editingQtyItem === item.id ? (
-                            <input
-                              type="number"
-                              min={1}
-                              value={qtyDraft}
-                              onChange={e => setQtyDraft(e.target.value)}
-                              onBlur={() => {
-                                const n = parseFloat(qtyDraft)
-                                if (!isNaN(n) && n > 0 && n !== item.quantity)
-                                  updateOrderItem.mutate({ id: item.id, quantity: n })
-                                setEditingQtyItem(null)
-                              }}
-                              onKeyDown={e => {
-                                if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-                                if (e.key === 'Escape') setEditingQtyItem(null)
-                              }}
-                              onClick={e => e.stopPropagation()}
-                              onDoubleClick={e => e.stopPropagation()}
-                              className="w-12 px-1.5 py-0.5 rounded border border-indigo-300 text-xs tabular-nums text-right focus:outline-none bg-white"
-                              autoFocus
-                            />
-                          ) : (
-                            <span
-                              className={`text-xs tabular-nums cursor-pointer ${excluded_ ? 'line-through text-red-300' : 'text-slate-400 hover:text-indigo-600'}`}
-                              onDoubleClick={e => { e.stopPropagation(); setQtyDraft(String(item.quantity)); setEditingQtyItem(item.id) }}
-                              title="Double-click to edit quantity"
-                            >
-                              {item.quantity}
-                            </span>
-                          )}
-                          <div className="relative">
-                            <button
-                              onClick={e => { e.stopPropagation(); setEditingUnitItem(prev => prev === item.id ? null : item.id) }}
-                              className={`text-xs px-1 py-0.5 rounded transition-colors ${
-                                unitOverrides[item.id]
-                                  ? 'text-indigo-500 font-medium'
-                                  : 'text-slate-400 hover:text-slate-600'
-                              } ${excluded_ ? 'line-through text-red-300' : ''}`}
-                            >
-                              {effectiveUnit(item)}
-                            </button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <div className={`flex items-center rounded-lg px-1.5 py-0.5 gap-1 ${excluded_ ? 'bg-red-50' : 'bg-slate-100'}`}>
+                            {editingQtyItem === item.id ? (
+                              <input
+                                type="number"
+                                min={1}
+                                value={qtyDraft}
+                                onChange={e => setQtyDraft(e.target.value)}
+                                onBlur={() => {
+                                  const n = parseFloat(qtyDraft)
+                                  if (!isNaN(n) && n > 0 && n !== item.quantity)
+                                    updateOrderItem.mutate({ id: item.id, quantity: n })
+                                  setEditingQtyItem(null)
+                                }}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                                  if (e.key === 'Escape') setEditingQtyItem(null)
+                                }}
+                                onClick={e => e.stopPropagation()}
+                                onDoubleClick={e => e.stopPropagation()}
+                                className="w-10 text-xs tabular-nums text-right focus:outline-none bg-transparent font-medium text-slate-700"
+                                autoFocus
+                              />
+                            ) : (
+                              <span
+                                className={`text-xs tabular-nums font-medium cursor-pointer ${excluded_ ? 'line-through text-red-400' : 'text-slate-600 hover:text-indigo-600'}`}
+                                onDoubleClick={e => { e.stopPropagation(); setQtyDraft(String(item.quantity)); setEditingQtyItem(item.id) }}
+                                title="Double-click to edit"
+                              >
+                                {item.quantity}
+                              </span>
+                            )}
+                            <div className="relative">
+                              <button
+                                onClick={e => { e.stopPropagation(); setEditingUnitItem(prev => prev === item.id ? null : item.id) }}
+                                className={`text-xs transition-colors ${
+                                  unitOverrides[item.id]
+                                    ? 'text-indigo-500 font-medium'
+                                    : excluded_ ? 'line-through text-red-300' : 'text-slate-400 hover:text-slate-600'
+                                }`}
+                              >
+                                {effectiveUnit(item)}
+                              </button>
                             {editingUnitItem === item.id && (
                               <>
                                 <div className="fixed inset-0 z-40" onClick={() => setEditingUnitItem(null)} />
@@ -339,6 +340,7 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
                                 </div>
                               </>
                             )}
+                            </div>
                           </div>
                           <div className="relative">
                             <button

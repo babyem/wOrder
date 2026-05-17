@@ -19,6 +19,7 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
   const { data: vendorList } = useVendors()
   const updateOrderItem = useUpdateOrderItem()
   const [showNotify, setShowNotify] = useState(false)
+  const [doneVendors, setDoneVendors] = useState<Set<string>>(new Set())
   const [sending, setSending] = useState<string | null>(null)
   const [editingVendorItem, setEditingVendorItem] = useState<string | null>(null)
   const [editingQtyItem, setEditingQtyItem] = useState<string | null>(null)
@@ -256,9 +257,9 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
   return (
     <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="relative">
 
-      {/* Green connecting line — visible in the gaps between vendor cards */}
+      {/* Green connecting line — centered, visible in the gaps between vendor cards */}
       {isMultiVendor && (
-        <div className="absolute left-[14px] top-3 bottom-3 w-0.5 bg-emerald-400 rounded-full z-0" />
+        <div className="absolute left-1/2 -translate-x-px top-3 bottom-3 w-0.5 bg-emerald-400 rounded-full z-0" />
       )}
 
       {/* Main card — order header + first vendor */}
@@ -318,8 +319,21 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
           </div>
 
           <div className="border-t border-slate-50 pt-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">{vendorEntries[0][0]}</p>
-            {renderItems(vendorEntries[0][1])}
+            {isMultiVendor && (
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{vendorEntries[0][0]}</p>
+                <button
+                  onClick={() => setDoneVendors(prev => { const s = new Set(prev); s.has(vendorEntries[0][0]) ? s.delete(vendorEntries[0][0]) : s.add(vendorEntries[0][0]); return s })}
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium transition-colors ${doneVendors.has(vendorEntries[0][0]) ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600'}`}
+                >
+                  <CheckCircle size={10} /> {doneVendors.has(vendorEntries[0][0]) ? 'Done' : 'Mark done'}
+                </button>
+              </div>
+            )}
+            {!isMultiVendor && <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">{vendorEntries[0][0]}</p>}
+            <div className={doneVendors.has(vendorEntries[0][0]) ? 'opacity-40' : ''}>
+              {renderItems(vendorEntries[0][1])}
+            </div>
           </div>
 
           {order.note && (
@@ -372,16 +386,25 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
       </div>
 
       {/* Additional vendor cards — one per extra vendor, connected by the green line */}
-      {isMultiVendor && vendorEntries.slice(1).map(([vendor, items]) => (
-        <div key={vendor} className="relative z-10 mt-2 bg-white rounded-2xl border border-slate-100 shadow-sm">
-          <div className="px-3 py-2 border-b border-slate-50">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{vendor}</p>
+      {isMultiVendor && vendorEntries.slice(1).map(([vendor, items]) => {
+        const isVendorDone = doneVendors.has(vendor)
+        return (
+          <div key={vendor} className="relative z-10 mt-2 bg-white rounded-2xl border border-slate-100 shadow-sm">
+            <div className="px-3 py-2 border-b border-slate-50 flex items-center justify-between">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{vendor}</p>
+              <button
+                onClick={() => setDoneVendors(prev => { const s = new Set(prev); s.has(vendor) ? s.delete(vendor) : s.add(vendor); return s })}
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium transition-colors ${isVendorDone ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600'}`}
+              >
+                <CheckCircle size={10} /> {isVendorDone ? 'Done' : 'Mark done'}
+              </button>
+            </div>
+            <div className={`p-3 ${isVendorDone ? 'opacity-40' : ''}`}>
+              {renderItems(items)}
+            </div>
           </div>
-          <div className="p-3">
-            {renderItems(items)}
-          </div>
-        </div>
-      ))}
+        )
+      })}
     </motion.div>
   )
 }

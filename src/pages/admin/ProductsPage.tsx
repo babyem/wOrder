@@ -726,9 +726,14 @@ export default function ProductsPage() {
       Category: p.category,
       Unit: p.unit,
       Active: p.active ? 'TRUE' : 'FALSE',
+      'Sort Order': p.sort_order,
+      'Image URL': p.image_url ?? '',
+      'ChefsCulinar ID': p.chefsculinar_id ?? '',
+      'ChefsCulinar Unit': p.chefsculinar_unit ?? '',
+      'ChefsCulinar Unit Qty': p.chefsculinar_unit_qty ?? '',
     }))
     const ws = XLSX.utils.json_to_sheet(rows)
-    ws['!cols'] = [{ wch: 36 }, { wch: 28 }, { wch: 28 }, { wch: 18 }, { wch: 18 }, { wch: 10 }, { wch: 8 }]
+    ws['!cols'] = [{ wch: 36 }, { wch: 28 }, { wch: 28 }, { wch: 18 }, { wch: 18 }, { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 60 }, { wch: 18 }, { wch: 18 }, { wch: 20 }]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Products')
     XLSX.writeFile(wb, 'products.xlsx')
@@ -751,6 +756,8 @@ export default function ProductsPage() {
       for (const row of rows) {
         const name = row['Display Name']?.toString().trim()
         if (!name) { skipped++; continue }
+        const sortRaw = row['Sort Order']?.toString().trim()
+        const unitQtyRaw = row['ChefsCulinar Unit Qty']?.toString().trim()
         const fields = {
           name,
           vendor_name: row['Vendor Name (notifications)']?.toString().trim() || null,
@@ -758,13 +765,18 @@ export default function ProductsPage() {
           category: row['Category']?.toString().trim() ?? '',
           unit: row['Unit']?.toString().trim() ?? '',
           active: row['Active']?.toString().toUpperCase() !== 'FALSE',
+          image_url: row['Image URL']?.toString().trim() || null,
+          sort_order: sortRaw ? parseInt(sortRaw, 10) : 0,
+          chefsculinar_id: row['ChefsCulinar ID']?.toString().trim() || null,
+          chefsculinar_unit: row['ChefsCulinar Unit']?.toString().trim() || null,
+          chefsculinar_unit_qty: unitQtyRaw ? parseFloat(unitQtyRaw) : null,
         }
         const id = row['ID']?.toString().trim()
         if (id && existingIds.has(id)) {
           await updateProduct.mutateAsync({ id, ...fields })
           updated++
         } else {
-          await createProduct.mutateAsync({ ...fields, image_url: null, sort_order: 0 })
+          await createProduct.mutateAsync(fields)
           created++
         }
       }

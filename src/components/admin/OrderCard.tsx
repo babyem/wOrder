@@ -376,12 +376,12 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
           </div>
 
           {chefsStatus === 'pending' && (
-            <div className="flex items-center justify-between gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-700">
-              <div className="flex items-center gap-2 min-w-0">
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-700 space-y-2">
+              <div className="flex items-center gap-2">
                 <AlertTriangle size={13} className="shrink-0" />
                 <span className="font-medium">Skickat — verifiera på ChefsCulinar</span>
               </div>
-              <div className="flex items-center gap-1 shrink-0">
+              <div className="flex items-center gap-1">
                 <a href="https://www.chefsculinar.se/sv-se/checkout" target="_blank" rel="noreferrer"
                   className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 font-medium transition-colors">
                   Öppna

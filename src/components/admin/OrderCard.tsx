@@ -255,7 +255,7 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
   const statusBarClass = selected ? 'bg-indigo-50 text-indigo-700' : isPending ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
 
   return (
-    <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="relative">
+    <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className={`relative transition-opacity ${!isPending ? 'opacity-50 hover:opacity-100' : ''}`}>
 
       {/* Green connecting line — centered, visible in the gaps between vendor cards */}
       {isMultiVendor && (
@@ -360,6 +360,7 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
                           try {
                             await sendEmail(v.email!, `Order – ${order.location?.name ?? ''}`, buildBody(v.name))
                             toast.success(`Email sent to ${v.name}`)
+                            setDoneVendors(prev => new Set(prev).add(v.name))
                             if (isPending) await updateStatus.mutateAsync({ id: order.id, status: 'done' })
                           } catch (err) {
                             toast.error(`${v.name}: ${err instanceof Error ? err.message : 'Failed to send'}`)
@@ -370,7 +371,7 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
                       )}
                       {v.phone && (
                         <a href={`sms:${v.phone}?body=${encodeURIComponent(buildBody(v.name))}`}
-                          onClick={() => { if (isPending) updateStatus.mutateAsync({ id: order.id, status: 'done' }) }}
+                          onClick={() => { setDoneVendors(prev => new Set(prev).add(v.name)); if (isPending) updateStatus.mutateAsync({ id: order.id, status: 'done' }) }}
                           className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 transition-colors">
                           <Phone size={11} /> SMS
                         </a>

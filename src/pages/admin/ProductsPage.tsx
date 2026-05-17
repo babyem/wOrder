@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import { Plus, Trash2, Package, Eye, EyeOff, Upload, X, GripVertical, Tag, Layers, ChevronDown, Copy, List, Download, FileUp, Search } from 'lucide-react'
 import {
-  DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent,
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent, DragStartEvent, DragOverlay,
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -668,6 +668,7 @@ export default function ProductsPage() {
   const { data: categories } = useCategories()
 
   const [localOrder, setLocalOrder] = useState<string[]>([])
+  const [draggingId, setDraggingId] = useState<string | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [batchModalOpen, setBatchModalOpen] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -697,7 +698,12 @@ export default function ProductsPage() {
     })
   }, [serverProducts, localOrder, search, filterVendor, filterCategory, filterStatus])
 
+  const handleDragStart = (event: DragStartEvent) => {
+    setDraggingId(event.active.id as string)
+  }
+
   const handleDragEnd = async (event: DragEndEvent) => {
+    setDraggingId(null)
     const { active, over } = event
     if (!over || active.id === over.id || !serverProducts) return
     const ids = products.map(p => p.id)
@@ -933,7 +939,7 @@ export default function ProductsPage() {
           ]
           const groups: [string, Product[]][] = orderedVendors.map(v => [v, map.get(v)!])
           return (
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
               <SortableContext items={products.map(p => p.id)} strategy={verticalListSortingStrategy}>
                 <div className="space-y-3">
                   {groups.map(([vendor, prods]) => (
@@ -951,6 +957,25 @@ export default function ProductsPage() {
                   ))}
                 </div>
               </SortableContext>
+              <DragOverlay dropAnimation={null}>
+                {draggingId ? (() => {
+                  const p = products.find(x => x.id === draggingId)
+                  if (!p) return null
+                  return (
+                    <div className="bg-white border border-indigo-200 rounded-xl shadow-2xl px-4 py-3 flex items-center gap-3 opacity-95">
+                      <div className="w-8 h-8 rounded-lg bg-slate-100 overflow-hidden shrink-0">
+                        {p.image_url
+                          ? <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
+                          : <div className="w-full h-full flex items-center justify-center"><Package size={14} className="text-slate-300" /></div>}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-900 truncate">{p.name}</p>
+                        <p className="text-xs text-slate-400 truncate">{p.vendor}</p>
+                      </div>
+                    </div>
+                  )
+                })() : null}
+              </DragOverlay>
             </DndContext>
           )
       })()}

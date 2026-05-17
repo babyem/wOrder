@@ -936,7 +936,9 @@ export default function ProductsPage() {
       ) : !products.length ? (
         <EmptyState icon={Package} title={hasFilters ? 'No products match filters' : 'No products yet'} description={hasFilters ? 'Try clearing filters' : "Click 'Add' to get started."} />
       ) : (() => {
-          // Group ALL products per vendor, preserving vendor order from the vendors list
+          // Flatten into a single list with vendor header markers so all sortable rows
+          // are siblings — this prevents CSS transforms from being clipped or painted
+          // over by neighbouring vendor group containers.
           const vendorOrder = (vendors ?? []).map(v => v.name)
           const map = new Map<string, Product[]>()
           for (const p of products) {
@@ -948,24 +950,32 @@ export default function ProductsPage() {
             ...vendorOrder.filter(v => map.has(v)),
             ...seenVendors.filter(v => !vendorOrder.includes(v)),
           ]
-          const groups: [string, Product[]][] = orderedVendors.map(v => [v, map.get(v)!])
+          type Row =
+            | { type: 'header'; vendor: string; count: number }
+            | { type: 'product'; product: Product }
+          const rows: Row[] = orderedVendors.flatMap(v => {
+            const prods = map.get(v)!
+            return [
+              { type: 'header' as const, vendor: v, count: prods.length },
+              ...prods.map(p => ({ type: 'product' as const, product: p })),
+            ]
+          })
           return (
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
               <SortableContext items={products.map(p => p.id)} strategy={verticalListSortingStrategy}>
-                <div className="space-y-3">
-                  {groups.map(([vendor, prods]) => (
-                    <div key={vendor} className="bg-white rounded-2xl border border-slate-100 shadow-sm">
-                      <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
-                        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">{vendor}</span>
-                        <span className="text-xs text-slate-400">{prods.length}</span>
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
+                  {rows.map(row =>
+                    row.type === 'header' ? (
+                      <div key={`h-${row.vendor}`} className="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center gap-2 first:rounded-t-2xl">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">{row.vendor}</span>
+                        <span className="text-xs text-slate-400">{row.count}</span>
                       </div>
-                      <div className="divide-y divide-slate-100">
-                        {prods.map(p => (
-                          <InlineEditRow key={p.id} product={p} onDelete={handleDelete} onDuplicate={handleDuplicate} />
-                        ))}
+                    ) : (
+                      <div key={row.product.id} className="border-b border-slate-100 last:border-0">
+                        <InlineEditRow product={row.product} onDelete={handleDelete} onDuplicate={handleDuplicate} />
                       </div>
-                    </div>
-                  ))}
+                    )
+                  )}
                 </div>
               </SortableContext>
               <DragOverlay dropAnimation={null}>

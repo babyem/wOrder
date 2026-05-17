@@ -43,9 +43,16 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
   const [editingQtyItem, setEditingQtyItem] = useState<string | null>(null)
   const [qtyDraft, setQtyDraft] = useState('')
   const [sendingChefs, setSendingChefs] = useState(false)
-  const [chefsOrderFailed, setChefsOrderFailed] = useState<boolean>(
-    () => localStorage.getItem(`chefs_failed_${order.id}`) === 'true'
+  const [chefsStatus, setChefsStatus] = useState<null | 'pending' | 'failed'>(
+    () => (localStorage.getItem(`chefs_status_${order.id}`) as null | 'pending' | 'failed') ?? null
   )
+  const chefsOrderFailed = chefsStatus === 'failed'
+
+  const setChefsState = (status: null | 'pending' | 'failed') => {
+    setChefsStatus(status)
+    if (status === null) localStorage.removeItem(`chefs_status_${order.id}`)
+    else localStorage.setItem(`chefs_status_${order.id}`, status)
+  }
 
   // Local state for instant feedback — initialised from server, persisted to DB in background
   const [excluded, setExcluded] = useState<Set<string>>(
@@ -152,6 +159,8 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
       unit_qty: i.product!.chefsculinar_unit_qty ?? 1,
     }))
     setSendingChefs(true)
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 30_000)
     try {
       const res = await fetch(webhookUrl, {
         method: 'POST',
@@ -162,16 +171,27 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
           customer_id: order.location?.chefsculinar_customer_id ?? null,
           products,
         }),
+        signal: controller.signal,
       })
+      clearTimeout(timeout)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      await updateStatus.mutateAsync({ id: order.id, status: 'done' })
-      setChefsOrderFailed(false)
-      localStorage.removeItem(`chefs_failed_${order.id}`)
-      toast.success('Beställning lagd hos ChefsCulinar!')
+
+      // Check response body for error fields even on 200
+      let body: unknown
+      try { body = await res.clone().json() } catch { /* not JSON, ignore */ }
+      if (body && typeof body === 'object' && ('error' in body || 'success' in body && !(body as Record<string, unknown>).success)) {
+        throw new Error(String((body as Record<string, unknown>).error ?? 'Webhook reported failure'))
+      }
+
+      setChefsState('pending')
+      toast.success('Skickat! Verifiera ordern på ChefsCulinar.')
     } catch (err) {
-      setChefsOrderFailed(true)
-      localStorage.setItem(`chefs_failed_${order.id}`, 'true')
-      toast.error(`Misslyckades: ${err instanceof Error ? err.message : String(err)}`)
+      clearTimeout(timeout)
+      const msg = err instanceof Error
+        ? (err.name === 'AbortError' ? 'Timeout — inget svar från ChefsCulinar' : err.message)
+        : String(err)
+      setChefsState('failed')
+      toast.error(`Misslyckades: ${msg}`)
     } finally {
       setSendingChefs(false)
     }
@@ -355,19 +375,38 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
             </div>
           </div>
 
-          {chefsOrderFailed && (
+          {chefsStatus === 'pending' && (
+            <div className="flex items-center justify-between gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-700">
+              <div className="flex items-center gap-2 min-w-0">
+                <AlertTriangle size={13} className="shrink-0" />
+                <span className="font-medium">Skickat — verifiera på ChefsCulinar</span>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <a href="https://www.chefsculinar.se/sv-se/checkout" target="_blank" rel="noreferrer"
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 font-medium transition-colors">
+                  Öppna
+                </a>
+                <button onClick={() => { setChefsState(null); updateStatus.mutateAsync({ id: order.id, status: 'done' }) }}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 hover:bg-emerald-200 font-medium transition-colors">
+                  <CheckCircle size={11} /> OK
+                </button>
+                <button onClick={() => setChefsState('failed')}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 font-medium transition-colors">
+                  <X size={11} /> Fel
+                </button>
+              </div>
+            </div>
+          )}
+          {chefsStatus === 'failed' && (
             <div className="flex items-center justify-between gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2 text-xs text-red-600">
               <div className="flex items-center gap-2">
                 <AlertTriangle size={13} className="shrink-0" />
-                <span className="font-medium">ChefsCulinar order failed — not yet placed</span>
+                <span className="font-medium">ChefsCulinar — ordern är inte lagd!</span>
               </div>
-              <button
-                onClick={handleSendToChefs}
-                disabled={sendingChefs}
-                className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg bg-red-100 hover:bg-red-200 font-medium disabled:opacity-50 transition-colors"
-              >
+              <button onClick={handleSendToChefs} disabled={sendingChefs}
+                className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg bg-red-100 hover:bg-red-200 font-medium disabled:opacity-50 transition-colors">
                 {sendingChefs ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />}
-                Retry
+                Försök igen
               </button>
             </div>
           )}

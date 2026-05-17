@@ -68,7 +68,7 @@ export default function OrderModal({ open, onClose, locationId, employeeId }: Pr
     >
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden w-14">
         {scrubberOffsets.map(offset => {
-          const n = Math.max(1, scrubber.qty + offset)
+          const n = scrubber.qty + offset
           const isCenter = offset === 0
           return (
             <div
@@ -81,7 +81,7 @@ export default function OrderModal({ open, onClose, locationId, employeeId }: Pr
                     : 'text-slate-200 text-xs'
               }`}
             >
-              {n}
+              {n >= 0 ? n : ''}
             </div>
           )
         })}

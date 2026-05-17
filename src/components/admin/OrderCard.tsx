@@ -21,6 +21,8 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
   const [showNotify, setShowNotify] = useState(false)
   const [sending, setSending] = useState<string | null>(null)
   const [editingVendorItem, setEditingVendorItem] = useState<string | null>(null)
+  const [editingQtyItem, setEditingQtyItem] = useState<string | null>(null)
+  const [qtyDraft, setQtyDraft] = useState('')
   const [sendingChefs, setSendingChefs] = useState(false)
 
   // Local state for instant feedback — initialised from server, persisted to DB in background
@@ -258,9 +260,34 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
                           {item.product?.name ?? 'Deleted product'}
                         </span>
                         <div className="flex items-center gap-1.5 shrink-0">
-                          <span className={`text-xs tabular-nums ${excluded_ ? 'line-through text-red-300' : 'text-slate-400'}`}>
-                            {item.quantity} {item.product?.unit ?? ''}
-                          </span>
+                          {editingQtyItem === item.id ? (
+                            <input
+                              type="number"
+                              value={qtyDraft}
+                              onChange={e => setQtyDraft(e.target.value)}
+                              onBlur={() => {
+                                const n = parseFloat(qtyDraft)
+                                if (!isNaN(n) && n > 0 && n !== item.quantity)
+                                  updateOrderItem.mutate({ id: item.id, quantity: n })
+                                setEditingQtyItem(null)
+                              }}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                                if (e.key === 'Escape') setEditingQtyItem(null)
+                              }}
+                              onClick={e => e.stopPropagation()}
+                              className="w-14 px-1.5 py-0.5 rounded border border-indigo-300 text-xs tabular-nums text-right focus:outline-none bg-white"
+                              autoFocus
+                            />
+                          ) : (
+                            <span
+                              className={`text-xs tabular-nums cursor-pointer ${excluded_ ? 'line-through text-red-300' : 'text-slate-400 hover:text-indigo-600'}`}
+                              onDoubleClick={e => { e.stopPropagation(); setQtyDraft(String(item.quantity)); setEditingQtyItem(item.id) }}
+                              title="Double-click to edit quantity"
+                            >
+                              {item.quantity} {item.product?.unit ?? ''}
+                            </span>
+                          )}
                           <div className="relative">
                             <button
                               onClick={e => { e.stopPropagation(); setEditingVendorItem(prev => prev === item.id ? null : item.id) }}

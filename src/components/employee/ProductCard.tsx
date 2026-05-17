@@ -50,13 +50,15 @@ export default function ProductCard({ product }: Props) {
     <>
       <AnimatePresence>
         {scrubber && (
-          <motion.div
+          <div
             className="fixed z-[200] pointer-events-none"
             style={{ left: scrubber.x, top: scrubber.y, transform: 'translate(-50%, -50%)' }}
+          >
+          <motion.div
             initial={{ opacity: 0, scale: 0.85 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.85 }}
-            transition={{ type: 'spring', damping: 20, stiffness: 300, duration: 0.2 }}
+            transition={{ type: 'spring', damping: 20, stiffness: 300 }}
           >
             <div className="relative w-14">
               <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
@@ -83,6 +85,7 @@ export default function ProductCard({ product }: Props) {
               <div className="absolute inset-x-0 bottom-0 h-9 bg-gradient-to-t from-white to-transparent rounded-b-2xl pointer-events-none" />
             </div>
           </motion.div>
+          </div>
         )}
       </AnimatePresence>
       <motion.div

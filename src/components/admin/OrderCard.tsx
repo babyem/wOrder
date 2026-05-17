@@ -119,6 +119,7 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
         body: JSON.stringify({
           location_id: order.location_id,
           location_name: order.location?.name ?? '',
+          customer_id: order.location?.chefsculinar_customer_id ?? null,
           products,
         }),
       })

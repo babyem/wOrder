@@ -41,10 +41,46 @@
       }
     },
     {
-      "name": "Get Basket",
+      "name": "Change Customer",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
       "position": [720, 300],
+      "parameters": {
+        "method": "PUT",
+        "url": "https://www.chefsculinar.se/api/auth/changecustomer",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {"name": "_n", "value": "1"},
+            {"name": "_u", "value": "1"}
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Cookie", "value": "={{ $('Login').item.json.headers['set-cookie'].join('; ') }}"},
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ Id: $('Webhook').item.json.body.customer_id, BasketId: null }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Get Basket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [960, 300],
       "parameters": {
         "method": "GET",
         "url": "https://www.chefsculinar.se/api/checkout/basket",
@@ -59,7 +95,7 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {"name": "Cookie", "value": "={{ $('Login').item.json.headers['set-cookie'].join('; ') }}"}
+            {"name": "Cookie", "value": "={{ $('Change Customer').item.json.headers['set-cookie'].join('; ') }}"}
           ]
         },
         "options": {}
@@ -69,7 +105,7 @@
       "name": "Put Basket",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [960, 300],
+      "position": [1200, 300],
       "parameters": {
         "method": "PUT",
         "url": "https://www.chefsculinar.se/api/checkout/basket",
@@ -85,13 +121,14 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {"name": "Cookie", "value": "={{ $('Login').item.json.headers['set-cookie'].join('; ') }}"},
+            {"name": "Cookie", "value": "={{ $('Change Customer').item.json.headers['set-cookie'].join('; ') }}"},
             {"name": "Content-Type", "value": "application/json"}
           ]
         },
         "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ Products: $('Webhook').item.json.body.products.map((p, i) => ({ ProductId: parseInt(p.chefsculinar_id), Quantity: p.quantity, SalesUnit: { Code: p.unit || 'st', Quantity: p.unit_qty || 1 }, Tracking: { ListName: 'FavoriteList/PLP/PLP', Position: i + 1 } })) }) }}",
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ Products: $('Webhook').item.json.body.products.map((p, i) => ({ ProductId: parseInt(p.chefsculinar_id), Quantity: p.quantity, SalesUnit: { Code: p.unit || 'st', Quantity: p.unit_qty || 1 }, Tracking: { ListName: 'FavoriteList/PLP/PLP', Position: i + 1 } })) }) }}",
         "options": {}
       }
     },
@@ -99,7 +136,7 @@
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1200, 300],
+      "position": [1440, 300],
       "parameters": {
         "respondWith": "json",
         "responseBody": "={ \"ok\": true }"
@@ -108,7 +145,8 @@
   ],
   "connections": {
     "Webhook": {"main": [[{"node": "Login", "type": "main", "index": 0}]]},
-    "Login": {"main": [[{"node": "Get Basket", "type": "main", "index": 0}]]},
+    "Login": {"main": [[{"node": "Change Customer", "type": "main", "index": 0}]]},
+    "Change Customer": {"main": [[{"node": "Get Basket", "type": "main", "index": 0}]]},
     "Get Basket": {"main": [[{"node": "Put Basket", "type": "main", "index": 0}]]},
     "Put Basket": {"main": [[{"node": "Respond", "type": "main", "index": 0}]]}
   }

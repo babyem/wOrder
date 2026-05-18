@@ -3,7 +3,8 @@
  * Callback-data format (max 64 bytes):
  *   L:{locationId}        -- visa vendors for pending order pa location
  *   V:{orderId}|{vendor}  -- visa kontaktval for vendor
- *   EM:{orderId}|{vendor} -- skicka email
+ *   EM:{orderId}|{vendor} -- skicka email + markera order klar
+ *   DONE:{orderId}        -- markera order som klar (efter SMS)
  *   BACK                  -- ga tillbaka
  */
 
@@ -18,6 +19,23 @@ async function db(path) {
   const text = await res.text()
   if (!res.ok) throw new Error(`Supabase error ${res.status}: ${text}`)
   try { return JSON.parse(text) } catch { throw new Error(`Supabase bad JSON: ${text.slice(0, 200)}`) }
+}
+
+async function dbPatch(path, body) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    method: 'PATCH',
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=minimal',
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Supabase PATCH error ${res.status}: ${text}`)
+  }
 }
 
 async function tg(method, body) {
@@ -109,7 +127,6 @@ async function handleVendorPress(orderId, vendorName, chatId, msgId, cbId) {
   )
   const locationName = order.locations?.name || 'Woso Group'
 
-  // Use /sms.html redirect page — Telegram allows https, the page then opens sms: scheme
   const msgText = `<b>${vendorName}</b> - ${locationName}\n\n${itemLines.join('\n')}\n\nHur vill du notifiera?`
 
   const row = []
@@ -119,12 +136,15 @@ async function handleVendorPress(orderId, vendorName, chatId, msgId, cbId) {
   if (vendor.phone) {
     const phone = vendor.phone.replace(/[\s\-()+ ]/g, '')
     const smsBody = `Hej ${vendorName}, bestallning fran ${locationName}:\n${itemLines.join('\n')}\nMvh Woso`
+    // /sms.html redirects from https -> sms: scheme (Telegram blocks sms:/tel: in button URLs)
     const redirectUrl = `https://worder.woso.se/sms.html?to=%2B${phone}&body=${encodeURIComponent(smsBody)}`
     row.push({ text: `SMS till ${vendor.phone}`, url: redirectUrl })
   }
 
+  // After sending SMS the user confirms manually -- DONE marks the order as completed
   const keyboard = []
   if (row.length) keyboard.push(row)
+  keyboard.push([{ text: 'Bekreft SMS skickat', callback_data: `DONE:${orderId}` }])
   keyboard.push([{ text: '<- Tillbaka', callback_data: 'BACK' }])
 
   await editMsg(chatId, msgId, msgText, { inline_keyboard: keyboard })
@@ -150,24 +170,43 @@ async function handleSendEmail(orderId, vendorName, chatId, msgId, cbId) {
   )
   const locationName = order?.locations?.name || 'Woso Group'
 
-  await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
+  const plainText = `Hej ${vendorName},\n\nVi onskar bestalla foljande:\n${itemLines.join('\n')}\n\nVanliga halsningar,\n${locationName}`
+  const htmlBody  = `<h2>Bestallning</h2><p>Hej ${vendorName},</p><p>Vi onskar bestalla foljande:</p><ul>` +
+    vendorItems.map(i =>
+      `<li>${i.product?.name} - ${i.quantity} ${i.unit_override || i.product?.unit || ''}</li>`
+    ).join('') +
+    `</ul><p>Vanliga halsningar,<br>${locationName}</p>`
+
+  const emailRes = await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SUPABASE_KEY}` },
     body: JSON.stringify({
-      to: vendor.email,
+      to:      vendor.email,
       subject: `Bestallning fran ${locationName}`,
-      html: `<h2>Bestallning</h2><p>Hej ${vendorName},</p><p>Vi onskar bestalla foljande:</p><ul>` +
-        vendorItems.map(i =>
-          `<li>${i.product?.name} - ${i.quantity} ${i.unit_override || i.product?.unit || ''}</li>`
-        ).join('') +
-        `</ul><p>Vanliga halsningar,<br>${locationName}</p>`,
+      text:    plainText,
+      html:    htmlBody,
     }),
   })
+  const emailResult = await emailRes.json()
+  if (!emailRes.ok) throw new Error(`Email failed: ${JSON.stringify(emailResult)}`)
+
+  // Mark order as done
+  await dbPatch(`orders?id=eq.${orderId}`, { status: 'done' })
 
   await answerCb(cbId)
   await editMsg(
     chatId, msgId,
-    `<b>Email skickat till ${vendorName}</b>\n${vendor.email}\n\n${itemLines.join('\n')}`,
+    `<b>Email skickat till ${vendorName}</b>\n${vendor.email}\n\n${itemLines.join('\n')}\n\nOrder markerad som klar.`,
+    { inline_keyboard: [[{ text: '<- Tillbaka', callback_data: 'BACK' }]] }
+  )
+}
+
+async function handleDone(orderId, chatId, msgId, cbId) {
+  await answerCb(cbId)
+  await dbPatch(`orders?id=eq.${orderId}`, { status: 'done' })
+  await editMsg(
+    chatId, msgId,
+    `Order markerad som klar.`,
     { inline_keyboard: [[{ text: '<- Tillbaka', callback_data: 'BACK' }]] }
   )
 }
@@ -185,9 +224,8 @@ export default async function handler(req, res) {
   const cbId = cb.id
 
   console.log(`[telegram] callback: ${data} chat=${chat} msg=${msg}`)
-  console.log(`[telegram] env: SUPABASE_URL=${SUPABASE_URL ? 'set' : 'MISSING'} BOT_TOKEN=${BOT_TOKEN ? 'set' : 'MISSING'}`)
 
-  // Fail fast if env vars missing -- answer before they expire
+  // Fail fast if env vars missing
   if (!SUPABASE_URL || !SUPABASE_KEY || !BOT_TOKEN) {
     const missing = [
       !SUPABASE_URL && 'SUPABASE_URL',
@@ -210,12 +248,13 @@ export default async function handler(req, res) {
       const rest = data.slice(3)
       const sep  = rest.indexOf('|')
       await handleSendEmail(rest.slice(0, sep), rest.slice(sep + 1), chat, msg, cbId)
+    } else if (data?.startsWith('DONE:')) {
+      await handleDone(data.slice(5), chat, msg, cbId)
     } else if (data === 'BACK') {
       await answerCb(cbId)
     }
   } catch (err) {
     console.error('[telegram] error:', err.message)
-    // answerCb already answered -- use editMsg to show error in the message
     try {
       await editMsg(chat, msg,
         `<b>Fel:</b> ${err.message.slice(0, 300)}`,

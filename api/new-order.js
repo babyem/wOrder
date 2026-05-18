@@ -79,7 +79,7 @@ export default async function handler(req, res) {
     const vendorNames = Object.keys(byVendor)
     const buttons = vendorNames.map(v => ({
       text: `📦 ${v}`,
-      callback_data: `V:${orderId.slice(0, 8)}:${v.slice(0, 20)}`,
+      callback_data: `V:${orderId}|${v.slice(0, 20)}`,
     }))
     const keyboard = []
     for (let i = 0; i < buttons.length; i += 2) keyboard.push(buttons.slice(i, i + 2))

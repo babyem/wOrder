@@ -48,13 +48,13 @@ serve(async (req) => {
 
     await fetch(`https://ntfy.sh/${ntfyTopic}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: 'New Order',
-        message,
-        priority: 4,
-        tags: ['shopping'],
-      }),
+      headers: {
+        'Title': 'New Order 🛒',
+        'Priority': '4',
+        'Tags': 'shopping',
+        'Content-Type': 'text/plain; charset=utf-8',
+      },
+      body: message,
     })
 
     return new Response('ok', { status: 200 })

@@ -1,10 +1,10 @@
 /**
- * Vercel webhook — tar emot Telegram-knapptryck
+ * Vercel webhook -- tar emot Telegram-knapptryck
  * Callback-data format (max 64 bytes):
- *   L:{locationId}         — visa vendors för pending order på location
- *   V:{orderId}|{vendor}   — visa email/SMS-val för vendor (| som separator, inte :)
- *   EM:{orderId}|{vendor}  — skicka email
- *   BACK                   — stäng alert
+ *   L:{locationId}         -- visa vendors for pending order pa location
+ *   V:{orderId}|{vendor}   -- visa email/tel-val for vendor
+ *   EM:{orderId}|{vendor}  -- skicka email
+ *   BACK                   -- stang alert
  */
 
 const SUPABASE_URL = process.env.SUPABASE_URL
@@ -12,8 +12,7 @@ const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY
 const BOT_TOKEN    = process.env.TELEGRAM_TOKEN
 
 async function db(path) {
-  const url = `${SUPABASE_URL}/rest/v1/${path}`
-  const res = await fetch(url, {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
   })
   const text = await res.text()
@@ -22,8 +21,7 @@ async function db(path) {
 }
 
 async function tg(method, body) {
-  const url = `https://api.telegram.org/bot${BOT_TOKEN}/${method}`
-  const res = await fetch(url, {
+  const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -41,7 +39,7 @@ const answerCb = (id, text = '') =>
 const editMsg = (chat_id, message_id, text, reply_markup) =>
   tg('editMessageText', { chat_id, message_id, text, parse_mode: 'HTML', reply_markup })
 
-// ── Handlers ─────────────────────────────────────────────────────────────────
+// Handlers
 
 async function handleLocationPress(locationId, chatId, msgId, cbId) {
   const todayStart = new Date()
@@ -51,7 +49,7 @@ async function handleLocationPress(locationId, chatId, msgId, cbId) {
     `orders?select=id,locations(name)&status=eq.pending&location_id=eq.${locationId}&created_at=gte.${todayStart.toISOString()}&order=created_at.desc&limit=1`
   )
   if (!orders.length) {
-    await answerCb(cbId, 'Inga pending orders för denna location.')
+    await answerCb(cbId, 'Inga pending orders for denna location.')
     return
   }
 
@@ -62,31 +60,31 @@ async function handleLocationPress(locationId, chatId, msgId, cbId) {
 
   const byVendor = {}
   for (const item of items) {
-    const v = item.product?.vendor || 'Okänd'
+    const v = item.product?.vendor || 'Okand'
     if (!byVendor[v]) byVendor[v] = []
-    byVendor[v].push(`  • ${item.product?.name} — ${item.quantity} ${item.unit_override || item.product?.unit || ''}`)
+    byVendor[v].push(`  - ${item.product?.name} - ${item.quantity} ${item.unit_override || item.product?.unit || ''}`)
   }
 
-  let text = `📋 <b>${order.locations?.name}</b>\n\n`
+  let text = `<b>${order.locations?.name}</b>\n\n`
   for (const [v, lines] of Object.entries(byVendor)) {
     text += `<b>${v}:</b>\n${lines.join('\n')}\n\n`
   }
-  text += 'Välj leverantör att notifiera:'
+  text += 'Valj leverantor att notifiera:'
 
   const buttons = Object.keys(byVendor).map(v => ({
-    text: `📦 ${v}`,
+    text: `[box] ${v}`,
     callback_data: `V:${order.id}|${v.slice(0, 20)}`,
   }))
   const keyboard = []
   for (let i = 0; i < buttons.length; i += 2) keyboard.push(buttons.slice(i, i + 2))
-  keyboard.push([{ text: '← Tillbaka', callback_data: 'BACK' }])
+  keyboard.push([{ text: '<- Tillbaka', callback_data: 'BACK' }])
 
   await answerCb(cbId)
   await editMsg(chatId, msgId, text, { inline_keyboard: keyboard })
 }
 
 async function handleVendorPress(orderId, vendorName, chatId, msgId, cbId) {
-  await answerCb(cbId) // Svara Telegram omedelbart — annars timeout
+  await answerCb(cbId) // Svara Telegram omedelbart -- annars timeout
 
   const [orders, vendorList, allItems] = await Promise.all([
     db(`orders?id=eq.${orderId}&select=id,locations(name)&limit=1`),
@@ -97,31 +95,35 @@ async function handleVendorPress(orderId, vendorName, chatId, msgId, cbId) {
   const order  = orders[0]
   const vendor = vendorList[0]
 
-  if (!order) { console.error('Order not found:', orderId); return }
+  if (!order)  { console.error('Order not found:', orderId);  return }
   if (!vendor) { console.error('Vendor not found:', vendorName); return }
   if (!vendor.email && !vendor.phone) { console.error('Vendor has no contact:', vendorName); return }
 
   const vendorItems = allItems.filter(i => i.product?.vendor === vendorName)
   const itemLines = vendorItems.map(i =>
-    `• ${i.product?.name} — ${i.quantity} ${i.unit_override || i.product?.unit || ''}`
+    `- ${i.product?.name} - ${i.quantity} ${i.unit_override || i.product?.unit || ''}`
   )
   const locationName = order.locations?.name || 'Woso Group'
 
+  // sms: URLs are blocked by Telegram -- show SMS text in message, use tel: for the button
+  let msgText = `<b>${vendorName}</b> -- ${locationName}\n\n${itemLines.join('\n')}\n\n`
+  if (vendor.phone) {
+    const smsContent = `Hej ${vendorName}, bestallning fran ${locationName}:\n${itemLines.join('\n')}\nMvh Woso`
+    msgText += `SMS-text (kopiera och skicka):\n<code>${smsContent}</code>\n\n`
+  }
+  msgText += 'Hur vill du notifiera?'
+
   const row = []
   if (vendor.email) {
-    row.push({ text: `📧 Email — ${vendor.email}`, callback_data: `EM:${orderId}|${vendorName.slice(0, 20)}` })
+    row.push({ text: 'Skicka email', callback_data: `EM:${orderId}|${vendorName.slice(0, 20)}` })
   }
   if (vendor.phone) {
     const phone = vendor.phone.replace(/[\s \-()+]/g, '')
-    const smsBody = encodeURIComponent(
-      `Hej ${vendorName}, beställning från ${locationName}:\n${itemLines.join('\n')}\nMvh Woso`
-    )
-    row.push({ text: `📱 SMS — ${vendor.phone}`, url: `sms:+${phone}?body=${smsBody}` })
+    row.push({ text: `Ring/SMS ${vendor.phone}`, url: `tel:+${phone}` })
   }
 
-  await editMsg(chatId, msgId,
-    `📦 <b>${vendorName}</b> — ${locationName}\n\n${itemLines.join('\n')}\n\nHur vill du notifiera?`,
-    { inline_keyboard: [row, [{ text: '← Tillbaka', callback_data: 'BACK' }]] }
+  await editMsg(chatId, msgId, msgText,
+    { inline_keyboard: [row, [{ text: '<- Tillbaka', callback_data: 'BACK' }]] }
   )
 }
 
@@ -141,7 +143,7 @@ async function handleSendEmail(orderId, vendorName, chatId, msgId, cbId) {
   )
   const vendorItems = items.filter(i => i.product?.vendor === vendorName)
   const itemLines = vendorItems.map(i =>
-    `• ${i.product?.name} — ${i.quantity} ${i.unit_override || i.product?.unit || ''}`
+    `- ${i.product?.name} - ${i.quantity} ${i.unit_override || i.product?.unit || ''}`
   )
   const locationName = order?.locations?.name || 'Woso Group'
 
@@ -150,20 +152,20 @@ async function handleSendEmail(orderId, vendorName, chatId, msgId, cbId) {
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SUPABASE_KEY}` },
     body: JSON.stringify({
       to: vendor.email,
-      subject: `Beställning från ${locationName}`,
-      html: `<h2>Beställning</h2><p>Hej ${vendorName},</p><p>Vi önskar beställa följande:</p><ul>${vendorItems.map(i => `<li>${i.product?.name} — ${i.quantity} ${i.unit_override || i.product?.unit || ''}</li>`).join('')}</ul><p>Vänliga hälsningar,<br>${locationName}</p>`,
+      subject: `Bestallning fran ${locationName}`,
+      html: `<h2>Bestallning</h2><p>Hej ${vendorName},</p><p>Vi onskar bestalla foljande:</p><ul>${vendorItems.map(i => `<li>${i.product?.name} - ${i.quantity} ${i.unit_override || i.product?.unit || ''}</li>`).join('')}</ul><p>Vanliga halsningar,<br>${locationName}</p>`,
     }),
   })
 
   await answerCb(cbId)
   await editMsg(
     chatId, msgId,
-    `✅ <b>Email skickat till ${vendorName}</b>\n📧 ${vendor.email}\n\n${itemLines.join('\n')}`,
-    { inline_keyboard: [[{ text: '← Tillbaka', callback_data: 'BACK' }]] }
+    `<b>Email skickat till ${vendorName}</b>\n${vendor.email}\n\n${itemLines.join('\n')}`,
+    { inline_keyboard: [[{ text: '<- Tillbaka', callback_data: 'BACK' }]] }
   )
 }
 
-// ── Main handler ──────────────────────────────────────────────────────────────
+// Main handler
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -176,13 +178,17 @@ export default async function handler(req, res) {
   const cbId = cb.id
 
   console.log(`[telegram] callback: ${data} chat=${chat} msg=${msg}`)
-  console.log(`[telegram] env check: SUPABASE_URL=${SUPABASE_URL ? 'set' : 'MISSING'} BOT_TOKEN=${BOT_TOKEN ? 'set' : 'MISSING'}`)
+  console.log(`[telegram] env: SUPABASE_URL=${SUPABASE_URL ? 'set' : 'MISSING'} BOT_TOKEN=${BOT_TOKEN ? 'set' : 'MISSING'}`)
 
-  // Check env vars upfront — if missing, show error before answering cbId
+  // Check env vars upfront -- if missing, show error before answering cbId
   if (!SUPABASE_URL || !SUPABASE_KEY || !BOT_TOKEN) {
-    const missing = [!SUPABASE_URL && 'SUPABASE_URL', !SUPABASE_KEY && 'SUPABASE_ANON_KEY', !BOT_TOKEN && 'TELEGRAM_TOKEN'].filter(Boolean).join(', ')
+    const missing = [
+      !SUPABASE_URL  && 'SUPABASE_URL',
+      !SUPABASE_KEY  && 'SUPABASE_ANON_KEY',
+      !BOT_TOKEN     && 'TELEGRAM_TOKEN',
+    ].filter(Boolean).join(', ')
     console.error('[telegram] Missing env vars:', missing)
-    try { await answerCb(cbId, `⚠️ Saknar env vars: ${missing}`) } catch {}
+    try { await answerCb(cbId, `Saknar env vars: ${missing}`) } catch {}
     return res.status(200).end()
   }
 
@@ -202,14 +208,14 @@ export default async function handler(req, res) {
     }
   } catch (err) {
     console.error('[telegram] error:', err.message)
-    // answerCb may already be answered — use editMsg to show error in the message itself
+    // answerCb may already be answered -- use editMsg to show error in the message
     try {
       await editMsg(chat, msg,
-        `⚠️ <b>Fel:</b> ${err.message.slice(0, 300)}`,
-        { inline_keyboard: [[{ text: '← Tillbaka', callback_data: 'BACK' }]] }
+        `<b>Fel:</b> ${err.message.slice(0, 300)}`,
+        { inline_keyboard: [[{ text: '<- Tillbaka', callback_data: 'BACK' }]] }
       )
     } catch {
-      try { await answerCb(cbId, '⚠️ Fel, kolla Vercel-loggar') } catch {}
+      try { await answerCb(cbId, 'Fel, kolla Vercel-loggar') } catch {}
     }
   }
 

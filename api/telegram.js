@@ -109,31 +109,22 @@ async function handleVendorPress(orderId, vendorName, chatId, msgId, cbId) {
   )
   const locationName = order.locations?.name || 'Woso Group'
 
-  // Telegram only allows http/https in inline keyboard URLs.
-  // Phone number: rendered as tappable <a href="tel:..."> link in the message text.
-  // SMS text: shown as copyable <code> block so user can copy and paste into Messages app.
-  let msgText = `<b>${vendorName}</b> - ${locationName}\n\n${itemLines.join('\n')}\n\n`
+  // Use /sms.html redirect page — Telegram allows https, the page then opens sms: scheme
+  const msgText = `<b>${vendorName}</b> - ${locationName}\n\n${itemLines.join('\n')}\n\nHur vill du notifiera?`
 
+  const row = []
+  if (vendor.email) {
+    row.push({ text: 'Skicka email', callback_data: `EM:${orderId}|${vendorName.slice(0, 20)}` })
+  }
   if (vendor.phone) {
     const phone = vendor.phone.replace(/[\s\-()+ ]/g, '')
     const smsBody = `Hej ${vendorName}, bestallning fran ${locationName}:\n${itemLines.join('\n')}\nMvh Woso`
-    msgText += `Telefon: <a href="tel:+${phone}">${vendor.phone}</a>\n`
-    msgText += `SMS-text:\n<code>${smsBody}</code>\n\n`
-  }
-
-  if (vendor.email) {
-    msgText += `Email: ${vendor.email}\n\n`
-  }
-
-  msgText += 'Hur vill du notifiera?'
-
-  const buttons = []
-  if (vendor.email) {
-    buttons.push({ text: 'Skicka email', callback_data: `EM:${orderId}|${vendorName.slice(0, 20)}` })
+    const redirectUrl = `https://worder.woso.se/sms.html?to=%2B${phone}&body=${encodeURIComponent(smsBody)}`
+    row.push({ text: `SMS till ${vendor.phone}`, url: redirectUrl })
   }
 
   const keyboard = []
-  if (buttons.length) keyboard.push(buttons)
+  if (row.length) keyboard.push(row)
   keyboard.push([{ text: '<- Tillbaka', callback_data: 'BACK' }])
 
   await editMsg(chatId, msgId, msgText, { inline_keyboard: keyboard })

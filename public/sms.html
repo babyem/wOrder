@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Oppnar Meddelanden...</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; display: flex; align-items: center;
+           justify-content: center; height: 100vh; margin: 0; background: #f5f5f5; }
+    .box { text-align: center; padding: 2rem; }
+    p { color: #555; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div style="font-size:2rem">&#128172;</div>
+    <p>Oppnar Meddelanden...</p>
+  </div>
+  <script>
+    (function () {
+      var p = new URLSearchParams(window.location.search)
+      var to = p.get('to') || ''
+      var body = p.get('body') || ''
+      // sms: scheme — works on iOS and Android
+      window.location.replace('sms:' + to + '?body=' + encodeURIComponent(body))
+    })()
+  </script>
+</body>
+</html>

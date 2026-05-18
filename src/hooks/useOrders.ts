@@ -135,18 +135,20 @@ export function useMergeOrders() {
       }
 
       const notes = orders.map(o => o.note).filter(Boolean)
-      const { data: newOrder, error: orderErr } = await supabase
+
+      // Try with is_merged flag; fall back without it if column doesn't exist yet (migration 010)
+      let newOrderResult = await supabase
         .from('orders')
-        .insert({
-          location_id: base.location_id,
-          employee_id: base.employee_id,
-          status: 'pending',
-          note: notes.length ? notes.join(' | ') : null,
-          is_merged: true,
-        })
-        .select()
-        .single()
-      if (orderErr) throw orderErr
+        .insert({ location_id: base.location_id, employee_id: base.employee_id, status: 'pending', note: notes.length ? notes.join(' | ') : null, is_merged: true })
+        .select().single()
+      if (newOrderResult.error?.message?.includes('is_merged')) {
+        newOrderResult = await supabase
+          .from('orders')
+          .insert({ location_id: base.location_id, employee_id: base.employee_id, status: 'pending', note: notes.length ? notes.join(' | ') : null })
+          .select().single()
+      }
+      if (newOrderResult.error) throw newOrderResult.error
+      const newOrder = newOrderResult.data
 
       const { error: itemsErr } = await supabase.from('order_items').insert(
         Array.from(merged.entries()).map(([product_id, quantity]) => ({

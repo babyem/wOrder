@@ -310,7 +310,10 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
     : isMerged ? 'border-orange-400 ring-2 ring-orange-100'
     : isPending ? 'border-amber-200'
     : 'border-slate-100'
-  const extraVendorBorder = isMerged ? 'border-orange-300' : 'border-slate-100'
+  const extraVendorBorder = selected
+    ? 'border-indigo-400 ring-2 ring-indigo-100'
+    : isMerged ? 'border-orange-300'
+    : 'border-slate-100'
   const statusBarClass = selected ? 'bg-indigo-50 text-indigo-700' : isPending ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
 
   return (

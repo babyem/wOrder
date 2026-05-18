@@ -5,7 +5,7 @@
  *   V:{orderId}|{vendor}  -- visa kontaktval for vendor
  *   EM:{orderId}|{vendor} -- skicka email + markera order klar
  *   DONE:{orderId}        -- markera order som klar (efter SMS)
- *   BACK                  -- ga tillbaka
+ *   BACK:{orderId}        -- ga tillbaka till leverantorslistan for ordern
  */
 
 const SUPABASE_URL = process.env.SUPABASE_URL
@@ -57,6 +57,37 @@ const answerCb = (id, text = '') =>
 const editMsg = (chat_id, message_id, text, reply_markup) =>
   tg('editMessageText', { chat_id, message_id, text, parse_mode: 'HTML', reply_markup })
 
+// Builds and shows the vendor list for an order (used by handleLocationPress and handleBack)
+async function showVendorList(orderId, locationName, chatId, msgId, headerText) {
+  const [orders, items] = await Promise.all([
+    orderId ? Promise.resolve(null) : Promise.resolve(null),
+    db(`order_items?select=quantity,unit_override,product:products(name,unit,vendor)&order_id=eq.${orderId}`),
+  ])
+
+  const byVendor = {}
+  for (const item of items) {
+    const v = item.product?.vendor || 'Okand'
+    if (!byVendor[v]) byVendor[v] = []
+    byVendor[v].push(`- ${item.product?.name} - ${item.quantity} ${item.unit_override || item.product?.unit || ''}`)
+  }
+
+  let text = `<b>${locationName}</b>\n\n`
+  for (const [v, lines] of Object.entries(byVendor)) {
+    text += `<b>${v}:</b>\n${lines.join('\n')}\n\n`
+  }
+  if (headerText) text += headerText + '\n\n'
+  text += 'Valj leverantor att notifiera:'
+
+  const buttons = Object.keys(byVendor).map(v => ({
+    text: `[${v}]`,
+    callback_data: `V:${orderId}|${v.slice(0, 20)}`,
+  }))
+  const keyboard = []
+  for (let i = 0; i < buttons.length; i += 2) keyboard.push(buttons.slice(i, i + 2))
+
+  await editMsg(chatId, msgId, text, { inline_keyboard: keyboard })
+}
+
 // Handlers
 
 async function handleLocationPress(locationId, chatId, msgId, cbId) {
@@ -73,33 +104,8 @@ async function handleLocationPress(locationId, chatId, msgId, cbId) {
   }
 
   const order = orders[0]
-  const items = await db(
-    `order_items?select=quantity,unit_override,product:products(name,unit,vendor)&order_id=eq.${order.id}`
-  )
-
-  const byVendor = {}
-  for (const item of items) {
-    const v = item.product?.vendor || 'Okand'
-    if (!byVendor[v]) byVendor[v] = []
-    byVendor[v].push(`- ${item.product?.name} - ${item.quantity} ${item.unit_override || item.product?.unit || ''}`)
-  }
-
-  let text = `<b>${order.locations?.name}</b>\n\n`
-  for (const [v, lines] of Object.entries(byVendor)) {
-    text += `<b>${v}:</b>\n${lines.join('\n')}\n\n`
-  }
-  text += 'Valj leverantor att notifiera:'
-
-  const buttons = Object.keys(byVendor).map(v => ({
-    text: `[${v}]`,
-    callback_data: `V:${order.id}|${v.slice(0, 20)}`,
-  }))
-  const keyboard = []
-  for (let i = 0; i < buttons.length; i += 2) keyboard.push(buttons.slice(i, i + 2))
-  keyboard.push([{ text: '<- Tillbaka', callback_data: 'BACK' }])
-
   await answerCb(cbId)
-  await editMsg(chatId, msgId, text, { inline_keyboard: keyboard })
+  await showVendorList(order.id, order.locations?.name || locationId, chatId, msgId, null)
 }
 
 async function handleVendorPress(orderId, vendorName, chatId, msgId, cbId) {
@@ -136,16 +142,15 @@ async function handleVendorPress(orderId, vendorName, chatId, msgId, cbId) {
   if (vendor.phone) {
     const phone = vendor.phone.replace(/[\s\-()+ ]/g, '')
     const smsBody = `Hej ${vendorName}, bestallning fran ${locationName}:\n${itemLines.join('\n')}\nMvh Woso`
-    // /sms.html redirects from https -> sms: scheme (Telegram blocks sms:/tel: in button URLs)
+    // /sms.html redirects https -> sms: scheme (Telegram blocks sms:/tel: in button URLs)
     const redirectUrl = `https://worder.woso.se/sms.html?to=%2B${phone}&body=${encodeURIComponent(smsBody)}`
     row.push({ text: `SMS till ${vendor.phone}`, url: redirectUrl })
   }
 
-  // After sending SMS the user confirms manually -- DONE marks the order as completed
   const keyboard = []
   if (row.length) keyboard.push(row)
   keyboard.push([{ text: 'Bekreft SMS skickat', callback_data: `DONE:${orderId}` }])
-  keyboard.push([{ text: '<- Tillbaka', callback_data: 'BACK' }])
+  keyboard.push([{ text: '<- Tillbaka', callback_data: `BACK:${orderId}` }])
 
   await editMsg(chatId, msgId, msgText, { inline_keyboard: keyboard })
 }
@@ -180,35 +185,34 @@ async function handleSendEmail(orderId, vendorName, chatId, msgId, cbId) {
   const emailRes = await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SUPABASE_KEY}` },
-    body: JSON.stringify({
-      to:      vendor.email,
-      subject: `Bestallning fran ${locationName}`,
-      text:    plainText,
-      html:    htmlBody,
-    }),
+    body: JSON.stringify({ to: vendor.email, subject: `Bestallning fran ${locationName}`, text: plainText, html: htmlBody }),
   })
   const emailResult = await emailRes.json()
   if (!emailRes.ok) throw new Error(`Email failed: ${JSON.stringify(emailResult)}`)
 
-  // Mark order as done
-  await dbPatch(`orders?id=eq.${orderId}`, { status: 'done' })
-
   await answerCb(cbId)
-  await editMsg(
-    chatId, msgId,
-    `<b>Email skickat till ${vendorName}</b>\n${vendor.email}\n\n${itemLines.join('\n')}\n\nOrder markerad som klar.`,
-    { inline_keyboard: [[{ text: '<- Tillbaka', callback_data: 'BACK' }]] }
-  )
+
+  // Go back to vendor list so user can notify remaining vendors, with a success note
+  await showVendorList(orderId, locationName, chatId, msgId, `Email skickat till ${vendorName} (${vendor.email})`)
 }
 
 async function handleDone(orderId, chatId, msgId, cbId) {
   await answerCb(cbId)
   await dbPatch(`orders?id=eq.${orderId}`, { status: 'done' })
-  await editMsg(
-    chatId, msgId,
-    `Order markerad som klar.`,
-    { inline_keyboard: [[{ text: '<- Tillbaka', callback_data: 'BACK' }]] }
-  )
+
+  // Fetch location name for the header
+  const orders = await db(`orders?id=eq.${orderId}&select=locations(name)&limit=1`)
+  const locationName = orders[0]?.locations?.name || 'Woso Group'
+
+  // Return to vendor list so user can notify remaining vendors
+  await showVendorList(orderId, locationName, chatId, msgId, 'Order markerad som klar.')
+}
+
+async function handleBack(orderId, chatId, msgId, cbId) {
+  await answerCb(cbId)
+  const orders = await db(`orders?id=eq.${orderId}&select=locations(name)&limit=1`)
+  const locationName = orders[0]?.locations?.name || 'Order'
+  await showVendorList(orderId, locationName, chatId, msgId, null)
 }
 
 // Main handler
@@ -225,7 +229,6 @@ export default async function handler(req, res) {
 
   console.log(`[telegram] callback: ${data} chat=${chat} msg=${msg}`)
 
-  // Fail fast if env vars missing
   if (!SUPABASE_URL || !SUPABASE_KEY || !BOT_TOKEN) {
     const missing = [
       !SUPABASE_URL && 'SUPABASE_URL',
@@ -250,6 +253,8 @@ export default async function handler(req, res) {
       await handleSendEmail(rest.slice(0, sep), rest.slice(sep + 1), chat, msg, cbId)
     } else if (data?.startsWith('DONE:')) {
       await handleDone(data.slice(5), chat, msg, cbId)
+    } else if (data?.startsWith('BACK:')) {
+      await handleBack(data.slice(5), chat, msg, cbId)
     } else if (data === 'BACK') {
       await answerCb(cbId)
     }
@@ -258,7 +263,7 @@ export default async function handler(req, res) {
     try {
       await editMsg(chat, msg,
         `<b>Fel:</b> ${err.message.slice(0, 300)}`,
-        { inline_keyboard: [[{ text: '<- Tillbaka', callback_data: 'BACK' }]] }
+        { inline_keyboard: [[{ text: 'Stang', callback_data: 'BACK' }]] }
       )
     } catch {
       try { await answerCb(cbId, 'Fel, kolla Vercel-loggar') } catch {}

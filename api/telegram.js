@@ -178,6 +178,14 @@ export default async function handler(req, res) {
   console.log(`[telegram] callback: ${data} chat=${chat} msg=${msg}`)
   console.log(`[telegram] env check: SUPABASE_URL=${SUPABASE_URL ? 'set' : 'MISSING'} BOT_TOKEN=${BOT_TOKEN ? 'set' : 'MISSING'}`)
 
+  // Check env vars upfront — if missing, show error before answering cbId
+  if (!SUPABASE_URL || !SUPABASE_KEY || !BOT_TOKEN) {
+    const missing = [!SUPABASE_URL && 'SUPABASE_URL', !SUPABASE_KEY && 'SUPABASE_ANON_KEY', !BOT_TOKEN && 'TELEGRAM_TOKEN'].filter(Boolean).join(', ')
+    console.error('[telegram] Missing env vars:', missing)
+    try { await answerCb(cbId, `⚠️ Saknar env vars: ${missing}`) } catch {}
+    return res.status(200).end()
+  }
+
   try {
     if (data?.startsWith('L:')) {
       await handleLocationPress(data.slice(2), chat, msg, cbId)
@@ -194,8 +202,15 @@ export default async function handler(req, res) {
     }
   } catch (err) {
     console.error('[telegram] error:', err.message)
-    // Try to notify user — may fail if cbId already answered
-    try { await answerCb(cbId, '⚠️ Fel: ' + err.message.slice(0, 150)) } catch {}
+    // answerCb may already be answered — use editMsg to show error in the message itself
+    try {
+      await editMsg(chat, msg,
+        `⚠️ <b>Fel:</b> ${err.message.slice(0, 300)}`,
+        { inline_keyboard: [[{ text: '← Tillbaka', callback_data: 'BACK' }]] }
+      )
+    } catch {
+      try { await answerCb(cbId, '⚠️ Fel, kolla Vercel-loggar') } catch {}
+    }
   }
 
   res.status(200).end()

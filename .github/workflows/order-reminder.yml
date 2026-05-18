@@ -1,0 +1,25 @@
+name: Order Reminder
+
+on:
+  schedule:
+    - cron: '3 7 * * *'   # 09:03 Stockholm (sommartid UTC+2)
+    - cron: '3 11 * * *'  # 13:03 Stockholm
+    - cron: '30 18 * * *' # 20:30 Stockholm — 1h innan deadline 21:30
+  workflow_dispatch:       # Manuell trigger för test
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run order reminder
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DEADLINE: '21:30'
+        run: node scripts/order-reminder.js

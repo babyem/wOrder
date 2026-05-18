@@ -2,7 +2,7 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { LayoutDashboard, ShoppingBag, Package, Settings, LogOut, ChefHat, Menu, X } from 'lucide-react'
 import { useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { QoplaSalesWidget } from 'qopla-plugin'
+import { QoplaSalesWidget } from '../../plugins/qopla/QoplaSalesWidget'
 import { motion, AnimatePresence } from 'framer-motion'
 
 const navItems = [

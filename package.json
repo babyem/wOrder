@@ -17,7 +17,6 @@
     "@tanstack/react-query": "^5.17.19",
     "framer-motion": "^11.0.3",
     "lucide-react": "^0.312.0",
-    "qopla-plugin": "file:../Demo App/Qopla",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-hot-toast": "^2.4.1",

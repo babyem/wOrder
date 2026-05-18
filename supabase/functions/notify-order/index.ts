@@ -12,6 +12,9 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
+    // Wait for order_items to be inserted (they come in a second query after orders)
+    await new Promise(r => setTimeout(r, 3000))
+
     const [{ data: employee }, { data: location }, { data: items }] = await Promise.all([
       supabase.from('employees').select('name').eq('id', record.employee_id).single(),
       supabase.from('locations').select('name').eq('id', record.location_id).single(),
@@ -46,15 +49,17 @@ serve(async (req) => {
 
     const ntfyTopic = Deno.env.get('NTFY_TOPIC') ?? 'new_order_notification'
 
-    await fetch(`https://ntfy.sh/${ntfyTopic}`, {
+    // POST to ntfy root URL with JSON body (topic in payload) — reliable across all runtimes
+    await fetch('https://ntfy.sh/', {
       method: 'POST',
-      headers: {
-        'Title': 'New Order 🛒',
-        'Priority': '4',
-        'Tags': 'shopping',
-        'Content-Type': 'text/plain; charset=utf-8',
-      },
-      body: message,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        topic: ntfyTopic,
+        title: 'New Order 🛒',
+        message,
+        priority: 4,
+        tags: ['shopping'],
+      }),
     })
 
     return new Response('ok', { status: 200 })

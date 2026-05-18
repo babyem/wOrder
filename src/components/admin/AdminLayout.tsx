@@ -73,7 +73,7 @@ export default function AdminLayout() {
           <span className="font-bold text-slate-900 text-sm">Staff Orders</span>
         </div>
 
-        <nav className="flex-1 space-y-1">
+        <nav className="space-y-1">
           {navItems.map(item => (
             <NavLink key={item.to} to={item.to} end={item.end} className={navLinkClass}>
               <item.icon size={18} />
@@ -81,6 +81,10 @@ export default function AdminLayout() {
             </NavLink>
           ))}
         </nav>
+
+        <QoplaSalesWidget />
+
+        <div className="flex-1" />
 
         <button
           onClick={handleLogout}
@@ -151,9 +155,14 @@ export default function AdminLayout() {
                     </NavLink>
                   ))}
                 </nav>
+
+                <QoplaSalesWidget />
+
+                <div className="flex-1" />
+
                 <button
                   onClick={handleLogout}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all mt-4 w-full"
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all w-full"
                 >
                   <LogOut size={18} />
                   Sign Out

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CheckCircle, RotateCcw, Trash2, Clock, MapPin, User, FileText, Mail, Phone, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag, AlertTriangle } from 'lucide-react'
 import type { Order, OrderWithDetails } from '../../types'
@@ -262,10 +263,10 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
                     onClick={e => { e.stopPropagation(); if (editingUnitItem === item.id) { setEditingUnitItem(null) } else { const rect = e.currentTarget.getBoundingClientRect(); const goUp = rect.bottom + 180 > window.innerHeight; const left = Math.max(4, Math.min(rect.right - 88, window.innerWidth - 92)); setUnitDropPos(prev => ({ ...prev, [item.id]: goUp ? { bottom: window.innerHeight - rect.top + 4, left } : { top: rect.bottom + 4, left } })); setEditingUnitItem(item.id) } }}
                     className={`text-xs transition-colors ${unitOverrides[item.id] ? 'text-indigo-500 font-medium' : excluded_ ? 'line-through text-red-300' : 'text-slate-400 hover:text-slate-600'}`}
                   >{effectiveUnit(item)}</button>
-                  {editingUnitItem === item.id && (
+                  {editingUnitItem === item.id && createPortal(
                     <>
-                      <div className="fixed inset-0 z-40" onClick={() => setEditingUnitItem(null)} />
-                      <div className="fixed z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 flex flex-col gap-0.5 min-w-[88px]" style={unitDropPos[item.id]}>
+                      <div className="fixed inset-0 z-[9998]" onClick={() => setEditingUnitItem(null)} />
+                      <div className="fixed z-[9999] bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 flex flex-col gap-0.5 min-w-[88px]" style={unitDropPos[item.id]}>
                         {(unitList ?? []).map(u => (
                           <button key={u.id} onClick={() => {
                             const override = u.name === item.product?.unit ? null : u.name
@@ -275,7 +276,8 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
                           }} className={`px-2.5 py-1 rounded-lg text-xs text-left transition-colors ${effectiveUnit(item) === u.name ? 'bg-indigo-600 text-white' : 'hover:bg-slate-50 text-slate-700'}`}>{u.name}</button>
                         ))}
                       </div>
-                    </>
+                    </>,
+                    document.body
                   )}
                 </div>
               </div>
@@ -285,15 +287,16 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
                   title="Change vendor"
                   className={`p-0.5 rounded transition-all ${isOverridden ? 'text-amber-500 opacity-100' : 'text-slate-300 opacity-0 group-hover:opacity-100 hover:text-slate-500'}`}
                 ><Tag size={10} /></button>
-                {editingVendorItem === item.id && (
+                {editingVendorItem === item.id && createPortal(
                   <>
-                    <div className="fixed inset-0 z-40" onClick={() => setEditingVendorItem(null)} />
-                    <div className="fixed z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 flex flex-col gap-0.5 min-w-[138px]" style={vendorDropPos[item.id]}>
+                    <div className="fixed inset-0 z-[9998]" onClick={() => setEditingVendorItem(null)} />
+                    <div className="fixed z-[9999] bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 flex flex-col gap-0.5 min-w-[138px]" style={vendorDropPos[item.id]}>
                       {(vendorList ?? []).map(v => (
                         <button key={v.id} onClick={() => setItemVendor(item, v.name)} className={`px-2.5 py-1 rounded-lg text-xs text-left transition-colors ${effectiveVendor(item) === v.name ? 'bg-indigo-600 text-white' : 'hover:bg-slate-50 text-slate-700'}`}>{v.name}</button>
                       ))}
                     </div>
-                  </>
+                  </>,
+                  document.body
                 )}
               </div>
             </div>

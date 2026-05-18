@@ -69,6 +69,7 @@ export interface Order {
   note: string | null
   created_at: string
   completed_at: string | null
+  is_merged?: boolean
 }
 
 export interface OrderItem {

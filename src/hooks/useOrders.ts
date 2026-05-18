@@ -142,6 +142,7 @@ export function useMergeOrders() {
           employee_id: base.employee_id,
           status: 'pending',
           note: notes.length ? notes.join(' | ') : null,
+          is_merged: true,
         })
         .select()
         .single()

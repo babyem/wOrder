@@ -12,19 +12,27 @@ const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY
 const BOT_TOKEN    = process.env.TELEGRAM_TOKEN
 
 async function db(path) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+  const url = `${SUPABASE_URL}/rest/v1/${path}`
+  const res = await fetch(url, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
   })
-  return res.json()
+  const text = await res.text()
+  if (!res.ok) throw new Error(`Supabase error ${res.status}: ${text}`)
+  try { return JSON.parse(text) } catch { throw new Error(`Supabase bad JSON: ${text.slice(0, 200)}`) }
 }
 
 async function tg(method, body) {
-  const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
+  const url = `https://api.telegram.org/bot${BOT_TOKEN}/${method}`
+  const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  return res.json()
+  const text = await res.text()
+  let json
+  try { json = JSON.parse(text) } catch { throw new Error(`Telegram bad JSON: ${text.slice(0, 200)}`) }
+  if (!json.ok) throw new Error(`Telegram ${method} failed: ${json.description || text}`)
+  return json
 }
 
 const answerCb = (id, text = '') =>
@@ -65,7 +73,6 @@ async function handleLocationPress(locationId, chatId, msgId, cbId) {
   }
   text += 'Välj leverantör att notifiera:'
 
-  // Använd | som separator — undviker kollision med UUID:ns bindestreck
   const buttons = Object.keys(byVendor).map(v => ({
     text: `📦 ${v}`,
     callback_data: `V:${order.id}|${v.slice(0, 20)}`,
@@ -90,8 +97,9 @@ async function handleVendorPress(orderId, vendorName, chatId, msgId, cbId) {
   const order  = orders[0]
   const vendor = vendorList[0]
 
-  if (!order || !vendor) return
-  if (!vendor.email && !vendor.phone) return
+  if (!order) { console.error('Order not found:', orderId); return }
+  if (!vendor) { console.error('Vendor not found:', vendorName); return }
+  if (!vendor.email && !vendor.phone) { console.error('Vendor has no contact:', vendorName); return }
 
   const vendorItems = allItems.filter(i => i.product?.vendor === vendorName)
   const itemLines = vendorItems.map(i =>
@@ -104,8 +112,7 @@ async function handleVendorPress(orderId, vendorName, chatId, msgId, cbId) {
     row.push({ text: `📧 Email — ${vendor.email}`, callback_data: `EM:${orderId}|${vendorName.slice(0, 20)}` })
   }
   if (vendor.phone) {
-    const phone = vendor.phone.replace(/[\s\-()+]/g, '')
-    // Kort SMS-body för att hålla URL under gränsen
+    const phone = vendor.phone.replace(/[\s \-()+]/g, '')
     const smsBody = encodeURIComponent(
       `Hej ${vendorName}, beställning från ${locationName}:\n${itemLines.join('\n')}\nMvh Woso`
     )
@@ -168,6 +175,9 @@ export default async function handler(req, res) {
   const msg  = cb.message?.message_id
   const cbId = cb.id
 
+  console.log(`[telegram] callback: ${data} chat=${chat} msg=${msg}`)
+  console.log(`[telegram] env check: SUPABASE_URL=${SUPABASE_URL ? 'set' : 'MISSING'} BOT_TOKEN=${BOT_TOKEN ? 'set' : 'MISSING'}`)
+
   try {
     if (data?.startsWith('L:')) {
       await handleLocationPress(data.slice(2), chat, msg, cbId)
@@ -183,8 +193,9 @@ export default async function handler(req, res) {
       await answerCb(cbId)
     }
   } catch (err) {
-    console.error(err)
-    await answerCb(cbId, 'Något gick fel, försök igen.')
+    console.error('[telegram] error:', err.message)
+    // Try to notify user — may fail if cbId already answered
+    try { await answerCb(cbId, '⚠️ Fel: ' + err.message.slice(0, 150)) } catch {}
   }
 
   res.status(200).end()

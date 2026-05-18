@@ -1,6 +1,14 @@
 import { useQuery } from '@tanstack/react-query'
 
-async function fetchQoplaSales() {
+export interface QoplaSaleRow {
+  shopId: string
+  restaurant: string
+  sales: number
+  orders: number
+  currency: string
+}
+
+async function fetchQoplaSales(): Promise<QoplaSaleRow[]> {
   const res = await fetch('/api/qopla')
   const json = await res.json()
   if (!res.ok) throw new Error(json.error ?? 'Qopla API fel')

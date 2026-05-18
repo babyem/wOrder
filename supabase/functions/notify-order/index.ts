@@ -19,7 +19,7 @@ serve(async (req) => {
       supabase.from('employees').select('name').eq('id', record.employee_id).single(),
       supabase.from('locations').select('name').eq('id', record.location_id).single(),
       supabase.from('order_items')
-        .select('quantity, products(name, vendor)')
+        .select('quantity, products(name, vendor, unit)')
         .eq('order_id', record.id),
     ])
 
@@ -27,20 +27,21 @@ serve(async (req) => {
     const locationName = location?.name ?? 'Unknown'
 
     // Group items by vendor
-    const byVendor = new Map<string, { name: string; quantity: number }[]>()
+    const byVendor = new Map<string, { name: string; quantity: number; unit: string }[]>()
     for (const item of items ?? []) {
-      const product = (item as Record<string, unknown>).products as { name: string; vendor: string } | null
+      const product = (item as Record<string, unknown>).products as { name: string; vendor: string; unit: string } | null
       const vendor = product?.vendor || 'Övrigt'
       const name = product?.name ?? '?'
+      const unit = product?.unit ?? ''
       const existing = byVendor.get(vendor) ?? []
-      existing.push({ name, quantity: item.quantity })
+      existing.push({ name, quantity: item.quantity, unit })
       byVendor.set(vendor, existing)
     }
 
     const vendorLines = [...byVendor.entries()]
       .map(([vendor, products]) => {
-        const lines = products.map(p => `${p.name} x${p.quantity}`).join('\n')
-        return `${vendor}\n${lines}`
+        const lines = products.map(p => `${p.name} ${p.quantity} ${p.unit}`.trim()).join('\n')
+        return `**${vendor}**\n${lines}`
       })
       .join('\n\n')
 
@@ -57,6 +58,7 @@ serve(async (req) => {
         topic: ntfyTopic,
         title: 'New Order 🛒',
         message,
+        markdown: true,
         priority: 4,
         tags: ['shopping'],
       }),

@@ -15,23 +15,43 @@ serve(async (req) => {
     const [{ data: employee }, { data: location }, { data: items }] = await Promise.all([
       supabase.from('employees').select('name').eq('id', record.employee_id).single(),
       supabase.from('locations').select('name').eq('id', record.location_id).single(),
-      supabase.from('order_items').select('quantity').eq('order_id', record.id),
+      supabase.from('order_items')
+        .select('quantity, products(name, vendor)')
+        .eq('order_id', record.id),
     ])
 
     const employeeName = employee?.name ?? 'Unknown'
     const locationName = location?.name ?? 'Unknown'
-    const totalItems = (items ?? []).reduce((sum: number, i: { quantity: number }) => sum + i.quantity, 0)
-    const note = record.note ? `\n📝 ${record.note}` : ''
+
+    // Group items by vendor
+    const byVendor = new Map<string, { name: string; quantity: number }[]>()
+    for (const item of items ?? []) {
+      const product = (item as Record<string, unknown>).products as { name: string; vendor: string } | null
+      const vendor = product?.vendor || 'Övrigt'
+      const name = product?.name ?? '?'
+      const existing = byVendor.get(vendor) ?? []
+      existing.push({ name, quantity: item.quantity })
+      byVendor.set(vendor, existing)
+    }
+
+    const vendorLines = [...byVendor.entries()]
+      .map(([vendor, products]) => {
+        const lines = products.map(p => `${p.name} x${p.quantity}`).join('\n')
+        return `${vendor}\n${lines}`
+      })
+      .join('\n\n')
+
+    const note = record.note ? `\n\n📝 ${record.note}` : ''
+    const message = `${locationName} · ${employeeName}\n\n${vendorLines}${note}`
 
     const ntfyTopic = Deno.env.get('NTFY_TOPIC') ?? 'new_order_notification'
-    const ntfyUrl = `https://ntfy.sh/${ntfyTopic}`
 
-    await fetch(ntfyUrl, {
+    await fetch(`https://ntfy.sh/${ntfyTopic}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         title: 'New Order',
-        message: `${employeeName} · ${locationName}\n${totalItems} item${totalItems !== 1 ? 's' : ''}${note}`,
+        message,
         priority: 4,
         tags: ['shopping'],
       }),

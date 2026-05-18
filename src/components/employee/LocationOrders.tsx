@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { motion, AnimatePresence } from 'framer-motion'
-import { Clock, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react'
-import { useState } from 'react'
+import { motion } from 'framer-motion'
+import { Clock, CheckCircle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import type { OrderWithDetails } from '../../types'
 
@@ -28,8 +27,7 @@ function useLocationOrders(locationId: string) {
   })
 }
 
-function OrderRow({ order }: { order: OrderWithDetails }) {
-  const [expanded, setExpanded] = useState(false)
+function OrderCard({ order }: { order: OrderWithDetails }) {
   const isPending = order.status === 'pending'
 
   const byVendor = new Map<string, typeof order.items>()
@@ -46,59 +44,43 @@ function OrderRow({ order }: { order: OrderWithDetails }) {
   return (
     <motion.div
       layout
-      className={`rounded-2xl border bg-white shadow-sm overflow-hidden transition-opacity ${!isPending ? 'opacity-60' : ''}`}
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={`rounded-2xl border bg-white shadow-sm overflow-hidden flex flex-col transition-opacity ${!isPending ? 'opacity-50' : ''}`}
     >
-      {/* Header row */}
-      <button
-        className="w-full flex items-center gap-2.5 px-4 py-3 text-left"
-        onClick={() => setExpanded(v => !v)}
-      >
-        <div className={`w-2 h-2 rounded-full shrink-0 ${isPending ? 'bg-amber-400' : 'bg-emerald-400'}`} />
-        <span className="font-medium text-slate-800 text-sm flex-1 truncate">
-          {order.employee?.name ?? 'Unknown'}
-        </span>
-        <span className="text-[11px] text-slate-400 tabular-nums shrink-0">{time}</span>
-        <div className={`shrink-0 ml-1 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${isPending ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
-          {isPending ? <Clock size={9} /> : <CheckCircle size={9} />}
-          {isPending ? 'Pending' : 'Done'}
-        </div>
-        {expanded ? <ChevronUp size={13} className="text-slate-400 shrink-0" /> : <ChevronDown size={13} className="text-slate-400 shrink-0" />}
-      </button>
+      {/* Status bar */}
+      <div className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold ${isPending ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
+        {isPending ? <Clock size={9} /> : <CheckCircle size={9} />}
+        {isPending ? 'Pending' : 'Done'}
+        <span className="ml-auto font-normal opacity-70 tabular-nums">{time}</span>
+      </div>
 
-      {/* Expanded product list */}
-      <AnimatePresence initial={false}>
-        {expanded && (
-          <motion.div
-            key="content"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
-            <div className="px-4 pb-3 space-y-2 border-t border-slate-50 pt-2">
-              {[...byVendor.entries()].map(([vendor, items]) => (
-                <div key={vendor}>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">{vendor}</p>
-                  <div className="space-y-0.5">
-                    {items.map(item => (
-                      <div key={item.id} className="flex items-center justify-between text-xs">
-                        <span className="text-slate-700">{item.product?.name ?? '?'}</span>
-                        <span className="text-slate-400 tabular-nums">
-                          {item.quantity} {item.unit_override ?? item.product?.unit ?? ''}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+      {/* Employee */}
+      <div className="px-3 pt-2 pb-1">
+        <p className="font-semibold text-slate-800 text-sm truncate">{order.employee?.name ?? 'Unknown'}</p>
+      </div>
+
+      {/* Products by vendor */}
+      <div className="px-3 pb-3 space-y-2 flex-1">
+        {[...byVendor.entries()].map(([vendor, items]) => (
+          <div key={vendor}>
+            <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">{vendor}</p>
+            <div className="space-y-0.5">
+              {items.map(item => (
+                <div key={item.id} className="flex items-baseline justify-between gap-1 text-xs">
+                  <span className="text-slate-700 truncate">{item.product?.name ?? '?'}</span>
+                  <span className="text-slate-400 tabular-nums shrink-0">
+                    {item.quantity} {item.unit_override ?? item.product?.unit ?? ''}
+                  </span>
                 </div>
               ))}
-              {order.note && (
-                <p className="text-[11px] text-slate-400 italic border-t border-slate-50 pt-1.5">📝 {order.note}</p>
-              )}
             </div>
-          </motion.div>
+          </div>
+        ))}
+        {order.note && (
+          <p className="text-[10px] text-slate-400 italic border-t border-slate-50 pt-1">📝 {order.note}</p>
         )}
-      </AnimatePresence>
+      </div>
     </motion.div>
   )
 }
@@ -111,9 +93,11 @@ export default function LocationOrders({ locationId }: { locationId: string }) {
   return (
     <div className="space-y-2">
       <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 px-1">Recent Orders</p>
-      {orders.map(order => (
-        <OrderRow key={order.id} order={order} />
-      ))}
+      <div className="grid grid-cols-4 gap-2">
+        {orders.map(order => (
+          <OrderCard key={order.id} order={order} />
+        ))}
+      </div>
     </div>
   )
 }

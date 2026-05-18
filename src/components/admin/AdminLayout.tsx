@@ -1,8 +1,8 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, ShoppingBag, Package, Settings, LogOut, ChefHat, Menu, X, TrendingUp } from 'lucide-react'
+import { LayoutDashboard, ShoppingBag, Package, Settings, LogOut, ChefHat, Menu, X } from 'lucide-react'
 import { useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { useQoplaSales } from '../../hooks/useQoplaSales'
+import { QoplaSalesWidget } from 'qopla-plugin'
 import { motion, AnimatePresence } from 'framer-motion'
 
 const navItems = [
@@ -11,40 +11,6 @@ const navItems = [
   { to: '/admin/products', label: 'Products', icon: Package, end: false },
   { to: '/admin/settings', label: 'Settings', icon: Settings, end: false },
 ]
-
-function QoplaSalesWidget() {
-  const { data, isLoading, isError } = useQoplaSales()
-  return (
-    <div className="mx-1 mt-6 mb-2 rounded-xl bg-slate-50 border border-slate-100 p-3">
-      <div className="flex items-center gap-1.5 mb-2.5">
-        <TrendingUp size={13} className="text-indigo-500" />
-        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Idag</span>
-      </div>
-      {isLoading && (
-        <div className="space-y-1.5">
-          {[1,2,3].map(i => (
-            <div key={i} className="h-3 bg-slate-200 rounded animate-pulse" style={{ width: `${60+i*10}%` }} />
-          ))}
-        </div>
-      )}
-      {isError && <p className="text-xs text-red-400">Kunde inte hämta data</p>}
-      {data && (
-        <div className="space-y-1.5">
-          {data.map(r => (
-            <div key={r.shopId} className="flex justify-between items-baseline gap-1">
-              <span className="text-xs text-slate-500 truncate">{r.restaurant}</span>
-              <span className="text-xs font-semibold text-slate-700 shrink-0">{r.sales.toLocaleString('sv-SE')} kr</span>
-            </div>
-          ))}
-          <div className="border-t border-slate-200 pt-1.5 mt-1.5 flex justify-between items-baseline">
-            <span className="text-xs font-semibold text-slate-600">Totalt</span>
-            <span className="text-xs font-bold text-indigo-600">{data.reduce((s,r)=>s+r.sales,0).toLocaleString('sv-SE')} kr</span>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
 
 export default function AdminLayout() {
   const navigate = useNavigate()

@@ -33,9 +33,9 @@ async function sendTelegram(text, reply_markup) {
   const todayStart = new Date()
   todayStart.setHours(0, 0, 0, 0)
 
-  // Hämta pending orders med location
+  // Hämta pending orders med location (använd pluralis — Supabase REST-konvention)
   const orders = await supabase(
-    `orders?select=id,status,created_at,location:locations(id,name)&status=eq.pending&created_at=gte.${todayStart.toISOString()}&order=created_at.asc`
+    `orders?select=id,status,created_at,location_id,locations(id,name)&status=eq.pending&created_at=gte.${todayStart.toISOString()}&order=created_at.asc`
   )
 
   if (orders.length === 0) {
@@ -51,8 +51,8 @@ async function sendTelegram(text, reply_markup) {
   const seen = new Set()
   const buttons = []
   for (const o of orders) {
-    const locId = o.location?.id
-    const locName = o.location?.name
+    const locId = o.locations?.id
+    const locName = o.locations?.name
     if (locId && !seen.has(locId)) {
       seen.add(locId)
       buttons.push({ text: `📋 ${locName}`, callback_data: `L:${locId}` })
@@ -67,8 +67,8 @@ async function sendTelegram(text, reply_markup) {
   keyboard.push([{ text: '🔗 Öppna Staff Orders', url: 'https://worder.woso.se/admin/orders' }])
 
   const locationList = [...seen].map(id => {
-    const o = orders.find(x => x.location?.id === id)
-    return `  • ${o.location?.name}`
+    const o = orders.find(x => x.locations?.id === id)
+    return `  • ${o.locations?.name}`
   }).join('\n')
 
   await sendTelegram(

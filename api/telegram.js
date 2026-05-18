@@ -79,32 +79,25 @@ async function handleLocationPress(locationId, chatId, msgId, cbId) {
 }
 
 async function handleVendorPress(orderId, vendorName, chatId, msgId, cbId) {
-  const [orders, vendorList] = await Promise.all([
+  await answerCb(cbId) // Svara Telegram omedelbart — annars timeout
+
+  const [orders, vendorList, allItems] = await Promise.all([
     db(`orders?id=eq.${orderId}&select=id,locations(name)&limit=1`),
     db(`vendors?name=eq.${encodeURIComponent(vendorName)}&select=name,email,phone`),
+    db(`order_items?select=quantity,unit_override,product:products(name,unit,vendor)&order_id=eq.${orderId}`),
   ])
 
   const order  = orders[0]
   const vendor = vendorList[0]
 
-  if (!order) { await answerCb(cbId, 'Order hittades inte.'); return }
-  if (!vendor) { await answerCb(cbId, `${vendorName} hittades inte.`); return }
-  if (!vendor.email && !vendor.phone) {
-    await answerCb(cbId, `${vendorName} saknar kontaktuppgifter.`)
-    return
-  }
+  if (!order || !vendor) return
+  if (!vendor.email && !vendor.phone) return
 
-  // Hämta items för denna vendor
-  const items = await db(
-    `order_items?select=quantity,unit_override,product:products(name,unit,vendor)&order_id=eq.${orderId}`
-  )
-  const vendorItems = items.filter(i => i.product?.vendor === vendorName)
+  const vendorItems = allItems.filter(i => i.product?.vendor === vendorName)
   const itemLines = vendorItems.map(i =>
     `• ${i.product?.name} — ${i.quantity} ${i.unit_override || i.product?.unit || ''}`
   )
-
   const locationName = order.locations?.name || 'Woso Group'
-  let text = `📦 <b>${vendorName}</b> — ${locationName}\n\n${itemLines.join('\n')}\n\nHur vill du notifiera?`
 
   const row = []
   if (vendor.email) {
@@ -112,16 +105,17 @@ async function handleVendorPress(orderId, vendorName, chatId, msgId, cbId) {
   }
   if (vendor.phone) {
     const phone = vendor.phone.replace(/[\s\-()+]/g, '')
+    // Kort SMS-body för att hålla URL under gränsen
     const smsBody = encodeURIComponent(
-      `Hej ${vendorName},\n\nBeställning från ${locationName}:\n${itemLines.join('\n')}\n\nMvh, Woso Group`
+      `Hej ${vendorName}, beställning från ${locationName}:\n${itemLines.join('\n')}\nMvh Woso`
     )
     row.push({ text: `📱 SMS — ${vendor.phone}`, url: `sms:+${phone}?body=${smsBody}` })
   }
 
-  await answerCb(cbId)
-  await editMsg(chatId, msgId, text, {
-    inline_keyboard: [row, [{ text: '← Tillbaka', callback_data: 'BACK' }]],
-  })
+  await editMsg(chatId, msgId,
+    `📦 <b>${vendorName}</b> — ${locationName}\n\n${itemLines.join('\n')}\n\nHur vill du notifiera?`,
+    { inline_keyboard: [row, [{ text: '← Tillbaka', callback_data: 'BACK' }]] }
+  )
 }
 
 async function handleSendEmail(orderId, vendorName, chatId, msgId, cbId) {

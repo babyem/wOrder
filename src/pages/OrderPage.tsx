@@ -7,6 +7,7 @@ import EmployeeSelector from '../components/employee/EmployeeSelector'
 import ProductGrid from '../components/employee/ProductGrid'
 import CartBar from '../components/employee/CartBar'
 import OrderModal from '../components/employee/OrderModal'
+import LocationOrders from '../components/employee/LocationOrders'
 import { useLocationAlarms } from '../hooks/useLocationAlarms'
 import { useAdminLocations } from '../hooks/useAdminData'
 import { toSlug } from '../lib/slug'
@@ -280,6 +281,18 @@ export default function OrderPage() {
             )}
           </AnimatePresence>
         </div>
+
+        <AnimatePresence>
+          {locationId && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+            >
+              <LocationOrders locationId={locationId} />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <AnimatePresence>
           {ready ? (

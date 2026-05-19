@@ -18,7 +18,7 @@ function useLocationOrders(locationId: string) {
         `)
         .eq('location_id', locationId)
         .order('created_at', { ascending: false })
-        .limit(4)
+        .limit(10)
       if (error) throw error
       return data as OrderWithDetails[]
     },
@@ -94,21 +94,21 @@ export default function LocationOrders({ locationId }: { locationId: string }) {
     <div className="space-y-2">
       <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 px-1">Recent Orders</p>
 
-      {/* Mobile: horizontal scroll showing 2.5 cards. Desktop: 4-column grid */}
+      {/* Horizontal scroll on all screen sizes — 2.5 cols mobile, ~4.5 cols desktop */}
       <div className="relative">
         <div
-          className="no-scrollbar flex md:grid md:grid-cols-4 gap-2 overflow-x-auto md:overflow-x-visible"
+          className="no-scrollbar flex gap-2 overflow-x-auto"
           style={{ scrollbarWidth: 'none' }}
         >
           {orders.map(order => (
-            <div key={order.id} className="w-[42vw] shrink-0 md:w-auto md:shrink">
+            <div key={order.id} className="w-[42vw] md:w-56 shrink-0">
               <OrderCard order={order} />
             </div>
           ))}
         </div>
 
-        {/* Right fade — mobile only */}
-        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-slate-50 to-transparent md:hidden" />
+        {/* Right fade gradient */}
+        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-slate-50 to-transparent" />
       </div>
     </div>
   )

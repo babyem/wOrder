@@ -28,13 +28,24 @@ export function useCreateLocation() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (name: string) => {
+      // Create the location
       const { data, error } = await supabase.from('locations').insert({ name }).select().single()
       if (error) throw error
+
+      // Fetch all active products and hide them all for this new location by default
+      const { data: products } = await supabase.from('products').select('id').eq('active', true)
+      if (products && products.length > 0) {
+        await supabase.from('product_locations').insert(
+          products.map(p => ({ product_id: p.id, location_id: data.id }))
+        )
+      }
+
       return data
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['locations'] })
       qc.invalidateQueries({ queryKey: ['admin', 'locations'] })
+      qc.invalidateQueries({ queryKey: ['product_locations_all'] })
     },
   })
 }

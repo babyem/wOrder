@@ -258,6 +258,18 @@ export default function OrderPage() {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-6 space-y-4">
+        <AnimatePresence>
+          {locationId && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+            >
+              <LocationOrders locationId={locationId} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-5">
           {!fixedLocation && (
             <LocationSelector selected={locationId} onSelect={handleLocationChange} />
@@ -281,18 +293,6 @@ export default function OrderPage() {
             )}
           </AnimatePresence>
         </div>
-
-        <AnimatePresence>
-          {locationId && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-            >
-              <LocationOrders locationId={locationId} />
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         <AnimatePresence>
           {ready ? (

@@ -10,11 +10,11 @@ import toast from 'react-hot-toast'
 
 interface Props {
   order: OrderWithDetails
-  selected?: boolean
-  onToggle?: () => void
+  selectedVendors?: Set<string>   // which vendor cards of this order are selected
+  onToggle?: (vendor: string) => void
 }
 
-export default function OrderCard({ order, selected, onToggle }: Props) {
+export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
   const updateStatus = useUpdateOrderStatus()
   const deleteOrder = useDeleteOrder()
   const { data: vendorList } = useVendors()
@@ -310,17 +310,17 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
   )
 
   const isMerged = !!(order as Order & { is_merged?: boolean }).is_merged && isPending
+  const firstVendor = vendorEntries[0][0]
+  const firstSelected = selectedVendors?.has(firstVendor) ?? false
+
   const cardBorder = chefsOrderFailed
     ? 'border-red-400 ring-2 ring-red-100'
-    : selected ? 'border-indigo-400 ring-2 ring-indigo-100'
+    : firstSelected && !isMultiVendor ? 'border-indigo-400 ring-2 ring-indigo-100'
+    : firstSelected && isMultiVendor ? 'border-indigo-300'
     : isMerged ? 'border-orange-400 ring-2 ring-orange-100'
     : isPending ? 'border-amber-200'
     : 'border-slate-100'
-  const extraVendorBorder = selected
-    ? 'border-indigo-400 ring-2 ring-indigo-100'
-    : isMerged ? 'border-orange-300'
-    : 'border-slate-100'
-  const statusBarClass = selected ? 'bg-indigo-50 text-indigo-700' : isPending ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
+  const statusBarClass = isPending ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
 
   return (
     <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="relative">
@@ -334,9 +334,9 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
       {/* Main card — order header + first vendor */}
       <div className={`relative z-10 bg-white rounded-2xl border shadow-sm transition-shadow ${cardBorder}`}>
         <div className={`px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 rounded-t-2xl ${statusBarClass}`}>
-          {onToggle && (
-            <button onClick={e => { e.stopPropagation(); onToggle() }} className="shrink-0 mr-0.5">
-              {selected ? <CheckSquare size={13} className="text-indigo-600" /> : <Square size={13} className="text-slate-400" />}
+          {onToggle && !isMultiVendor && (
+            <button onClick={e => { e.stopPropagation(); onToggle(firstVendor) }} className="shrink-0 mr-0.5">
+              {firstSelected ? <CheckSquare size={13} className="text-indigo-600" /> : <Square size={13} className="text-slate-400" />}
             </button>
           )}
           {isPending ? <Clock size={12} /> : <CheckCircle size={12} />}
@@ -426,7 +426,14 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
           <div className="border-t border-slate-50 pt-2">
             {isMultiVendor && (
               <div className="flex items-center justify-between mb-1">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{vendorEntries[0][0]}</p>
+                <div className="flex items-center gap-1.5">
+                  {onToggle && (
+                    <button onClick={e => { e.stopPropagation(); onToggle(firstVendor) }} className="shrink-0">
+                      {firstSelected ? <CheckSquare size={13} className="text-indigo-600" /> : <Square size={13} className="text-slate-400" />}
+                    </button>
+                  )}
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{vendorEntries[0][0]}</p>
+                </div>
                 <button
                   onClick={() => markVendorDone(vendorEntries[0][0], !doneVendors.has(vendorEntries[0][0]), allVendorNames)}
                   className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium transition-colors ${doneVendors.has(vendorEntries[0][0]) ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600'}`}
@@ -493,13 +500,18 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
       {/* Additional vendor cards — one per extra vendor, connected by the green line */}
       {isMultiVendor && vendorEntries.slice(1).map(([vendor, items]) => {
         const isVendorDone = doneVendors.has(vendor)
+        const isVendorSelected = selectedVendors?.has(vendor) ?? false
+        const subBorder = isVendorSelected
+          ? 'border-indigo-400 ring-2 ring-indigo-100'
+          : isMerged ? 'border-orange-300'
+          : 'border-slate-100'
         return (
-          <div key={vendor} className={`relative z-10 mt-2 bg-white rounded-2xl border shadow-sm ${extraVendorBorder}`}>
+          <div key={vendor} className={`relative z-10 mt-2 bg-white rounded-2xl border shadow-sm ${subBorder}`}>
             <div className="px-3 py-2 border-b border-slate-50 flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 {onToggle && (
-                  <button onClick={e => { e.stopPropagation(); onToggle() }} className="shrink-0">
-                    {selected ? <CheckSquare size={13} className="text-indigo-600" /> : <Square size={13} className="text-slate-400" />}
+                  <button onClick={e => { e.stopPropagation(); onToggle(vendor) }} className="shrink-0">
+                    {isVendorSelected ? <CheckSquare size={13} className="text-indigo-600" /> : <Square size={13} className="text-slate-400" />}
                   </button>
                 )}
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{vendor}</p>

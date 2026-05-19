@@ -504,6 +504,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
         const subBorder = isVendorSelected
           ? 'border-indigo-400 ring-2 ring-indigo-100'
           : isMerged ? 'border-orange-300'
+          : isPending ? 'border-amber-200'
           : 'border-slate-100'
         return (
           <div key={vendor} className={`relative z-10 mt-2 bg-white rounded-2xl border shadow-sm ${subBorder}`}>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Search, RefreshCw, GitMerge, Bell, X, Mail, Phone, GripVertical, Loader2 } from 'lucide-react'
-import { useOrders, useMergeOrders } from '../../hooks/useOrders'
+import { useOrders, useMergeOrders, useUpdateOrderStatus } from '../../hooks/useOrders'
 import { useLocations } from '../../hooks/useLocations'
 import { useVendors } from '../../hooks/useMetadata'
 import OrderCard from '../../components/admin/OrderCard'
@@ -58,6 +58,7 @@ function SortableColumn({
 export default function OrdersPage() {
   const [status, setStatus] = useState('all')
   const [search, setSearch] = useState('')
+  // Selection key: "orderId::vendor"
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [showBatchNotify, setShowBatchNotify] = useState(false)
   const [batchSending, setBatchSending] = useState<string | null>(null)
@@ -70,6 +71,7 @@ export default function OrdersPage() {
   const { data: locations } = useLocations()
   const { data: vendorList } = useVendors()
   const mergeOrders = useMergeOrders()
+  const updateStatus = useUpdateOrderStatus()
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
@@ -100,16 +102,24 @@ export default function OrdersPage() {
     return () => { supabase.removeChannel(channel) }
   }, [qc])
 
-  const toggleSelect = (id: string) => {
+  const toggleSelect = (orderId: string, vendor: string) => {
+    const key = `${orderId}::${vendor}`
     setSelected(prev => {
       const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
       return next
     })
   }
 
   const clearSelection = () => setSelected(new Set())
+
+  // Parse selected keys into { orderId, vendor } pairs
+  const selectedPairs = [...selected].map(k => {
+    const idx = k.indexOf('::')
+    return { orderId: k.slice(0, idx), vendor: k.slice(idx + 2) }
+  })
+  const selectedOrderIds = new Set(selectedPairs.map(p => p.orderId))
 
   // Group orders by location_id
   const ordersByLocation: Record<string, OrderWithDetails[]> = {}
@@ -121,26 +131,58 @@ export default function OrdersPage() {
 
   // --- Batch notify logic ---
   const vendorMap = Object.fromEntries((vendorList ?? []).map(v => [v.name, v]))
-  const selectedOrders = (orders ?? []).filter(o => selected.has(o.id))
+  const selectedOrders = (orders ?? []).filter(o => selectedOrderIds.has(o.id))
   const sameLocation = selectedOrders.length >= 2 &&
     new Set(selectedOrders.map(o => o.location_id)).size === 1
 
   interface VendorItem { product: string; quantity: number; unit: string }
 
+  // Only include items from selected vendor cards (not the whole order)
   const vendorLocItems = new Map<string, Map<string, VendorItem[]>>()
-  for (const order of selectedOrders) {
+  for (const { orderId, vendor: selVendor } of selectedPairs) {
+    const order = (orders ?? []).find(o => o.id === orderId)
+    if (!order) continue
     const loc = order.location?.name ?? 'Unknown'
     for (const item of order.items) {
-      const vendor = item.product?.vendor
-      if (!vendor) continue
-      if (!vendorLocItems.has(vendor)) vendorLocItems.set(vendor, new Map())
-      const locMap = vendorLocItems.get(vendor)!
+      const itemVendor = item.vendor_override ?? item.product?.vendor
+      if (itemVendor !== selVendor) continue
+      if (!vendorLocItems.has(selVendor)) vendorLocItems.set(selVendor, new Map())
+      const locMap = vendorLocItems.get(selVendor)!
       const list = locMap.get(loc) ?? []
       const displayName = item.product?.vendor_name ?? item.product?.name ?? '?'
       const existing = list.find(e => e.product === displayName)
       if (existing) existing.quantity += item.quantity
-      else list.push({ product: displayName, quantity: item.quantity, unit: item.product?.unit ?? '' })
+      else list.push({ product: displayName, quantity: item.quantity, unit: item.unit_override ?? item.product?.unit ?? '' })
       locMap.set(loc, list)
+    }
+  }
+
+  // After notifying a vendor, mark it done on each affected order and auto-complete if all vendors done
+  const markVendorDoneAcrossOrders = (vendorName: string) => {
+    const affectedOrderIds = selectedPairs
+      .filter(p => p.vendor === vendorName)
+      .map(p => p.orderId)
+
+    for (const orderId of affectedOrderIds) {
+      const order = (orders ?? []).find(o => o.id === orderId)
+      if (!order || order.status !== 'pending') continue
+
+      // All vendor names for this order
+      const allVendors = [...new Set(order.items.map(i => i.vendor_override ?? i.product?.vendor).filter(Boolean))] as string[]
+
+      // Load & update localStorage done set
+      let doneVendors: Set<string>
+      try {
+        const stored = localStorage.getItem(`done_vendors_${orderId}`)
+        doneVendors = stored ? new Set(JSON.parse(stored)) : new Set()
+      } catch { doneVendors = new Set() }
+      doneVendors.add(vendorName)
+      localStorage.setItem(`done_vendors_${orderId}`, JSON.stringify([...doneVendors]))
+
+      // Auto-complete order if all vendors are done
+      if (allVendors.every(v => doneVendors.has(v))) {
+        updateStatus.mutateAsync({ id: orderId, status: 'done' })
+      }
     }
   }
 
@@ -217,14 +259,19 @@ export default function OrdersPage() {
                             <span className="text-xs text-slate-300">No orders</span>
                           </div>
                         ) : (
-                          colOrders.map(order => (
+                          colOrders.map(order => {
+                            const orderSelectedVendors = new Set(
+                              selectedPairs.filter(p => p.orderId === order.id).map(p => p.vendor)
+                            )
+                            return (
                             <OrderCard
                               key={order.id}
                               order={order}
-                              selected={selected.has(order.id)}
-                              onToggle={() => toggleSelect(order.id)}
+                              selectedVendors={orderSelectedVendors}
+                              onToggle={(vendor) => toggleSelect(order.id, vendor)}
                             />
-                          ))
+                            )
+                          })
                         )}
                       </AnimatePresence>
                     </SortableColumn>
@@ -246,7 +293,7 @@ export default function OrdersPage() {
             transition={{ type: 'spring', damping: 20, stiffness: 260 }}
             className="fixed bottom-4 left-4 right-4 max-w-lg mx-auto bg-slate-900 rounded-2xl px-4 py-3 flex items-center gap-2 shadow-2xl z-40"
           >
-            <span className="text-white text-sm font-medium flex-1">{selected.size} selected</span>
+            <span className="text-white text-sm font-medium flex-1">{selected.size} vendor card{selected.size !== 1 ? 's' : ''} selected</span>
             {batchNotifiableVendors.length > 0 && (
               <button
                 onClick={() => setShowBatchNotify(true)}
@@ -321,6 +368,7 @@ export default function OrdersPage() {
                             try {
                               await sendEmail(v.email!, `Order – ${v.name}`, buildBatchBody(v))
                               toast.success(`Email sent to ${v.name}`)
+                              markVendorDoneAcrossOrders(v.name)
                             } catch (err) {
                               toast.error(`${v.name}: ${err instanceof Error ? err.message : 'Failed to send'}`)
                             } finally {
@@ -338,6 +386,7 @@ export default function OrdersPage() {
                       {v.phone && (
                         <a
                           href={`sms:${v.phone}?body=${encodeURIComponent(buildBatchBody(v))}`}
+                          onClick={() => markVendorDoneAcrossOrders(v.name)}
                           className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 transition-colors"
                         >
                           <Phone size={11} /> SMS

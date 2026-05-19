@@ -91,7 +91,11 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
     const items = order.items.filter(i =>
       effectiveVendor(i) === vendorName && !isExcluded(i.id)
     )
-    const lines = items.map(i => `${i.product?.vendor_name ?? i.product?.name ?? '?'}: ${i.quantity} ${effectiveUnit(i)}`)
+    const hideUnit = vendorMap[vendorName]?.hide_unit ?? false
+    const lines = items.map(i => {
+      const unit = hideUnit ? '' : ` ${effectiveUnit(i)}`
+      return `${i.product?.vendor_name ?? i.product?.name ?? '?'}: ${i.quantity}${unit}`
+    })
     return `${order.location?.name ?? ''}\n\n${lines.join('\n')}`
   }
 

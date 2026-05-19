@@ -141,8 +141,8 @@ function MetaSection({ icon, title, items, loading, onAdd, onDelete, onRename, p
 
 // ── Vendor section (with reorder support) ────────────────────────────────────
 
-function SortableVendorRow({ id, name, email, phone, onDelete }: {
-  id: string; name: string; email?: string; phone?: string; onDelete: () => void
+function SortableVendorRow({ id, name, email, phone, hide_unit, onDelete }: {
+  id: string; name: string; email?: string; phone?: string; hide_unit?: boolean; onDelete: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }
@@ -247,6 +247,15 @@ function SortableVendorRow({ id, name, email, phone, onDelete }: {
               )}
             </span>
           )}
+          {/* Hide unit toggle */}
+          <button
+            onClick={() => updateVendor.mutate({ id, hide_unit: !hide_unit })}
+            title={hide_unit ? 'Enheter döljs i meddelanden — klicka för att visa' : 'Klicka för att dölja enheter i meddelanden'}
+            className={`flex items-center gap-1 text-xs transition-colors rounded px-1 ${hide_unit ? 'text-indigo-600 font-medium' : 'text-slate-300 hover:text-slate-500'}`}
+          >
+            <span className="tabular-nums">#</span>
+            {hide_unit ? 'Antal only' : 'Antal only'}
+          </button>
         </div>
       </div>
       <button
@@ -324,6 +333,7 @@ function VendorSection() {
                       name={v.name}
                       email={v.email}
                       phone={v.phone}
+                      hide_unit={v.hide_unit}
                       onDelete={async () => {
                         try { await deleteVendor.mutateAsync(v.id) }
                         catch { toast.error('Delete failed — vendor may be in use') }

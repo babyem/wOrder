@@ -39,6 +39,7 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
       return next
     })
   }
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [sending, setSending] = useState<string | null>(null)
   const [editingVendorItem, setEditingVendorItem] = useState<string | null>(null)
   const [editingQtyItem, setEditingQtyItem] = useState<string | null>(null)
@@ -139,7 +140,6 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
   }
 
   const handleDelete = async () => {
-    if (!confirm('Delete this order?')) return
     try {
       await deleteOrder.mutateAsync(order.id)
       toast.success('Order deleted')
@@ -377,10 +377,24 @@ export default function OrderCard({ order, selected, onToggle }: Props) {
                   <RotateCcw size={14} />
                 </button>
               )}
-              <button onClick={handleDelete} disabled={deleteOrder.isPending} title="Delete order"
-                className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 disabled:opacity-50 transition-colors">
-                <Trash2 size={14} />
-              </button>
+              {confirmDelete ? (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => { setConfirmDelete(false); handleDelete() }}
+                    disabled={deleteOrder.isPending}
+                    className="px-2 py-1 rounded-lg bg-red-500 text-white text-[10px] font-semibold hover:bg-red-600 disabled:opacity-50 transition-colors"
+                  >Delete</button>
+                  <button
+                    onClick={() => setConfirmDelete(false)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 transition-colors"
+                  ><X size={12} /></button>
+                </div>
+              ) : (
+                <button onClick={() => setConfirmDelete(true)} disabled={deleteOrder.isPending} title="Delete order"
+                  className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 disabled:opacity-50 transition-colors">
+                  <Trash2 size={14} />
+                </button>
+              )}
             </div>
           </div>
 

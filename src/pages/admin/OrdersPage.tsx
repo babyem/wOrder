@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Search, RefreshCw, GitMerge, Bell, X, Mail, Phone, GripVertical, Loader2 } from 'lucide-react'
-import { useOrders, useMergeOrders, useUpdateOrderStatus } from '../../hooks/useOrders'
+import { useOrders, useMergeOrders } from '../../hooks/useOrders'
 import { useLocations } from '../../hooks/useLocations'
 import { useVendors } from '../../hooks/useMetadata'
 import OrderCard from '../../components/admin/OrderCard'
@@ -71,7 +71,7 @@ export default function OrdersPage() {
   const { data: locations } = useLocations()
   const { data: vendorList } = useVendors()
   const mergeOrders = useMergeOrders()
-  const updateStatus = useUpdateOrderStatus()
+
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
@@ -157,22 +157,26 @@ export default function OrdersPage() {
     }
   }
 
-  // After notifying a vendor, mark it done on each affected order and auto-complete if all vendors done
+  // After notifying a vendor, mark that vendor done locally and auto-complete any orders
+  // where ALL their vendors are now done. Uses a direct Supabase batch update to avoid
+  // React Query mutation concurrency issues when multiple orders complete at once.
   const markVendorDoneAcrossOrders = (vendorName: string) => {
     const affectedOrderIds = selectedPairs
       .filter(p => p.vendor === vendorName)
       .map(p => p.orderId)
 
+    const orderIdsToComplete: string[] = []
+
     for (const orderId of affectedOrderIds) {
       const order = (orders ?? []).find(o => o.id === orderId)
       if (!order || order.status !== 'pending') continue
 
-      // Only the vendor cards that were selected for this specific order
-      const selectedVendorsForOrder = selectedPairs
-        .filter(p => p.orderId === orderId)
-        .map(p => p.vendor)
+      // All actual vendors in this order
+      const allVendors = [
+        ...new Set(order.items.map(i => i.vendor_override ?? i.product?.vendor).filter(Boolean))
+      ] as string[]
 
-      // Load & update localStorage done set
+      // Update localStorage done-set for this order
       let doneVendors: Set<string>
       try {
         const stored = localStorage.getItem(`done_vendors_${orderId}`)
@@ -181,10 +185,20 @@ export default function OrdersPage() {
       doneVendors.add(vendorName)
       localStorage.setItem(`done_vendors_${orderId}`, JSON.stringify([...doneVendors]))
 
-      // Auto-complete order once all *selected* vendor cards for this order are notified
-      if (selectedVendorsForOrder.every(v => doneVendors.has(v))) {
-        updateStatus.mutateAsync({ id: orderId, status: 'done' })
+      // Queue for completion if every vendor in the order is now done
+      if (allVendors.every(v => doneVendors.has(v))) {
+        orderIdsToComplete.push(orderId)
       }
+    }
+
+    // Batch-update all completed orders in one go
+    if (orderIdsToComplete.length > 0) {
+      const now = new Date().toISOString()
+      supabase
+        .from('orders')
+        .update({ status: 'done', completed_at: now })
+        .in('id', orderIdsToComplete)
+        .then(() => qc.invalidateQueries({ queryKey: ['orders'] }))
     }
   }
 

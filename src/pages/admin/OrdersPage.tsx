@@ -167,8 +167,10 @@ export default function OrdersPage() {
       const order = (orders ?? []).find(o => o.id === orderId)
       if (!order || order.status !== 'pending') continue
 
-      // All vendor names for this order
-      const allVendors = [...new Set(order.items.map(i => i.vendor_override ?? i.product?.vendor).filter(Boolean))] as string[]
+      // Only the vendor cards that were selected for this specific order
+      const selectedVendorsForOrder = selectedPairs
+        .filter(p => p.orderId === orderId)
+        .map(p => p.vendor)
 
       // Load & update localStorage done set
       let doneVendors: Set<string>
@@ -179,8 +181,8 @@ export default function OrdersPage() {
       doneVendors.add(vendorName)
       localStorage.setItem(`done_vendors_${orderId}`, JSON.stringify([...doneVendors]))
 
-      // Auto-complete order if all vendors are done
-      if (allVendors.every(v => doneVendors.has(v))) {
+      // Auto-complete order once all *selected* vendor cards for this order are notified
+      if (selectedVendorsForOrder.every(v => doneVendors.has(v))) {
         updateStatus.mutateAsync({ id: orderId, status: 'done' })
       }
     }

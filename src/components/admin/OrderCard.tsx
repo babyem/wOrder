@@ -152,6 +152,8 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
   }
 
   const chefsItems = order.items.filter(i => i.product?.chefsculinar_id)
+  // Which vendor the ChefsCulinar items belong to
+  const chefsVendorName = chefsItems.length > 0 ? effectiveVendor(chefsItems[0]) : null
 
   const handleSendToChefs = async () => {
     const webhookUrl = import.meta.env.VITE_N8N_CHEFSCULINAR_WEBHOOK
@@ -309,6 +311,54 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
     </div>
   )
 
+  // ChefsCulinar controls — rendered inside whichever vendor card owns the CC items
+  const renderChefsControls = () => (
+    <div className="mt-2 space-y-1.5">
+      {isPending && chefsStatus !== 'pending' && (
+        <button
+          onClick={handleSendToChefs}
+          disabled={sendingChefs}
+          className={`flex w-full items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium disabled:opacity-50 transition-colors ${chefsStatus === 'failed' ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}
+        >
+          {sendingChefs
+            ? <Loader2 size={12} className="animate-spin" />
+            : chefsStatus === 'failed'
+              ? <><RotateCcw size={12} /> Försök igen</>
+              : <><ShoppingBag size={12} /> Skicka till ChefsCulinar</>}
+        </button>
+      )}
+      {chefsStatus === 'pending' && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-700 space-y-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={13} className="shrink-0" />
+            <span className="font-medium">Skickat — verifiera på ChefsCulinar</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <a href="https://www.chefsculinar.se/sv-se/checkout" target="_blank" rel="noreferrer"
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 font-medium transition-colors">
+              Öppna
+            </a>
+            <button
+              onClick={() => { setChefsState(null); if (chefsVendorName) markVendorDone(chefsVendorName, true, allVendorNames) }}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 hover:bg-emerald-200 font-medium transition-colors">
+              <CheckCircle size={11} /> OK
+            </button>
+            <button onClick={() => setChefsState('failed')}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 font-medium transition-colors">
+              <X size={11} /> Fel
+            </button>
+          </div>
+        </div>
+      )}
+      {chefsStatus === 'failed' && (
+        <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2 text-xs text-red-600">
+          <AlertTriangle size={13} className="shrink-0" />
+          <span className="font-medium flex-1">Ordern är inte lagd!</span>
+        </div>
+      )}
+    </div>
+  )
+
   const isMerged = !!(order as Order & { is_merged?: boolean }).is_merged && isPending
   const firstVendor = vendorEntries[0][0]
   const firstSelected = selectedVendors?.has(firstVendor) ?? false
@@ -357,12 +407,6 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
-              {chefsItems.length > 0 && isPending && (
-                <button onClick={handleSendToChefs} disabled={sendingChefs} title="Skicka till ChefsCulinar"
-                  className={`p-1.5 rounded-lg disabled:opacity-50 transition-colors ${chefsOrderFailed ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}>
-                  {sendingChefs ? <Loader2 size={14} className="animate-spin" /> : chefsOrderFailed ? <AlertTriangle size={14} /> : <ShoppingBag size={14} />}
-                </button>
-              )}
               {orderVendors.length > 0 && (
                 <button onClick={() => setShowNotify(v => !v)} title="Notify vendors"
                   className={`p-1.5 rounded-lg text-xs transition-colors ${showNotify ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600'}`}>
@@ -387,42 +431,6 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
             </div>
           </div>
 
-          {chefsStatus === 'pending' && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-700 space-y-2">
-              <div className="flex items-center gap-2">
-                <AlertTriangle size={13} className="shrink-0" />
-                <span className="font-medium">Skickat — verifiera på ChefsCulinar</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <a href="https://www.chefsculinar.se/sv-se/checkout" target="_blank" rel="noreferrer"
-                  className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 font-medium transition-colors">
-                  Öppna
-                </a>
-                <button onClick={() => { setChefsState(null); updateStatus.mutateAsync({ id: order.id, status: 'done' }) }}
-                  className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 hover:bg-emerald-200 font-medium transition-colors">
-                  <CheckCircle size={11} /> OK
-                </button>
-                <button onClick={() => setChefsState('failed')}
-                  className="flex items-center gap-1 px-2 py-1 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 font-medium transition-colors">
-                  <X size={11} /> Fel
-                </button>
-              </div>
-            </div>
-          )}
-          {chefsStatus === 'failed' && (
-            <div className="flex items-center justify-between gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2 text-xs text-red-600">
-              <div className="flex items-center gap-2">
-                <AlertTriangle size={13} className="shrink-0" />
-                <span className="font-medium">ChefsCulinar — ordern är inte lagd!</span>
-              </div>
-              <button onClick={handleSendToChefs} disabled={sendingChefs}
-                className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg bg-red-100 hover:bg-red-200 font-medium disabled:opacity-50 transition-colors">
-                {sendingChefs ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />}
-                Försök igen
-              </button>
-            </div>
-          )}
-
           <div className="border-t border-slate-50 pt-2">
             {isMultiVendor && (
               <div className="flex items-center justify-between mb-1">
@@ -446,6 +454,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
             <div className={doneVendors.has(vendorEntries[0][0]) ? 'opacity-40' : ''}>
               {renderItems(vendorEntries[0][1])}
             </div>
+            {firstVendor === chefsVendorName && renderChefsControls()}
           </div>
 
           {order.note && (
@@ -526,6 +535,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
             </div>
             <div className={`p-3 ${isVendorDone ? 'opacity-40' : ''}`}>
               {renderItems(items)}
+              {vendor === chefsVendorName && renderChefsControls()}
             </div>
           </div>
         )

@@ -368,6 +368,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
     : firstSelected && !isMultiVendor ? 'border-indigo-400 ring-2 ring-indigo-100'
     : firstSelected && isMultiVendor ? 'border-indigo-300'
     : isMerged ? 'border-orange-400 ring-2 ring-orange-100'
+    : isMultiVendor && doneVendors.has(firstVendor) ? 'border-emerald-400'
     : isPending ? 'border-amber-200'
     : 'border-slate-100'
   const statusBarClass = isPending ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
@@ -513,6 +514,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
         const subBorder = isVendorSelected
           ? 'border-indigo-400 ring-2 ring-indigo-100'
           : isMerged ? 'border-orange-300'
+          : isVendorDone ? 'border-emerald-400'
           : isPending ? 'border-amber-200'
           : 'border-slate-100'
         return (

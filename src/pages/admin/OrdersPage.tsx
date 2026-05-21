@@ -150,9 +150,16 @@ export default function OrdersPage() {
       const locMap = vendorLocItems.get(selVendor)!
       const list = locMap.get(loc) ?? []
       const displayName = item.product?.vendor_name ?? item.product?.name ?? '?'
+      // Use || (not ??) so empty-string unit_override falls through to product.unit
+      const unit = item.unit_override || item.product?.unit || ''
       const existing = list.find(e => e.product === displayName)
-      if (existing) existing.quantity += item.quantity
-      else list.push({ product: displayName, quantity: item.quantity, unit: item.unit_override ?? item.product?.unit ?? '' })
+      if (existing) {
+        existing.quantity += item.quantity
+        // Fill in unit if first occurrence had none
+        if (!existing.unit && unit) existing.unit = unit
+      } else {
+        list.push({ product: displayName, quantity: item.quantity, unit })
+      }
       locMap.set(loc, list)
     }
   }

@@ -217,10 +217,14 @@ export default function OrdersPage() {
     })
     .filter(v => v.email || v.phone)
 
-  const buildBatchBody = (vendor: typeof batchNotifiableVendors[0]) =>
-    vendor.locations
-      .map(({ loc, items }) => `${loc}\n${items.map(i => `${i.product}: ${i.quantity} ${i.unit}`).join('\n')}`)
+  const buildBatchBody = (vendor: typeof batchNotifiableVendors[0]) => {
+    const hideUnit = vendorMap[vendor.name]?.hide_unit ?? false
+    return vendor.locations
+      .map(({ loc, items }) =>
+        `${loc}\n${items.map(i => hideUnit ? `${i.product}: ${i.quantity}` : `${i.product}: ${i.quantity} ${i.unit}`.trimEnd()).join('\n')}`
+      )
       .join('\n\n')
+  }
 
   const handleMerge = async () => {
     const toMerge = selectedOrders as OrderWithDetails[]

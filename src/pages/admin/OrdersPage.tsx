@@ -198,14 +198,14 @@ export default function OrdersPage() {
       }
     }
 
-    // Batch-update all completed orders in one go
+    // Update each order individually (mirrors useUpdateOrderStatus — .in() can fail with RLS)
     if (orderIdsToComplete.length > 0) {
       const now = new Date().toISOString()
-      supabase
-        .from('orders')
-        .update({ status: 'done', completed_at: now })
-        .in('id', orderIdsToComplete)
-        .then(() => qc.invalidateQueries({ queryKey: ['orders'] }))
+      Promise.all(
+        orderIdsToComplete.map(id =>
+          supabase.from('orders').update({ status: 'done', completed_at: now }).eq('id', id)
+        )
+      ).then(() => qc.invalidateQueries({ queryKey: ['orders'] }))
     }
   }
 

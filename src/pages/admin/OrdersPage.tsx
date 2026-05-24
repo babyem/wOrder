@@ -396,6 +396,8 @@ export default function OrdersPage() {
                               await sendEmail(v.email!, `Order – ${v.name}`, buildBatchBody(v))
                               toast.success(`Email sent to ${v.name}`)
                               markVendorDoneAcrossOrders(v.name)
+                              setShowBatchNotify(false)
+                              clearSelection()
                             } catch (err) {
                               toast.error(`${v.name}: ${err instanceof Error ? err.message : 'Failed to send'}`)
                             } finally {
@@ -413,7 +415,7 @@ export default function OrdersPage() {
                       {v.phone && (
                         <a
                           href={`sms:${v.phone}?body=${encodeURIComponent(buildBatchBody(v))}`}
-                          onClick={() => markVendorDoneAcrossOrders(v.name)}
+                          onClick={() => { markVendorDoneAcrossOrders(v.name); setShowBatchNotify(false); clearSelection() }}
                           className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 transition-colors"
                         >
                           <Phone size={11} /> SMS

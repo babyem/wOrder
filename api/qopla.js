@@ -22,13 +22,16 @@ async function gql(query, variables, token) {
   return json.data;
 }
 
-function getTodayRange() {
+function getDateRange(daysAgo = 0) {
   const now = new Date();
   const stockholmDate = new Intl.DateTimeFormat("sv-SE", {
     timeZone: "Europe/Stockholm",
     year: "numeric", month: "2-digit", day: "2-digit",
   }).format(now);
-  const [year, month, day] = stockholmDate.split("-").map(Number);
+  let [year, month, day] = stockholmDate.split("-").map(Number);
+  // Shift back by daysAgo
+  const base = new Date(Date.UTC(year, month - 1, day - daysAgo));
+  year = base.getUTCFullYear(); month = base.getUTCMonth() + 1; day = base.getUTCDate();
   const testDate = new Date(`${year}-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}T12:00:00`);
   const stockholmHour = parseInt(new Intl.DateTimeFormat("sv-SE", {
     timeZone: "Europe/Stockholm", hour: "2-digit", hour12: false,
@@ -42,6 +45,7 @@ function getTodayRange() {
 export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).end();
 
+  const daysAgo = req.query.date === "yesterday" ? 1 : 0;
   const email = process.env.QOPLA_EMAIL;
   const password = process.env.QOPLA_PASSWORD;
   if (!email || !password) {
@@ -67,7 +71,7 @@ export default async function handler(req, res) {
       { companyId }, token
     );
     const shops = shopsData.getCompanyShops;
-    const { startDate, endDate } = getTodayRange();
+    const { startDate, endDate } = getDateRange(daysAgo);
 
     // 3. Försäljning per restaurang (sekventiellt — token är engångs per anrop)
     const sales = [];

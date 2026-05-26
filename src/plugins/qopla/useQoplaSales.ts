@@ -8,18 +8,19 @@ export interface QoplaSaleRow {
   currency: string
 }
 
-async function fetchQoplaSales(): Promise<QoplaSaleRow[]> {
-  const res = await fetch('/api/qopla')
+async function fetchQoplaSales(daysAgo: number): Promise<QoplaSaleRow[]> {
+  const url = daysAgo === 1 ? '/api/qopla?date=yesterday' : '/api/qopla'
+  const res = await fetch(url)
   const json = await res.json()
   if (!res.ok) throw new Error(json.error ?? 'Qopla API fel')
   return json.sales
 }
 
-export function useQoplaSales() {
+export function useQoplaSales(daysAgo = 0) {
   return useQuery({
-    queryKey: ['qopla-sales'],
-    queryFn: fetchQoplaSales,
+    queryKey: ['qopla-sales', daysAgo],
+    queryFn: () => fetchQoplaSales(daysAgo),
     staleTime: 5 * 60 * 1000,
-    refetchInterval: 5 * 60 * 1000,
+    refetchInterval: daysAgo === 0 ? 5 * 60 * 1000 : false, // only auto-refresh today
   })
 }

@@ -182,6 +182,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
         throw new Error(String((body as Record<string, unknown>).error ?? 'Webhook reported failure'))
       }
 
+      console.log('[ChefsCulinar response]', JSON.stringify(body))
       setChefsState('pending')
       const b = body && typeof body === 'object'
         ? (Array.isArray(body) ? body[0] : body) as Record<string, unknown>

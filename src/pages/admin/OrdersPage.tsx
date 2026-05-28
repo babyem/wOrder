@@ -164,49 +164,41 @@ export default function OrdersPage() {
     }
   }
 
-  // After notifying a vendor, mark that vendor done locally and auto-complete any orders
-  // where ALL their vendors are now done. Uses a direct Supabase batch update to avoid
-  // React Query mutation concurrency issues when multiple orders complete at once.
-  const markVendorDoneAcrossOrders = (vendorName: string) => {
+  // After notifying a vendor, persist done_vendors to the DB for every affected order
+  // and auto-complete orders where all vendors are now done.
+  const markVendorDoneAcrossOrders = async (vendorName: string) => {
     const affectedOrderIds = selectedPairs
       .filter(p => p.vendor === vendorName)
       .map(p => p.orderId)
 
-    const orderIdsToComplete: string[] = []
+    const now = new Date().toISOString()
 
-    for (const orderId of affectedOrderIds) {
-      const order = (orders ?? []).find(o => o.id === orderId)
-      if (!order || order.status !== 'pending') continue
+    await Promise.all(
+      affectedOrderIds.map(async (orderId) => {
+        const order = (orders ?? []).find(o => o.id === orderId)
+        if (!order || order.status !== 'pending') return
 
-      // All actual vendors in this order
-      const allVendors = [
-        ...new Set(order.items.map(i => i.vendor_override ?? i.product?.vendor).filter(Boolean))
-      ] as string[]
+        // All actual vendors in this order
+        const allVendors = [
+          ...new Set(order.items.map(i => i.vendor_override ?? i.product?.vendor).filter(Boolean))
+        ] as string[]
 
-      // Update localStorage done-set for this order
-      let doneVendors: Set<string>
-      try {
-        const stored = localStorage.getItem(`done_vendors_${orderId}`)
-        doneVendors = stored ? new Set(JSON.parse(stored)) : new Set()
-      } catch { doneVendors = new Set() }
-      doneVendors.add(vendorName)
-      localStorage.setItem(`done_vendors_${orderId}`, JSON.stringify([...doneVendors]))
+        // Merge with whatever is already done on the server
+        const doneSet = new Set(order.done_vendors ?? [])
+        doneSet.add(vendorName)
+        const doneArray = [...doneSet]
+        const allDone = allVendors.every(v => doneSet.has(v))
 
-      // Queue for completion if every vendor in the order is now done
-      if (allVendors.every(v => doneVendors.has(v))) {
-        orderIdsToComplete.push(orderId)
-      }
-    }
+        // One DB call: update done_vendors and, if fully done, flip status too
+        await supabase.from('orders').update(
+          allDone
+            ? { done_vendors: doneArray, status: 'done', completed_at: now }
+            : { done_vendors: doneArray }
+        ).eq('id', orderId)
+      })
+    )
 
-    // Update each order individually (mirrors useUpdateOrderStatus — .in() can fail with RLS)
-    if (orderIdsToComplete.length > 0) {
-      const now = new Date().toISOString()
-      Promise.all(
-        orderIdsToComplete.map(id =>
-          supabase.from('orders').update({ status: 'done', completed_at: now }).eq('id', id)
-        )
-      ).then(() => qc.invalidateQueries({ queryKey: ['orders'] }))
-    }
+    qc.invalidateQueries({ queryKey: ['orders'] })
   }
 
   const batchNotifiableVendors = Array.from(vendorLocItems.entries())
@@ -395,7 +387,7 @@ export default function OrdersPage() {
                             try {
                               await sendEmail(v.email!, `Order – ${v.name}`, buildBatchBody(v))
                               toast.success(`Email sent to ${v.name}`)
-                              markVendorDoneAcrossOrders(v.name)
+                              await markVendorDoneAcrossOrders(v.name)
                               setShowBatchNotify(false)
                               clearSelection()
                             } catch (err) {

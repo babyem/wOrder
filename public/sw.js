@@ -11,8 +11,8 @@ self.addEventListener('push', event => {
       badge: '/icon-72.png',
       data: { orderId: data.orderId, url: '/admin/orders' },
       actions: [
+        { action: 'open', title: '📦 Öppna order' },
         { action: 'done', title: '✅ Markera klar' },
-        { action: 'open', title: '👁 Öppna' },
       ],
       requireInteraction: true,
       tag: `order-${data.orderId}`,

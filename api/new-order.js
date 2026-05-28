@@ -123,10 +123,18 @@ export default async function handler(req, res) {
     for (let i = 0; i < buttons.length; i += 2) keyboard.push(buttons.slice(i, i + 2))
     keyboard.push([{ text: '🔗 Öppna Staff Orders', url: 'https://worder.woso.se/admin/orders' }])
 
+    // Bygg push-body med leverantörer + produkter
+    const vendorSummary = Object.entries(byVendor)
+      .map(([v, lines]) => {
+        const items = lines.map(l => l.replace(/^\s+•\s+/, '').replace(/\s+—\s+/, ' ').trim()).join(', ')
+        return `${v}: ${items}`
+      })
+      .join('\n')
+
     // Skicka Telegram + web push parallellt
     const pushPayload = {
       title: `Ny order 🛒 — ${locationName}`,
-      body: `${employeeName} · kl ${time}`,
+      body: `${employeeName} · kl ${time}\n\n${vendorSummary}`,
       orderId,
     }
 

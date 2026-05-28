@@ -183,7 +183,9 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
       }
 
       setChefsState('pending')
-      const b = body && typeof body === 'object' ? body as Record<string, unknown> : null
+      const b = body && typeof body === 'object'
+        ? (Array.isArray(body) ? body[0] : body) as Record<string, unknown>
+        : null
       const orderNum = b?.OrderNumber
       const orderTotal = b?.Total
       const confirmMsg = orderNum

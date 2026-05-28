@@ -1,9 +1,8 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, ShoppingBag, Package, Settings, LogOut, ChefHat, Menu, X } from 'lucide-react'
+import { LayoutDashboard, ShoppingBag, Package, Settings, LogOut, ChefHat, Menu, X, FileBarChart } from 'lucide-react'
 import { useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { QoplaSalesWidget } from '../../plugins/qopla/QoplaSalesWidget'
-import { QoplaReportsWidget } from '../../plugins/qopla/QoplaReportsWidget'
 import { motion, AnimatePresence } from 'framer-motion'
 import PushSubscribeButton from './PushSubscribeButton'
 
@@ -11,6 +10,7 @@ const navItems = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/admin/orders', label: 'Orders', icon: ShoppingBag, end: false },
   { to: '/admin/products', label: 'Products', icon: Package, end: false },
+  { to: '/admin/reports', label: 'Rapporter', icon: FileBarChart, end: false },
   { to: '/admin/settings', label: 'Settings', icon: Settings, end: false },
 ]
 
@@ -74,7 +74,6 @@ export default function AdminLayout() {
         </nav>
 
         <QoplaSalesWidget />
-        <QoplaReportsWidget />
 
         <div className="flex-1" />
       </aside>
@@ -173,7 +172,6 @@ export default function AdminLayout() {
                 </nav>
 
                 <QoplaSalesWidget />
-                <QoplaReportsWidget />
 
                 <div className="flex-1" />
               </motion.div>

@@ -7,11 +7,15 @@
  *   HTTP Headers: { "x-webhook-secret": "<WEBHOOK_SECRET>" }
  */
 
-const SUPABASE_URL    = process.env.SUPABASE_URL
-const SUPABASE_KEY    = process.env.SUPABASE_ANON_KEY
-const BOT_TOKEN       = process.env.TELEGRAM_TOKEN
-const CHAT_ID         = process.env.TELEGRAM_CHAT_ID
-const WEBHOOK_SECRET  = process.env.WEBHOOK_SECRET  // valfri säkerhetskontroll
+import webpush from 'web-push'
+
+const SUPABASE_URL     = process.env.SUPABASE_URL
+const SUPABASE_KEY     = process.env.SUPABASE_ANON_KEY
+const BOT_TOKEN        = process.env.TELEGRAM_TOKEN
+const CHAT_ID          = process.env.TELEGRAM_CHAT_ID
+const WEBHOOK_SECRET   = process.env.WEBHOOK_SECRET
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY
 
 async function db(path) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -30,10 +34,45 @@ async function sendTelegram(text, reply_markup) {
   })
 }
 
+async function sendWebPush(payload) {
+  if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+    console.log('[push] VAPID keys missing, skipping')
+    return
+  }
+
+  const subscriptions = await db('push_subscriptions?select=endpoint,p256dh,auth')
+  if (!Array.isArray(subscriptions) || subscriptions.length === 0) {
+    console.log('[push] no subscriptions found')
+    return
+  }
+
+  console.log(`[push] sending to ${subscriptions.length} subscription(s)`)
+  webpush.setVapidDetails('mailto:admin@woso.se', VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)
+
+  await Promise.allSettled(
+    subscriptions.map(async sub => {
+      try {
+        const r = await webpush.sendNotification(
+          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+          JSON.stringify(payload)
+        )
+        console.log(`[push] ok statusCode=${r.statusCode}`)
+      } catch (err) {
+        console.error(`[push] failed statusCode=${err.statusCode} msg=${err.message}`)
+        if (err.statusCode === 410 || err.statusCode === 404) {
+          await fetch(
+            `${SUPABASE_URL}/rest/v1/push_subscriptions?endpoint=eq.${encodeURIComponent(sub.endpoint)}`,
+            { method: 'DELETE', headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+          )
+        }
+      }
+    })
+  )
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
 
-  // Verifiera secret om satt
   if (WEBHOOK_SECRET && req.headers['x-webhook-secret'] !== WEBHOOK_SECRET) {
     return res.status(401).end()
   }
@@ -44,7 +83,6 @@ export default async function handler(req, res) {
   try {
     const orderId = record.id
 
-    // Hämta order med location och employee
     const [orders, items] = await Promise.all([
       db(`orders?id=eq.${orderId}&select=id,created_at,locations(name),employees(name)&limit=1`),
       db(`order_items?order_id=eq.${orderId}&select=quantity,unit_override,product:products(name,unit,vendor)`),
@@ -85,7 +123,18 @@ export default async function handler(req, res) {
     for (let i = 0; i < buttons.length; i += 2) keyboard.push(buttons.slice(i, i + 2))
     keyboard.push([{ text: '🔗 Öppna Staff Orders', url: 'https://worder.woso.se/admin/orders' }])
 
-    await sendTelegram(text, { inline_keyboard: keyboard })
+    // Skicka Telegram + web push parallellt
+    const pushPayload = {
+      title: `Ny order 🛒 — ${locationName}`,
+      body: `${employeeName} · kl ${time}`,
+      orderId,
+    }
+
+    await Promise.all([
+      sendTelegram(text, { inline_keyboard: keyboard }),
+      sendWebPush(pushPayload),
+    ])
+
     return res.status(200).end()
   } catch (err) {
     console.error('new-order webhook error:', err)

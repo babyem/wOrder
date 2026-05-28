@@ -38,10 +38,13 @@ export function usePushSubscription() {
   }, [])
 
   const subscribe = async () => {
-    if (!('serviceWorker' in navigator)) return
+    if (!('serviceWorker' in navigator)) {
+      alert('Din webbläsare stödjer inte service workers som krävs för push-notiser.')
+      return
+    }
     if (!VAPID_PUBLIC_KEY) {
       console.error('VITE_VAPID_PUBLIC_KEY is not set')
-      alert('Push-notiser är inte konfigurerade (VAPID-nyckel saknas).')
+      alert('Push-notiser är inte konfigurerade — VAPID-nyckel saknas i miljövariabler.\n\nLägg till VITE_VAPID_PUBLIC_KEY i Vercel-inställningarna och gör om deploy.')
       return
     }
     setStatus('loading')
@@ -56,12 +59,20 @@ export function usePushSubscription() {
       })
 
       const json = sub.toJSON() as { endpoint: string; keys: { p256dh: string; auth: string } }
-      await supabase.from('push_subscriptions').upsert(
+      const { error } = await supabase.from('push_subscriptions').upsert(
         { endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth },
         { onConflict: 'endpoint' }
       )
+      if (error) {
+        console.error('Supabase upsert error:', error)
+        alert(`Kunde inte spara prenumerationen: ${error.message}\n\nKontrollera att tabellen push_subscriptions finns i Supabase.`)
+        setStatus('idle')
+        return
+      }
       setStatus('subscribed')
-    } catch {
+    } catch (err) {
+      console.error('Push subscription error:', err)
+      alert(`Kunde inte aktivera push-notiser:\n${err instanceof Error ? err.message : String(err)}`)
       setStatus('idle')
     }
   }

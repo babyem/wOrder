@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChefHat, Bell, MapPin, X, ChevronDown } from 'lucide-react'
+import { ChefHat, Bell, MapPin, X, ChevronDown, LayoutDashboard } from 'lucide-react'
 import LocationSelector from '../components/employee/LocationSelector'
 import EmployeeSelector from '../components/employee/EmployeeSelector'
 import ProductGrid from '../components/employee/ProductGrid'
@@ -254,6 +254,14 @@ export default function OrderPage() {
               <p className="text-xs text-slate-400">Internal supply ordering</p>
             )}
           </div>
+          <Link
+            to="/admin"
+            title="Backoffice"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-500 hover:text-indigo-700 hover:bg-indigo-50 transition-colors shrink-0"
+          >
+            <LayoutDashboard size={14} />
+            <span className="hidden sm:inline">Backoffice</span>
+          </Link>
         </div>
       </header>
 

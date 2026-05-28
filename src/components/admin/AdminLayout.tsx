@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { QoplaSalesWidget } from '../../plugins/qopla/QoplaSalesWidget'
 import { motion, AnimatePresence } from 'framer-motion'
+import PushSubscribeButton from './PushSubscribeButton'
 
 const navItems = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -52,6 +53,7 @@ export default function AdminLayout() {
 
         <div className="flex-1" />
 
+        <PushSubscribeButton />
         <button
           onClick={handleLogout}
           className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
@@ -126,6 +128,7 @@ export default function AdminLayout() {
 
                 <div className="flex-1" />
 
+                <PushSubscribeButton />
                 <button
                   onClick={handleLogout}
                   className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all w-full"

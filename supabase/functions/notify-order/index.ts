@@ -64,6 +64,43 @@ serve(async (req) => {
       }),
     })
 
+    // --- Web Push ---
+    const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY')
+    const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY')
+
+    if (vapidPublicKey && vapidPrivateKey) {
+      const { data: subscriptions } = await supabase.from('push_subscriptions').select('*')
+
+      if (subscriptions && subscriptions.length > 0) {
+        const webPush = await import('npm:web-push@3.6.7')
+        webPush.default.setVapidDetails(
+          'mailto:admin@woso.se',
+          vapidPublicKey,
+          vapidPrivateKey
+        )
+
+        const pushPayload = JSON.stringify({
+          title: 'New Order 🛒',
+          body: `${locationName} · ${employeeName}\n${message.split('\n\n').slice(1).join('\n')}`.trim(),
+          orderId: record.id,
+        })
+
+        await Promise.allSettled(
+          subscriptions.map(sub =>
+            webPush.default.sendNotification(
+              { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+              pushPayload
+            ).catch(async (err: { statusCode?: number }) => {
+              // Clean up expired subscriptions
+              if (err.statusCode === 410 || err.statusCode === 404) {
+                await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint)
+              }
+            })
+          )
+        )
+      }
+    }
+
     return new Response('ok', { status: 200 })
   } catch (err) {
     console.error(err)

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Search, RefreshCw, GitMerge, Bell, X, Mail, Phone, GripVertical, Loader2 } from 'lucide-react'
+import { Search, RefreshCw, GitMerge, Bell, X, Mail, Phone, GripVertical, Loader2, ZoomIn, ZoomOut } from 'lucide-react'
 import { useOrders, useMergeOrders } from '../../hooks/useOrders'
 import { useLocations } from '../../hooks/useLocations'
 import { useVendors } from '../../hooks/useMetadata'
@@ -65,7 +65,20 @@ export default function OrdersPage() {
   const [columnOrder, setColumnOrder] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('orders-column-order') ?? '[]') } catch { return [] }
   })
+  const [zoom, setZoom] = useState<number>(() => {
+    const raw = parseFloat(localStorage.getItem('orders-zoom') ?? '1')
+    return Number.isFinite(raw) && raw >= 0.5 && raw <= 1.5 ? raw : 1
+  })
   const qc = useQueryClient()
+
+  const ZOOM_MIN = 0.5
+  const ZOOM_MAX = 1.5
+  const ZOOM_STEP = 0.1
+  const setZoomPersist = (z: number) => {
+    const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 100) / 100))
+    setZoom(clamped)
+    localStorage.setItem('orders-zoom', String(clamped))
+  }
 
   const { data: orders, isLoading, refetch } = useOrders({ status, search })
   const { data: locations } = useLocations()
@@ -252,6 +265,31 @@ export default function OrdersPage() {
           <option value="pending">Pending</option>
           <option value="done">Done</option>
         </select>
+        <div className="flex items-center gap-0.5 rounded-xl border border-slate-200 bg-white px-1 py-1">
+          <button
+            onClick={() => setZoomPersist(zoom - ZOOM_STEP)}
+            disabled={zoom <= ZOOM_MIN + 0.001}
+            title="Zoom out"
+            className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <ZoomOut size={15} />
+          </button>
+          <button
+            onClick={() => setZoomPersist(1)}
+            title="Reset zoom"
+            className="px-1.5 text-xs tabular-nums font-medium text-slate-500 hover:text-slate-700 min-w-[40px]"
+          >
+            {Math.round(zoom * 100)}%
+          </button>
+          <button
+            onClick={() => setZoomPersist(zoom + ZOOM_STEP)}
+            disabled={zoom >= ZOOM_MAX - 0.001}
+            title="Zoom in"
+            className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <ZoomIn size={15} />
+          </button>
+        </div>
         <button
           onClick={() => refetch()}
           className="p-2 rounded-xl hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-700"
@@ -264,7 +302,7 @@ export default function OrdersPage() {
       {isLoading ? (
         <div className="flex justify-center py-16"><Spinner size={32} /></div>
       ) : (
-        <div className="overflow-x-auto -mx-4 md:-mx-6 px-4 md:px-6">
+        <div className="overflow-x-auto -mx-4 md:-mx-6 px-4 md:px-6" style={{ zoom }}>
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleColumnDragEnd}>
             <SortableContext items={sortedLocations.map(l => l.id)} strategy={horizontalListSortingStrategy}>
               <div className="flex gap-4 pb-4" style={{ minWidth: 'max-content' }}>

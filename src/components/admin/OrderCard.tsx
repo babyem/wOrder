@@ -183,7 +183,13 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
       }
 
       setChefsState('pending')
-      toast.success('Skickat! Verifiera ordern på ChefsCulinar.')
+      const b = body && typeof body === 'object' ? body as Record<string, unknown> : null
+      const orderNum = b?.OrderNumber
+      const orderTotal = b?.Total
+      const confirmMsg = orderNum
+        ? `✓ Order #${orderNum} bekräftad${orderTotal ? ` — ${orderTotal} SEK` : ''}`
+        : 'Skickat! Verifiera ordern på ChefsCulinar.'
+      toast.success(confirmMsg, { duration: 6000 })
     } catch (err) {
       clearTimeout(timeout)
       const msg = err instanceof Error

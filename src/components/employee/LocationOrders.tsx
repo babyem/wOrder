@@ -66,14 +66,17 @@ function OrderCard({ order }: { order: OrderWithDetails }) {
           <div key={vendor}>
             <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">{vendor}</p>
             <div className="space-y-0.5">
-              {items.map(item => (
-                <div key={item.id} className="flex items-baseline justify-between gap-1 text-xs">
-                  <span className="text-slate-700 truncate">{item.product?.name ?? '?'}</span>
-                  <span className="text-slate-400 tabular-nums shrink-0">
-                    {item.quantity} {item.unit_override ?? item.product?.unit ?? ''}
-                  </span>
-                </div>
-              ))}
+              {items.map(item => {
+                const excluded = item.notify_excluded
+                return (
+                  <div key={item.id} className="flex items-baseline justify-between gap-1 text-xs">
+                    <span className={`truncate ${excluded ? 'line-through text-red-400' : 'text-slate-700'}`}>{item.product?.name ?? '?'}</span>
+                    <span className={`tabular-nums shrink-0 ${excluded ? 'line-through text-red-400' : 'text-slate-400'}`}>
+                      {item.quantity} {item.unit_override ?? item.product?.unit ?? ''}
+                    </span>
+                  </div>
+                )
+              })}
             </div>
           </div>
         ))}

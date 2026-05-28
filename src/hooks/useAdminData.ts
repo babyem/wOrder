@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import type { Location, Employee } from '../types'
+import type { Location, EmployeeWithLocations } from '../types'
 
 export function useAdminLocations() {
   return useQuery({
@@ -16,10 +16,13 @@ export function useAdminLocations() {
 export function useAdminEmployees() {
   return useQuery({
     queryKey: ['admin', 'employees'],
-    queryFn: async (): Promise<Employee[]> => {
-      const { data, error } = await supabase.from('employees').select('*, location:locations(name)').order('name')
+    queryFn: async (): Promise<EmployeeWithLocations[]> => {
+      const { data, error } = await supabase
+        .from('employees')
+        .select('*, employee_locations(location_id, location:locations(name))')
+        .order('name')
       if (error) throw error
-      return data
+      return data as EmployeeWithLocations[]
     },
   })
 }
@@ -53,9 +56,21 @@ export function useCreateLocation() {
 export function useCreateEmployee() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (employee: { name: string; location_id: string }) => {
-      const { data, error } = await supabase.from('employees').insert({ ...employee, active: true }).select().single()
+    mutationFn: async ({ name, location_ids, active }: { name: string; location_ids: string[]; active: boolean }) => {
+      const { data, error } = await supabase
+        .from('employees')
+        .insert({ name, active })
+        .select()
+        .single()
       if (error) throw error
+
+      if (location_ids.length > 0) {
+        const { error: locErr } = await supabase
+          .from('employee_locations')
+          .insert(location_ids.map(lid => ({ employee_id: data.id, location_id: lid })))
+        if (locErr) throw locErr
+      }
+
       return data
     },
     onSuccess: () => {
@@ -68,9 +83,24 @@ export function useCreateEmployee() {
 export function useUpdateEmployee() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ id, ...updates }: Partial<Employee> & { id: string }) => {
-      const { data, error } = await supabase.from('employees').update(updates).eq('id', id).select().single()
+    mutationFn: async ({ id, name, location_ids, active }: { id: string; name: string; location_ids: string[]; active: boolean }) => {
+      const { data, error } = await supabase
+        .from('employees')
+        .update({ name, active })
+        .eq('id', id)
+        .select()
+        .single()
       if (error) throw error
+
+      // Replace all location assignments atomically
+      await supabase.from('employee_locations').delete().eq('employee_id', id)
+      if (location_ids.length > 0) {
+        const { error: locErr } = await supabase
+          .from('employee_locations')
+          .insert(location_ids.map(lid => ({ employee_id: id, location_id: lid })))
+        if (locErr) throw locErr
+      }
+
       return data
     },
     onSuccess: () => {

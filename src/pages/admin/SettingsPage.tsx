@@ -19,7 +19,7 @@ import {
 import Modal from '../../components/ui/Modal'
 import Spinner from '../../components/ui/Spinner'
 import toast from 'react-hot-toast'
-import type { Employee } from '../../types'
+import type { EmployeeWithLocations } from '../../types'
 
 // ── Reusable tag-list section ────────────────────────────────────────────────
 
@@ -371,9 +371,9 @@ export default function SettingsPage() {
 
   const [locModal, setLocModal] = useState(false)
   const [empModal, setEmpModal] = useState(false)
-  const [editingEmp, setEditingEmp] = useState<Employee | null>(null)
+  const [editingEmp, setEditingEmp] = useState<EmployeeWithLocations | null>(null)
   const [locName, setLocName] = useState('')
-  const [empForm, setEmpForm] = useState({ name: '', location_id: '', active: true })
+  const [empForm, setEmpForm] = useState({ name: '', location_ids: [] as string[], active: true })
 
   const handleCreateLocation = async () => {
     if (!locName.trim()) return
@@ -383,21 +383,31 @@ export default function SettingsPage() {
 
   const openAddEmployee = () => {
     setEditingEmp(null)
-    setEmpForm({ name: '', location_id: locations?.[0]?.id ?? '', active: true })
+    setEmpForm({ name: '', location_ids: [], active: true })
     setEmpModal(true)
   }
 
-  const openEditEmployee = (emp: Employee) => {
+  const openEditEmployee = (emp: EmployeeWithLocations) => {
     setEditingEmp(emp)
-    setEmpForm({ name: emp.name, location_id: emp.location_id, active: emp.active })
+    setEmpForm({
+      name: emp.name,
+      location_ids: emp.employee_locations.map(el => el.location_id),
+      active: emp.active,
+    })
     setEmpModal(true)
   }
 
   const handleSaveEmployee = async () => {
-    if (!empForm.name.trim() || !empForm.location_id) { toast.error('Name and location required'); return }
+    if (!empForm.name.trim()) { toast.error('Name is required'); return }
+    if (empForm.location_ids.length === 0) { toast.error('Select at least one location'); return }
     try {
-      if (editingEmp) { await updateEmployee.mutateAsync({ id: editingEmp.id, ...empForm }); toast.success('Employee updated') }
-      else { await createEmployee.mutateAsync(empForm); toast.success('Employee added') }
+      if (editingEmp) {
+        await updateEmployee.mutateAsync({ id: editingEmp.id, name: empForm.name, location_ids: empForm.location_ids, active: empForm.active })
+        toast.success('Employee updated')
+      } else {
+        await createEmployee.mutateAsync({ name: empForm.name, location_ids: empForm.location_ids, active: empForm.active })
+        toast.success('Employee added')
+      }
       setEmpModal(false)
     } catch { toast.error('Failed to save employee') }
   }
@@ -461,7 +471,10 @@ export default function SettingsPage() {
               <div key={emp.id} className="flex items-center justify-between px-5 py-3">
                 <div>
                   <p className="text-sm font-medium text-slate-700">{emp.name}</p>
-                  <p className="text-xs text-slate-400">{(emp as Employee & { location?: { name: string } }).location?.name ?? '—'} · {emp.active ? 'Active' : 'Inactive'}</p>
+                  <p className="text-xs text-slate-400">
+                    {emp.employee_locations.map(el => el.location?.name).filter(Boolean).join(', ') || '—'}
+                    {' · '}{emp.active ? 'Active' : 'Inactive'}
+                  </p>
                 </div>
                 <div className="flex items-center gap-1">
                   <button onClick={() => openEditEmployee(emp)} className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"><Pencil size={15} /></button>
@@ -514,11 +527,28 @@ export default function SettingsPage() {
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Employee name" autoFocus />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1.5">Location</label>
-            <select value={empForm.location_id} onChange={e => setEmpForm(f => ({ ...f, location_id: e.target.value }))}
-              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
-              {locations?.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-            </select>
+            <label className="block text-xs font-medium text-slate-500 mb-2">Locations</label>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {locations?.map(l => {
+                const checked = empForm.location_ids.includes(l.id)
+                return (
+                  <label key={l.id} className={`flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer transition-colors ${checked ? 'bg-indigo-50 border border-indigo-200' : 'border border-slate-100 hover:bg-slate-50'}`}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={e => setEmpForm(f => ({
+                        ...f,
+                        location_ids: e.target.checked
+                          ? [...f.location_ids, l.id]
+                          : f.location_ids.filter(id => id !== l.id),
+                      }))}
+                      className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 accent-indigo-600"
+                    />
+                    <span className={`text-sm font-medium ${checked ? 'text-indigo-700' : 'text-slate-700'}`}>{l.name}</span>
+                  </label>
+                )
+              })}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => setEmpForm(f => ({ ...f, active: !f.active }))}

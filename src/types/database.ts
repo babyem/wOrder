@@ -40,9 +40,13 @@ export interface Location {
 export interface Employee {
   id: string
   name: string
-  location_id: string
+  location_id: string | null
   active: boolean
   created_at: string
+}
+
+export interface EmployeeWithLocations extends Employee {
+  employee_locations: { location_id: string; location: Pick<Location, 'name'> | null }[]
 }
 
 export interface Product {

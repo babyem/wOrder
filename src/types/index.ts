@@ -1,4 +1,4 @@
-export type { Location, Employee, Product, Order, OrderItem, OrderWithDetails } from './database'
+export type { Location, Employee, EmployeeWithLocations, Product, Order, OrderItem, OrderWithDetails } from './database'
 
 import type { Product } from './database'
 

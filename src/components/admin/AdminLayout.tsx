@@ -72,12 +72,15 @@ export default function AdminLayout() {
             </div>
             <span className="font-bold text-slate-900 text-sm">Staff Orders</span>
           </div>
-          <button
-            onClick={() => setMobileOpen(true)}
-            className="p-2 rounded-xl hover:bg-slate-100 transition-colors"
-          >
-            <Menu size={20} className="text-slate-600" />
-          </button>
+          <div className="flex items-center gap-1">
+            <PushSubscribeButton compact />
+            <button
+              onClick={() => setMobileOpen(true)}
+              className="p-2 rounded-xl hover:bg-slate-100 transition-colors"
+            >
+              <Menu size={20} className="text-slate-600" />
+            </button>
+          </div>
         </header>
 
         {/* Mobile nav drawer */}
@@ -92,7 +95,7 @@ export default function AdminLayout() {
                 onClick={() => setMobileOpen(false)}
               />
               <motion.div
-                className="fixed left-0 top-0 bottom-0 w-64 bg-white z-50 p-4 md:hidden"
+                className="fixed left-0 top-0 bottom-0 w-64 bg-white z-50 p-4 md:hidden flex flex-col"
                 initial={{ x: -256 }}
                 animate={{ x: 0 }}
                 exit={{ x: -256 }}

@@ -38,7 +38,12 @@ export function usePushSubscription() {
   }, [])
 
   const subscribe = async () => {
-    if (!VAPID_PUBLIC_KEY || !('serviceWorker' in navigator)) return
+    if (!('serviceWorker' in navigator)) return
+    if (!VAPID_PUBLIC_KEY) {
+      console.error('VITE_VAPID_PUBLIC_KEY is not set')
+      alert('Push-notiser är inte konfigurerade (VAPID-nyckel saknas).')
+      return
+    }
     setStatus('loading')
     try {
       const reg = await navigator.serviceWorker.ready

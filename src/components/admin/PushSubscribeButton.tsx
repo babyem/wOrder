@@ -1,18 +1,36 @@
 import { Bell, BellOff, BellRing, Loader2 } from 'lucide-react'
 import { usePushSubscription } from '../../hooks/usePushSubscription'
 
-export default function PushSubscribeButton() {
+interface Props { compact?: boolean }
+
+export default function PushSubscribeButton({ compact = false }: Props) {
   const { status, subscribe, unsubscribe } = usePushSubscription()
 
   if (status === 'unsupported') return null
 
+  if (compact) {
+    // Icon-only variant for mobile header
+    if (status === 'subscribed') {
+      return (
+        <button onClick={unsubscribe} title="Push-notiser aktiva — tryck för att avsluta"
+          className="p-2 rounded-xl text-emerald-500 hover:bg-emerald-50 transition-colors">
+          <BellRing size={18} />
+        </button>
+      )
+    }
+    if (status === 'denied') return null
+    return (
+      <button onClick={subscribe} disabled={status === 'loading'} title="Aktivera push-notiser"
+        className="p-2 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-50">
+        {status === 'loading' ? <Loader2 size={18} className="animate-spin" /> : <Bell size={18} />}
+      </button>
+    )
+  }
+
   if (status === 'subscribed') {
     return (
-      <button
-        onClick={unsubscribe}
-        title="Push-notiser aktiva — klicka för att avsluta"
-        className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium text-emerald-600 hover:bg-emerald-50 transition-all w-full"
-      >
+      <button onClick={unsubscribe} title="Push-notiser aktiva — klicka för att avsluta"
+        className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium text-emerald-600 hover:bg-emerald-50 transition-all w-full">
         <BellRing size={18} />
         Notiser på
       </button>
@@ -21,11 +39,8 @@ export default function PushSubscribeButton() {
 
   if (status === 'denied') {
     return (
-      <button
-        disabled
-        title="Notiser blockerade i webbläsaren"
-        className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-300 w-full cursor-not-allowed"
-      >
+      <button disabled title="Notiser blockerade i webbläsaren"
+        className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-300 w-full cursor-not-allowed">
         <BellOff size={18} />
         Notiser blockerade
       </button>
@@ -33,12 +48,9 @@ export default function PushSubscribeButton() {
   }
 
   return (
-    <button
-      onClick={subscribe}
-      disabled={status === 'loading'}
+    <button onClick={subscribe} disabled={status === 'loading'}
       title="Aktivera push-notiser för nya beställningar"
-      className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all w-full disabled:opacity-50"
-    >
+      className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all w-full disabled:opacity-50">
       {status === 'loading' ? <Loader2 size={18} className="animate-spin" /> : <Bell size={18} />}
       Aktivera notiser
     </button>

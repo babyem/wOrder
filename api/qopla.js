@@ -176,36 +176,79 @@ async function handleReports({ companyId, token, reportType, pageNumber, pageIte
   return { reports: perShop };
 }
 
-// SIE-nedladdning — gissad endpoint, behöver verifieras mot Qopla
-async function handleSie({ companyId, token, reportId, shopId, res }) {
+// SIE-nedladdning — gissade endpoints, behöver verifieras mot Qopla
+async function handleSie({ companyId, token, reportId, shopId, startDate, endDate, res }) {
   const qReportToken = await getQReportToken(companyId, shopId, token);
 
-  // Try common endpoint patterns
-  const candidates = [
-    `${QREPORT_URL}/sie/${reportId}`,
-    `${QREPORT_URL}/sie?reportId=${reportId}`,
-    `${QREPORT_URL}/download/sie/${reportId}`,
-    `${QREPORT_URL}/report/${reportId}/sie`,
+  // GET-candidates (URL only)
+  const getCandidates = reportId
+    ? [
+        `${QREPORT_URL}/sie/${reportId}`,
+        `${QREPORT_URL}/sie?reportId=${reportId}`,
+        `${QREPORT_URL}/download/sie/${reportId}`,
+        `${QREPORT_URL}/report/${reportId}/sie`,
+      ]
+    : [
+        `${QREPORT_URL}/sie?shopId=${shopId}&startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`,
+        `${QREPORT_URL}/sie/${shopId}?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`,
+      ];
+
+  // POST-candidates (URL + body)
+  const postBody = JSON.stringify({ shopIDs: [shopId], startDate, endDate, reportId });
+  const postCandidates = [
+    `${QREPORT_URL}/sie`,
+    `${QREPORT_URL}/download/sie`,
+    `${QREPORT_URL}/sie/export`,
   ];
 
+  const tried = [];
   let lastStatus = 0;
-  for (const url of candidates) {
+
+  const send = (r, fallbackName) => {
+    const ct = r.headers.get("content-type") || "application/octet-stream";
+    res.setHeader("Content-Type", ct);
+    res.setHeader("Content-Disposition", `attachment; filename="${fallbackName}"`);
+  };
+
+  for (const url of getCandidates) {
+    tried.push(`GET ${url}`);
     const r = await fetch(url, {
       headers: { Authorization: qReportToken, Accept: "application/octet-stream, */*" },
     });
     if (r.ok) {
       const buf = Buffer.from(await r.arrayBuffer());
-      res.setHeader("Content-Type", r.headers.get("content-type") || "application/octet-stream");
-      res.setHeader("Content-Disposition", `attachment; filename="zrapport-${reportId}.se"`);
+      const name = reportId ? `zrapport-${reportId}.se` : `rapport-${shopId}-${startDate?.slice(0,10)}.se`;
+      send(r, name);
       return res.status(200).send(buf);
     }
     lastStatus = r.status;
   }
+
+  for (const url of postCandidates) {
+    tried.push(`POST ${url}`);
+    const r = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: qReportToken,
+        "Content-Type": "application/json;charset=utf-8",
+        Accept: "application/octet-stream, */*",
+      },
+      body: postBody,
+    });
+    if (r.ok) {
+      const buf = Buffer.from(await r.arrayBuffer());
+      const name = reportId ? `zrapport-${reportId}.se` : `rapport-${shopId}-${startDate?.slice(0,10)}.se`;
+      send(r, name);
+      return res.status(200).send(buf);
+    }
+    lastStatus = r.status;
+  }
+
   return res.status(404).json({
     error: "SIE-endpoint hittades ej",
     hint: "Capturer SIE-download-request från Qopla DevTools och uppdatera handleSie() med rätt URL",
     lastStatus,
-    tried: candidates,
+    tried,
   });
 }
 
@@ -247,12 +290,17 @@ export default async function handler(req, res) {
     }
 
     if (action === "sie") {
-      const reportId = req.query.reportId;
+      const reportId = req.query.reportId || null;
       const shopId = req.query.shopId;
-      if (!reportId || !shopId) {
-        return res.status(400).json({ error: "reportId och shopId krävs" });
+      const start = req.query.start || null;
+      const end = req.query.end || null;
+      if (!shopId) {
+        return res.status(400).json({ error: "shopId krävs" });
       }
-      return await handleSie({ companyId, token, reportId, shopId, res });
+      if (!reportId && !(start && end)) {
+        return res.status(400).json({ error: "reportId ELLER start+end krävs" });
+      }
+      return await handleSie({ companyId, token, reportId, shopId, startDate: start, endDate: end, res });
     }
 
     // default: sales overview (idag/igår)

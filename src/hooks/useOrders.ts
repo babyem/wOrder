@@ -109,6 +109,18 @@ export function useUpdateOrderItem() {
   })
 }
 
+export function useMarkVendorDone() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, done_vendors }: { id: string; done_vendors: string[] }) => {
+      const { error } = await supabase.from('orders').update({ done_vendors }).eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['orders'] }),
+    onError: (err: Error) => toast.error(`Save failed: ${err.message}`),
+  })
+}
+
 export function useDeleteOrder() {
   const qc = useQueryClient()
   return useMutation({

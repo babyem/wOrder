@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CheckCircle, RotateCcw, Trash2, Clock, MapPin, User, FileText, Mail, Phone, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag, AlertTriangle } from 'lucide-react'
 import type { Order, OrderWithDetails } from '../../types'
-import { useUpdateOrderStatus, useDeleteOrder, useUpdateOrderItem } from '../../hooks/useOrders'
+import { useUpdateOrderStatus, useDeleteOrder, useUpdateOrderItem, useMarkVendorDone } from '../../hooks/useOrders'
 import { useVendors, useUnits } from '../../hooks/useMetadata'
 import { sendEmail } from '../../lib/sendEmail'
 import toast from 'react-hot-toast'
@@ -19,25 +19,20 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
   const deleteOrder = useDeleteOrder()
   const { data: vendorList } = useVendors()
   const updateOrderItem = useUpdateOrderItem()
+  const markVendorDoneMutation = useMarkVendorDone()
   const [showNotify, setShowNotify] = useState(false)
-  const [doneVendors, setDoneVendors] = useState<Set<string>>(() => {
-    try {
-      const stored = localStorage.getItem(`done_vendors_${order.id}`)
-      return stored ? new Set(JSON.parse(stored)) : new Set()
-    } catch { return new Set() }
-  })
+
+  // Derived from server state — persists globally and syncs across users via Realtime
+  const doneVendors = new Set(order.done_vendors ?? [])
 
   const markVendorDone = (vendor: string, done: boolean, allVendors?: string[]) => {
-    setDoneVendors(prev => {
-      const next = new Set(prev)
-      done ? next.add(vendor) : next.delete(vendor)
-      localStorage.setItem(`done_vendors_${order.id}`, JSON.stringify([...next]))
-      // Auto-complete order when every vendor is done
-      if (done && allVendors && allVendors.every(v => next.has(v)) && order.status === 'pending') {
-        updateStatus.mutateAsync({ id: order.id, status: 'done' })
-      }
-      return next
-    })
+    const next = new Set(doneVendors)
+    done ? next.add(vendor) : next.delete(vendor)
+    markVendorDoneMutation.mutate({ id: order.id, done_vendors: [...next] })
+    // Auto-complete order when every vendor is done
+    if (done && allVendors && allVendors.every(v => next.has(v)) && order.status === 'pending') {
+      updateStatus.mutateAsync({ id: order.id, status: 'done' })
+    }
   }
   const [sending, setSending] = useState<string | null>(null)
   const [editingVendorItem, setEditingVendorItem] = useState<string | null>(null)
@@ -128,9 +123,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
   }
 
   const markAllVendorsDone = (allVendors: string[]) => {
-    const next = new Set(allVendors)
-    setDoneVendors(next)
-    localStorage.setItem(`done_vendors_${order.id}`, JSON.stringify([...next]))
+    markVendorDoneMutation.mutate({ id: order.id, done_vendors: allVendors })
   }
 
   const handleReopen = async () => {

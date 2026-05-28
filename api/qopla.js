@@ -29,7 +29,6 @@ function getDateRange(daysAgo = 0) {
     year: "numeric", month: "2-digit", day: "2-digit",
   }).format(now);
   let [year, month, day] = stockholmDate.split("-").map(Number);
-  // Shift back by daysAgo
   const base = new Date(Date.UTC(year, month - 1, day - daysAgo));
   year = base.getUTCFullYear(); month = base.getUTCMonth() + 1; day = base.getUTCDate();
   const testDate = new Date(`${year}-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}T12:00:00`);
@@ -63,36 +62,66 @@ async function getShops(companyId, token) {
   return data.getCompanyShops;
 }
 
+async function getQReportToken(companyId, shopId, token) {
+  const data = await gql(
+    `query qReportToken($companyId: String, $shopIds: [String]) {
+      getQReportToken(companyId: $companyId, shopIds: $shopIds)
+    }`,
+    { companyId, shopIds: [shopId] }, token
+  );
+  return data.getQReportToken;
+}
+
+async function fetchShopOverview({ companyId, token, shop, startDate, endDate }) {
+  const qReportToken = await getQReportToken(companyId, shop.id, token);
+  const r = await fetch(`${QREPORT_URL}/overview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json;charset=utf-8", Authorization: qReportToken },
+    body: JSON.stringify({ shopIDs: [shop.id], startDate, endDate }),
+  });
+  const text = await r.text();
+  const data = text ? JSON.parse(text) : { aggregatedReport: {} };
+  const report = data.aggregatedReport || {};
+  let totalSum = 0, totalOrders = 0;
+  const byChannel = {};
+  for (const [channel, ch] of Object.entries(report)) {
+    totalSum += ch.totalSum || 0;
+    totalOrders += ch.quantityOfOrders || 0;
+    byChannel[channel] = { sales: ch.totalSum || 0, orders: ch.quantityOfOrders || 0 };
+  }
+  return { totalSum, totalOrders, byChannel };
+}
+
 async function handleSales({ companyId, token, daysAgo }) {
   const shops = await getShops(companyId, token);
   const { startDate, endDate } = getDateRange(daysAgo);
 
   const sales = [];
   for (const shop of shops) {
-    const qrtData = await gql(
-      `query qReportToken($companyId: String, $shopIds: [String]) {
-        getQReportToken(companyId: $companyId, shopIds: $shopIds)
-      }`,
-      { companyId, shopIds: [shop.id] }, token
-    );
-    const qReportToken = qrtData.getQReportToken;
-
-    const r = await fetch(`${QREPORT_URL}/overview`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json;charset=utf-8", Authorization: qReportToken },
-      body: JSON.stringify({ shopIDs: [shop.id], startDate, endDate }),
-    });
-    const text = await r.text();
-    const data = text ? JSON.parse(text) : { aggregatedReport: {} };
-    const report = data.aggregatedReport || {};
-    let totalSum = 0, totalOrders = 0;
-    for (const ch of Object.values(report)) {
-      totalSum += ch.totalSum || 0;
-      totalOrders += ch.quantityOfOrders || 0;
-    }
-    sales.push({ shopId: shop.id, restaurant: shop.name, sales: totalSum, orders: totalOrders, currency: "SEK" });
+    const o = await fetchShopOverview({ companyId, token, shop, startDate, endDate });
+    sales.push({ shopId: shop.id, restaurant: shop.name, sales: o.totalSum, orders: o.totalOrders, currency: "SEK" });
   }
   return { sales };
+}
+
+async function handleOverview({ companyId, token, startDate, endDate }) {
+  const shops = await getShops(companyId, token);
+  const perShop = [];
+  for (const shop of shops) {
+    try {
+      const o = await fetchShopOverview({ companyId, token, shop, startDate, endDate });
+      perShop.push({
+        shopId: shop.id,
+        shopName: shop.name,
+        totalSales: o.totalSum,
+        totalOrders: o.totalOrders,
+        byChannel: o.byChannel,
+      });
+    } catch {
+      perShop.push({ shopId: shop.id, shopName: shop.name, totalSales: 0, totalOrders: 0, byChannel: {} });
+    }
+  }
+  return { overview: perShop };
 }
 
 const REPORTS_QUERY = `query getReports($shopId: String, $posId: String, $reportType: ReportType, $pageNumber: Int, $pageItems: Int) {
@@ -147,6 +176,39 @@ async function handleReports({ companyId, token, reportType, pageNumber, pageIte
   return { reports: perShop };
 }
 
+// SIE-nedladdning — gissad endpoint, behöver verifieras mot Qopla
+async function handleSie({ companyId, token, reportId, shopId, res }) {
+  const qReportToken = await getQReportToken(companyId, shopId, token);
+
+  // Try common endpoint patterns
+  const candidates = [
+    `${QREPORT_URL}/sie/${reportId}`,
+    `${QREPORT_URL}/sie?reportId=${reportId}`,
+    `${QREPORT_URL}/download/sie/${reportId}`,
+    `${QREPORT_URL}/report/${reportId}/sie`,
+  ];
+
+  let lastStatus = 0;
+  for (const url of candidates) {
+    const r = await fetch(url, {
+      headers: { Authorization: qReportToken, Accept: "application/octet-stream, */*" },
+    });
+    if (r.ok) {
+      const buf = Buffer.from(await r.arrayBuffer());
+      res.setHeader("Content-Type", r.headers.get("content-type") || "application/octet-stream");
+      res.setHeader("Content-Disposition", `attachment; filename="zrapport-${reportId}.se"`);
+      return res.status(200).send(buf);
+    }
+    lastStatus = r.status;
+  }
+  return res.status(404).json({
+    error: "SIE-endpoint hittades ej",
+    hint: "Capturer SIE-download-request från Qopla DevTools och uppdatera handleSie() med rätt URL",
+    lastStatus,
+    tried: candidates,
+  });
+}
+
 export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).end();
 
@@ -169,12 +231,31 @@ export default async function handler(req, res) {
       const pageItems = parseInt(req.query.items || "10", 10);
       const shopId = req.query.shopId || null;
       const out = await handleReports({ companyId, token, reportType, pageNumber, pageItems, shopId });
-      // Z-rapport ändras sällan, X uppdateras löpande
       res.setHeader("Cache-Control", reportType === "Z" ? "s-maxage=600" : "s-maxage=120");
       return res.status(200).json({ ...out, fetchedAt: new Date().toISOString() });
     }
 
-    // default: sales overview
+    if (action === "overview") {
+      const start = req.query.start;
+      const end = req.query.end;
+      if (!start || !end) {
+        return res.status(400).json({ error: "start och end (ISO) krävs" });
+      }
+      const out = await handleOverview({ companyId, token, startDate: start, endDate: end });
+      res.setHeader("Cache-Control", "s-maxage=300");
+      return res.status(200).json({ ...out, fetchedAt: new Date().toISOString() });
+    }
+
+    if (action === "sie") {
+      const reportId = req.query.reportId;
+      const shopId = req.query.shopId;
+      if (!reportId || !shopId) {
+        return res.status(400).json({ error: "reportId och shopId krävs" });
+      }
+      return await handleSie({ companyId, token, reportId, shopId, res });
+    }
+
+    // default: sales overview (idag/igår)
     const daysAgo = req.query.date === "yesterday" ? 1 : 0;
     const out = await handleSales({ companyId, token, daysAgo });
     res.setHeader("Cache-Control", "s-maxage=300");

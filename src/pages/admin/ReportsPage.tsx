@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
-import { FileText, TrendingUp, Receipt, Package, CreditCard, Tag } from 'lucide-react'
+import { FileText, TrendingUp, Receipt, Package, Download } from 'lucide-react'
 import Spinner from '../../components/ui/Spinner'
-import { useQoplaReports, type QoplaReport, type QoplaShopReports } from '../../plugins/qopla/useQoplaReports'
+import { useQoplaReports, type QoplaReport } from '../../plugins/qopla/useQoplaReports'
+import { useQoplaOverview } from '../../plugins/qopla/useQoplaOverview'
 
 type Preset = 'today' | 'yesterday' | 'week' | 'month' | 'lastMonth' | 'custom'
 
@@ -33,7 +34,7 @@ function computeRange(preset: Preset, customStart?: string, customEnd?: string):
     }
     case 'week': {
       const d = new Date(now)
-      const day = (d.getDay() + 6) % 7 // monday=0
+      const day = (d.getDay() + 6) % 7
       d.setDate(d.getDate() - day)
       return { start: startOfDay(d), end: endOfDay(now), label: 'Denna vecka' }
     }
@@ -66,81 +67,11 @@ function formatDateTime(iso: string) {
   return new Date(iso).toLocaleString('sv-SE', { dateStyle: 'short', timeStyle: 'short' })
 }
 
+// Period overlap — report's [startDate, endDate] crosses the filter range
 function inRange(report: QoplaReport, range: DateRange) {
-  const t = new Date(report.endDate).getTime()
-  return t >= range.start.getTime() && t <= range.end.getTime()
-}
-
-interface Aggregated {
-  totalSales: number
-  totalNetSales: number
-  sumReceipts: number
-  sumSoldProducts: number
-  tip: number
-  byCategory: { categoryName: string; totalSales: number }[]
-  byPaymentMethod: { paymentMethod: string; amount: number; tip: number }[]
-  byShop: { shopId: string; shopName: string; totalSales: number; totalNetSales: number; reportCount: number }[]
-  byVat: { vatRate: number; net: number; vat: number }[]
-}
-
-function aggregate(shops: QoplaShopReports[], range: DateRange): Aggregated {
-  const result: Aggregated = {
-    totalSales: 0, totalNetSales: 0, sumReceipts: 0, sumSoldProducts: 0, tip: 0,
-    byCategory: [], byPaymentMethod: [], byShop: [], byVat: [],
-  }
-  const cat = new Map<string, number>()
-  const pay = new Map<string, { amount: number; tip: number }>()
-  const shop = new Map<string, { name: string; sales: number; net: number; count: number }>()
-  const vat = new Map<number, { net: number; vat: number }>()
-
-  for (const s of shops) {
-    for (const r of s.items) {
-      if (!inRange(r, range)) continue
-      result.totalSales += r.totalSales || 0
-      result.totalNetSales += r.totalNetSales || 0
-      result.sumReceipts += r.sumReceipts || 0
-      result.sumSoldProducts += r.sumSoldProducts || 0
-      result.tip += r.tip || 0
-
-      for (const c of r.categoryTotalSales || []) {
-        cat.set(c.categoryName, (cat.get(c.categoryName) ?? 0) + c.totalSales)
-      }
-      for (const p of r.paymentMethodAndAmounts || []) {
-        const prev = pay.get(p.paymentMethod) ?? { amount: 0, tip: 0 }
-        pay.set(p.paymentMethod, { amount: prev.amount + p.amount, tip: prev.tip + p.tip })
-      }
-      const prevShop = shop.get(s.shopId) ?? { name: s.shopName, sales: 0, net: 0, count: 0 }
-      shop.set(s.shopId, {
-        name: s.shopName,
-        sales: prevShop.sales + r.totalSales,
-        net: prevShop.net + r.totalNetSales,
-        count: prevShop.count + 1,
-      })
-      for (const v of r.vatRatesAndNetAmounts || []) {
-        const prev = vat.get(v.vatRate) ?? { net: 0, vat: 0 }
-        vat.set(v.vatRate, { net: prev.net + v.amount, vat: prev.vat })
-      }
-      for (const v of r.vatRateAmountWithRefunds || []) {
-        const prev = vat.get(v.vatRate) ?? { net: 0, vat: 0 }
-        vat.set(v.vatRate, { net: prev.net, vat: prev.vat + v.amount })
-      }
-    }
-  }
-
-  result.byCategory = [...cat.entries()]
-    .map(([categoryName, totalSales]) => ({ categoryName, totalSales }))
-    .sort((a, b) => b.totalSales - a.totalSales)
-  result.byPaymentMethod = [...pay.entries()]
-    .map(([paymentMethod, v]) => ({ paymentMethod, amount: v.amount, tip: v.tip }))
-    .sort((a, b) => b.amount - a.amount)
-  result.byShop = [...shop.entries()]
-    .map(([shopId, v]) => ({ shopId, shopName: v.name, totalSales: v.sales, totalNetSales: v.net, reportCount: v.count }))
-    .sort((a, b) => b.totalSales - a.totalSales)
-  result.byVat = [...vat.entries()]
-    .map(([vatRate, v]) => ({ vatRate, net: v.net, vat: v.vat }))
-    .sort((a, b) => b.vatRate - a.vatRate)
-
-  return result
+  const rs = new Date(report.startDate).getTime()
+  const re = new Date(report.endDate).getTime()
+  return rs <= range.end.getTime() && re >= range.start.getTime()
 }
 
 const PRESET_LABELS: Record<Preset, string> = {
@@ -156,23 +87,57 @@ export default function ReportsPage() {
   const [preset, setPreset] = useState<Preset>('today')
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
-  const [reportType, setReportType] = useState<'X' | 'Z'>('Z')
+  const [reportType, setReportType] = useState<'X' | 'Z'>('X')
 
   const range = useMemo(() => computeRange(preset, customStart, customEnd), [preset, customStart, customEnd])
-  const { data, isLoading, isError } = useQoplaReports({ reportType, pageItems: 100 })
 
-  const agg = useMemo(() => (data ? aggregate(data, range) : null), [data, range])
+  const reportsQ = useQoplaReports({ reportType, pageItems: 100 })
+  const overviewQ = useQoplaOverview({ startISO: range.start.toISOString(), endISO: range.end.toISOString() })
 
   const reportsInRange = useMemo(() => {
-    if (!data) return []
-    const all: { shopName: string; report: QoplaReport }[] = []
-    for (const s of data) {
+    if (!reportsQ.data) return []
+    const all: { shopName: string; shopId: string; report: QoplaReport }[] = []
+    for (const s of reportsQ.data) {
       for (const r of s.items) {
-        if (inRange(r, range)) all.push({ shopName: s.shopName, report: r })
+        if (inRange(r, range)) all.push({ shopName: s.shopName, shopId: s.shopId, report: r })
       }
     }
     return all.sort((a, b) => new Date(b.report.createdAt).getTime() - new Date(a.report.createdAt).getTime())
-  }, [data, range])
+  }, [reportsQ.data, range])
+
+  const totals = useMemo(() => {
+    if (!overviewQ.data) return { sales: 0, orders: 0 }
+    return overviewQ.data.reduce(
+      (acc, s) => ({ sales: acc.sales + s.totalSales, orders: acc.orders + s.totalOrders }),
+      { sales: 0, orders: 0 }
+    )
+  }, [overviewQ.data])
+
+  const reportTotals = useMemo(() => {
+    let receipts = 0, products = 0
+    for (const { report } of reportsInRange) {
+      receipts += report.sumReceipts || 0
+      products += report.sumSoldProducts || 0
+    }
+    return { receipts, products }
+  }, [reportsInRange])
+
+  const handleSieDownload = (shopId: string, reportId: string, reportNumber: number) => {
+    const params = new URLSearchParams({ action: 'sie', reportId, shopId })
+    const url = `/api/qopla?${params.toString()}`
+    // open in new tab so user sees error message inline if endpoint returns 404
+    window.open(url, '_blank')
+    // also start download via hidden link
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `zrapport-${reportNumber}.se`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+  }
+
+  const isLoading = reportsQ.isLoading || overviewQ.isLoading
+  const isError = reportsQ.isError && overviewQ.isError
 
   return (
     <div className="space-y-6">
@@ -232,112 +197,96 @@ export default function ReportsPage() {
       </div>
 
       {isLoading && <div className="flex justify-center py-16"><Spinner size={32} /></div>}
-      {isError && <div className="bg-red-50 border border-red-200 text-red-600 rounded-xl p-4 text-sm">Kunde inte hämta rapporter</div>}
+      {isError && <div className="bg-red-50 border border-red-200 text-red-600 rounded-xl p-4 text-sm">Kunde inte hämta data</div>}
 
-      {agg && (
+      {overviewQ.data && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <StatCard label="Brutto" value={formatKr(agg.totalSales)} icon={TrendingUp} color="text-indigo-600" bg="bg-indigo-50" />
-            <StatCard label="Netto" value={formatKr(agg.totalNetSales)} icon={TrendingUp} color="text-emerald-600" bg="bg-emerald-50" />
-            <StatCard label="Kvitton" value={agg.sumReceipts.toString()} icon={Receipt} color="text-sky-600" bg="bg-sky-50" />
-            <StatCard label="Produkter" value={agg.sumSoldProducts.toString()} icon={Package} color="text-amber-600" bg="bg-amber-50" />
+            <StatCard label="Total brutto" value={formatKr(totals.sales)} icon={TrendingUp} color="text-indigo-600" bg="bg-indigo-50" />
+            <StatCard label="Total order" value={totals.orders.toString()} icon={Receipt} color="text-emerald-600" bg="bg-emerald-50" />
+            <StatCard label="Kvitton (rapport)" value={reportTotals.receipts.toString()} icon={Receipt} color="text-sky-600" bg="bg-sky-50" />
+            <StatCard label="Produkter (rapport)" value={reportTotals.products.toString()} icon={Package} color="text-amber-600" bg="bg-amber-50" />
           </div>
 
-          <div className="grid md:grid-cols-2 gap-4">
-            <Section title="Per restaurang" icon={FileText}>
-              {agg.byShop.length === 0 ? <Empty /> : (
-                <ul className="divide-y divide-slate-100">
-                  {agg.byShop.map(s => (
-                    <li key={s.shopId} className="py-2 flex justify-between items-baseline">
-                      <div>
-                        <div className="text-sm font-medium text-slate-700">{s.shopName}</div>
-                        <div className="text-[11px] text-slate-400">{s.reportCount} rapporter · netto {formatKr(s.totalNetSales)}</div>
-                      </div>
-                      <span className="text-sm font-bold text-indigo-600">{formatKr(s.totalSales)}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Section>
-
-            <Section title="Kategoriförsäljning" icon={Tag}>
-              {agg.byCategory.length === 0 ? <Empty /> : (
-                <ul className="divide-y divide-slate-100">
-                  {agg.byCategory.map(c => (
-                    <li key={c.categoryName} className="py-2 flex justify-between items-baseline">
-                      <span className="text-sm text-slate-600 truncate">{c.categoryName}</span>
-                      <span className="text-sm font-semibold text-slate-800">{formatKr(c.totalSales)}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Section>
-
-            <Section title="Betalsätt" icon={CreditCard}>
-              {agg.byPaymentMethod.length === 0 ? <Empty /> : (
-                <ul className="divide-y divide-slate-100">
-                  {agg.byPaymentMethod.map(p => (
-                    <li key={p.paymentMethod} className="py-2 flex justify-between items-baseline">
-                      <div>
-                        <div className="text-sm text-slate-600">{p.paymentMethod}</div>
-                        {p.tip > 0 && <div className="text-[11px] text-slate-400">dricks {formatKr(p.tip)}</div>}
-                      </div>
-                      <span className="text-sm font-semibold text-slate-800">{formatKr(p.amount)}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Section>
-
-            <Section title="Moms" icon={Receipt}>
-              {agg.byVat.length === 0 ? <Empty /> : (
-                <ul className="divide-y divide-slate-100">
-                  {agg.byVat.map(v => (
-                    <li key={v.vatRate} className="py-2 flex justify-between items-baseline">
-                      <span className="text-sm text-slate-600">{v.vatRate}%</span>
-                      <span className="text-sm text-slate-500">
-                        Netto {formatKr(v.net)} · Moms <span className="font-semibold text-slate-800">{formatKr(v.vat)}</span>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Section>
-          </div>
-
-          <Section title={`${reportType}-rapporter (${reportsInRange.length})`} icon={FileText}>
-            {reportsInRange.length === 0 ? <Empty text="Inga rapporter i perioden" /> : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-100">
-                      <th className="py-2 pr-3">#</th>
-                      <th className="py-2 pr-3">Restaurang</th>
-                      <th className="py-2 pr-3">Skapad</th>
-                      <th className="py-2 pr-3 text-right">Brutto</th>
-                      <th className="py-2 pr-3 text-right">Netto</th>
-                      <th className="py-2 pr-3 text-right">Kvitton</th>
-                      <th className="py-2 text-right">Produkter</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {reportsInRange.map(({ shopName, report }) => (
-                      <tr key={report.id} className="border-b border-slate-50 last:border-0">
-                        <td className="py-2 pr-3 text-slate-500">{report.reportNumber}</td>
-                        <td className="py-2 pr-3 text-slate-700">{shopName}</td>
-                        <td className="py-2 pr-3 text-slate-500 text-[12px]">{formatDateTime(report.createdAt)}</td>
-                        <td className="py-2 pr-3 text-right font-medium text-slate-800">{formatKr(report.totalSales)}</td>
-                        <td className="py-2 pr-3 text-right text-slate-600">{formatKr(report.totalNetSales)}</td>
-                        <td className="py-2 pr-3 text-right text-slate-500">{report.sumReceipts}</td>
-                        <td className="py-2 text-right text-slate-500">{report.sumSoldProducts}</td>
+          <Section title="Per restaurang" icon={FileText}>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-100">
+                    <th className="py-2 pr-3">Restaurang</th>
+                    <th className="py-2 pr-3 text-right">Försäljning</th>
+                    <th className="py-2 text-right">Order</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {overviewQ.data
+                    .slice()
+                    .sort((a, b) => b.totalSales - a.totalSales)
+                    .map(s => (
+                      <tr key={s.shopId} className="border-b border-slate-50 last:border-0">
+                        <td className="py-2 pr-3 text-slate-700">{s.shopName}</td>
+                        <td className="py-2 pr-3 text-right font-semibold text-slate-800">{formatKr(s.totalSales)}</td>
+                        <td className="py-2 text-right text-slate-500">{s.totalOrders}</td>
                       </tr>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                  <tr className="border-t-2 border-slate-200">
+                    <td className="py-2 pr-3 font-semibold text-slate-700">Totalt</td>
+                    <td className="py-2 pr-3 text-right font-bold text-indigo-600">{formatKr(totals.sales)}</td>
+                    <td className="py-2 text-right font-bold text-slate-700">{totals.orders}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </Section>
         </>
+      )}
+
+      {reportsQ.data && (
+        <Section title={`${reportType}-rapporter (${reportsInRange.length})`} icon={FileText}>
+          {reportsInRange.length === 0 ? <Empty text="Inga rapporter i perioden" /> : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-100">
+                    <th className="py-2 pr-3">#</th>
+                    <th className="py-2 pr-3">Restaurang</th>
+                    <th className="py-2 pr-3">Skapad</th>
+                    <th className="py-2 pr-3 text-right">Brutto</th>
+                    <th className="py-2 pr-3 text-right">Netto</th>
+                    <th className="py-2 pr-3 text-right">Kvitton</th>
+                    <th className="py-2 pr-3 text-right">Produkter</th>
+                    {reportType === 'Z' && <th className="py-2 text-right">SIE</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {reportsInRange.map(({ shopName, shopId, report }) => (
+                    <tr key={report.id} className="border-b border-slate-50 last:border-0">
+                      <td className="py-2 pr-3 text-slate-500">{report.reportNumber}</td>
+                      <td className="py-2 pr-3 text-slate-700">{shopName}</td>
+                      <td className="py-2 pr-3 text-slate-500 text-[12px]">{formatDateTime(report.createdAt)}</td>
+                      <td className="py-2 pr-3 text-right font-medium text-slate-800">{formatKr(report.totalSales)}</td>
+                      <td className="py-2 pr-3 text-right text-slate-600">{formatKr(report.totalNetSales)}</td>
+                      <td className="py-2 pr-3 text-right text-slate-500">{report.sumReceipts}</td>
+                      <td className="py-2 pr-3 text-right text-slate-500">{report.sumSoldProducts}</td>
+                      {reportType === 'Z' && (
+                        <td className="py-2 text-right">
+                          <button
+                            onClick={() => handleSieDownload(shopId, report.id, report.reportNumber)}
+                            title="Ladda ned SIE"
+                            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md text-indigo-600 hover:bg-indigo-50 transition-colors"
+                          >
+                            <Download size={12} />
+                            SIE
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Section>
       )}
     </div>
   )

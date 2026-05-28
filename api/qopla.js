@@ -42,10 +42,114 @@ function getDateRange(daysAgo = 0) {
   return { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
 }
 
+async function login(email, password) {
+  const data = await gql(
+    `mutation login($credentials: CredentialsInput) {
+      login(userCredentials: $credentials) { token companyId }
+      ttlTimeoutMs
+    }`,
+    { credentials: { username: email, password } }
+  );
+  return data.login;
+}
+
+async function getShops(companyId, token) {
+  const data = await gql(
+    `query getCompanyShops($companyId: String!) {
+      getCompanyShops(companyId: $companyId) { id name }
+    }`,
+    { companyId }, token
+  );
+  return data.getCompanyShops;
+}
+
+async function handleSales({ companyId, token, daysAgo }) {
+  const shops = await getShops(companyId, token);
+  const { startDate, endDate } = getDateRange(daysAgo);
+
+  const sales = [];
+  for (const shop of shops) {
+    const qrtData = await gql(
+      `query qReportToken($companyId: String, $shopIds: [String]) {
+        getQReportToken(companyId: $companyId, shopIds: $shopIds)
+      }`,
+      { companyId, shopIds: [shop.id] }, token
+    );
+    const qReportToken = qrtData.getQReportToken;
+
+    const r = await fetch(`${QREPORT_URL}/overview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json;charset=utf-8", Authorization: qReportToken },
+      body: JSON.stringify({ shopIDs: [shop.id], startDate, endDate }),
+    });
+    const text = await r.text();
+    const data = text ? JSON.parse(text) : { aggregatedReport: {} };
+    const report = data.aggregatedReport || {};
+    let totalSum = 0, totalOrders = 0;
+    for (const ch of Object.values(report)) {
+      totalSum += ch.totalSum || 0;
+      totalOrders += ch.quantityOfOrders || 0;
+    }
+    sales.push({ shopId: shop.id, restaurant: shop.name, sales: totalSum, orders: totalOrders, currency: "SEK" });
+  }
+  return { sales };
+}
+
+const REPORTS_QUERY = `query getReports($shopId: String, $posId: String, $reportType: ReportType, $pageNumber: Int, $pageItems: Int) {
+  numberOfReports(shopId: $shopId, posId: $posId, reportType: $reportType)
+  getReports(shopId: $shopId, posId: $posId, reportType: $reportType, pageNumber: $pageNumber, pageItems: $pageItems) {
+    ... on ZXReport {
+      id
+      reportNumber
+      reportType
+      createdAt
+      startDate
+      endDate
+      shopId
+      shopName
+      posName
+      totalSales
+      totalNetSales
+      grandTotalSales
+      grandTotalNet
+      sumSoldProducts
+      sumReceipts
+      tip
+      categoryTotalSales { categoryName totalSales }
+      paymentMethodAndAmounts { paymentMethod amount tip }
+      vatRatesAndNetAmounts { vatRate amount refundedAmount }
+      vatRateAmountWithRefunds { vatRate amount refundedAmount }
+      refunds { receiptType count amount }
+      discounts { receiptType count amount }
+    }
+  }
+}`;
+
+async function handleReports({ companyId, token, reportType, pageNumber, pageItems, shopId }) {
+  const shops = shopId
+    ? [(await getShops(companyId, token)).find(s => s.id === shopId)].filter(Boolean)
+    : await getShops(companyId, token);
+
+  const perShop = [];
+  for (const shop of shops) {
+    const data = await gql(
+      REPORTS_QUERY,
+      { shopId: shop.id, reportType, pageNumber, pageItems },
+      token
+    );
+    perShop.push({
+      shopId: shop.id,
+      shopName: shop.name,
+      totalCount: data.numberOfReports || 0,
+      items: data.getReports || [],
+    });
+  }
+  return { reports: perShop };
+}
+
 export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).end();
 
-  const daysAgo = req.query.date === "yesterday" ? 1 : 0;
   const email = process.env.QOPLA_EMAIL;
   const password = process.env.QOPLA_PASSWORD;
   if (!email || !password) {
@@ -53,55 +157,28 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 1. Login
-    const loginData = await gql(
-      `mutation login($credentials: CredentialsInput) {
-        login(userCredentials: $credentials) { token companyId }
-        ttlTimeoutMs
-      }`,
-      { credentials: { username: email, password } }
-    );
-    const { token, companyId } = loginData.login;
+    const { token, companyId } = await login(email, password);
+    const action = req.query.action || "sales";
 
-    // 2. Alla restauranger
-    const shopsData = await gql(
-      `query getCompanyShops($companyId: String!) {
-        getCompanyShops(companyId: $companyId) { id name }
-      }`,
-      { companyId }, token
-    );
-    const shops = shopsData.getCompanyShops;
-    const { startDate, endDate } = getDateRange(daysAgo);
-
-    // 3. Försäljning per restaurang (sekventiellt — token är engångs per anrop)
-    const sales = [];
-    for (const shop of shops) {
-      const qrtData = await gql(
-        `query qReportToken($companyId: String, $shopIds: [String]) {
-          getQReportToken(companyId: $companyId, shopIds: $shopIds)
-        }`,
-        { companyId, shopIds: [shop.id] }, token
-      );
-      const qReportToken = qrtData.getQReportToken;
-
-      const r = await fetch(`${QREPORT_URL}/overview`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json;charset=utf-8", Authorization: qReportToken },
-        body: JSON.stringify({ shopIDs: [shop.id], startDate, endDate }),
-      });
-      const text = await r.text();
-      const data = text ? JSON.parse(text) : { aggregatedReport: {} };
-      const report = data.aggregatedReport || {};
-      let totalSum = 0, totalOrders = 0;
-      for (const ch of Object.values(report)) {
-        totalSum += ch.totalSum || 0;
-        totalOrders += ch.quantityOfOrders || 0;
+    if (action === "reports") {
+      const reportType = (req.query.reportType || "X").toUpperCase();
+      if (reportType !== "X" && reportType !== "Z") {
+        return res.status(400).json({ error: "reportType måste vara X eller Z" });
       }
-      sales.push({ shopId: shop.id, restaurant: shop.name, sales: totalSum, orders: totalOrders, currency: "SEK" });
+      const pageNumber = parseInt(req.query.page || "1", 10);
+      const pageItems = parseInt(req.query.items || "10", 10);
+      const shopId = req.query.shopId || null;
+      const out = await handleReports({ companyId, token, reportType, pageNumber, pageItems, shopId });
+      // Z-rapport ändras sällan, X uppdateras löpande
+      res.setHeader("Cache-Control", reportType === "Z" ? "s-maxage=600" : "s-maxage=120");
+      return res.status(200).json({ ...out, fetchedAt: new Date().toISOString() });
     }
 
-    res.setHeader("Cache-Control", "s-maxage=300"); // Cache 5 min på Vercel edge
-    return res.status(200).json({ sales, fetchedAt: new Date().toISOString() });
+    // default: sales overview
+    const daysAgo = req.query.date === "yesterday" ? 1 : 0;
+    const out = await handleSales({ companyId, token, daysAgo });
+    res.setHeader("Cache-Control", "s-maxage=300");
+    return res.status(200).json({ ...out, fetchedAt: new Date().toISOString() });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

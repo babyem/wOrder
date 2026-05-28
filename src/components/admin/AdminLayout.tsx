@@ -33,14 +33,26 @@ export default function AdminLayout() {
     <div className="min-h-screen bg-slate-50 flex">
       {/* Desktop sidebar */}
       <aside className="hidden md:flex flex-col w-56 bg-white border-r border-slate-100 p-4 shrink-0">
-        <div className="flex items-center gap-2.5 px-1 mb-8">
-          <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
-            <ChefHat size={16} className="text-white" />
+        <div className="flex items-center justify-between px-1 mb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
+              <ChefHat size={16} className="text-white" />
+            </div>
+            <span className="font-bold text-slate-900 text-sm">Staff Orders</span>
           </div>
-          <span className="font-bold text-slate-900 text-sm">Staff Orders</span>
+          <div className="flex items-center gap-0.5">
+            <PushSubscribeButton compact />
+            <button
+              onClick={handleLogout}
+              title="Logga ut"
+              className="p-2 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+            >
+              <LogOut size={18} />
+            </button>
+          </div>
         </div>
 
-        <nav className="space-y-1">
+        <nav className="space-y-1 mt-4">
           {navItems.map(item => (
             <NavLink key={item.to} to={item.to} end={item.end} className={navLinkClass}>
               <item.icon size={18} />
@@ -52,15 +64,6 @@ export default function AdminLayout() {
         <QoplaSalesWidget />
 
         <div className="flex-1" />
-
-        <PushSubscribeButton />
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
-        >
-          <LogOut size={18} />
-          Sign Out
-        </button>
       </aside>
 
       {/* Mobile header */}
@@ -74,6 +77,13 @@ export default function AdminLayout() {
           </div>
           <div className="flex items-center gap-1">
             <PushSubscribeButton compact />
+            <button
+              onClick={handleLogout}
+              title="Logga ut"
+              className="p-2 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+            >
+              <LogOut size={18} />
+            </button>
             <button
               onClick={() => setMobileOpen(true)}
               className="p-2 rounded-xl hover:bg-slate-100 transition-colors"
@@ -101,7 +111,7 @@ export default function AdminLayout() {
                 exit={{ x: -256 }}
                 transition={{ type: 'spring', damping: 25, stiffness: 300 }}
               >
-                <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
                       <ChefHat size={16} className="text-white" />
@@ -112,6 +122,18 @@ export default function AdminLayout() {
                     <X size={18} className="text-slate-500" />
                   </button>
                 </div>
+
+                <div className="flex items-center gap-1 mb-4 pb-4 border-b border-slate-100">
+                  <PushSubscribeButton compact />
+                  <button
+                    onClick={handleLogout}
+                    title="Logga ut"
+                    className="p-2 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                  >
+                    <LogOut size={18} />
+                  </button>
+                </div>
+
                 <nav className="space-y-1">
                   {navItems.map(item => (
                     <NavLink
@@ -130,15 +152,6 @@ export default function AdminLayout() {
                 <QoplaSalesWidget />
 
                 <div className="flex-1" />
-
-                <PushSubscribeButton />
-                <button
-                  onClick={handleLogout}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all w-full"
-                >
-                  <LogOut size={18} />
-                  Sign Out
-                </button>
               </motion.div>
             </>
           )}

@@ -67,11 +67,24 @@ serve(async (req) => {
     // --- Web Push ---
     const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY')
     const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY')
+    const pushReport: Record<string, unknown> = {}
 
-    if (vapidPublicKey && vapidPrivateKey) {
-      const { data: subscriptions } = await supabase.from('push_subscriptions').select('*')
+    if (!vapidPublicKey || !vapidPrivateKey) {
+      pushReport.skipped = `VAPID env missing (public=${!!vapidPublicKey}, private=${!!vapidPrivateKey})`
+      console.error('[notify-order]', pushReport.skipped)
+    } else {
+      const { data: subscriptions, error: subErr } = await supabase.from('push_subscriptions').select('*')
 
-      if (subscriptions && subscriptions.length > 0) {
+      if (subErr) {
+        pushReport.subscriptionQueryError = subErr.message
+        console.error('[notify-order] subscription query failed:', subErr)
+      } else if (!subscriptions || subscriptions.length === 0) {
+        pushReport.subscriptions = 0
+        console.warn('[notify-order] no push subscriptions found in DB')
+      } else {
+        pushReport.subscriptions = subscriptions.length
+        console.log(`[notify-order] sending push to ${subscriptions.length} subscription(s)`)
+
         const webPush = await import('npm:web-push@3.6.7')
         webPush.default.setVapidDetails(
           'mailto:admin@woso.se',
@@ -85,23 +98,34 @@ serve(async (req) => {
           orderId: record.id,
         })
 
-        await Promise.allSettled(
-          subscriptions.map(sub =>
-            webPush.default.sendNotification(
-              { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-              pushPayload
-            ).catch(async (err: { statusCode?: number }) => {
-              // Clean up expired subscriptions
-              if (err.statusCode === 410 || err.statusCode === 404) {
+        const results = await Promise.allSettled(
+          subscriptions.map(async sub => {
+            try {
+              const r = await webPush.default.sendNotification(
+                { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+                pushPayload
+              )
+              console.log(`[notify-order] push ok statusCode=${r.statusCode} endpoint=${sub.endpoint.slice(0, 60)}...`)
+              return { ok: true, statusCode: r.statusCode }
+            } catch (err) {
+              const e = err as { statusCode?: number; body?: string; message?: string }
+              console.error(`[notify-order] push FAILED statusCode=${e.statusCode} body=${e.body} msg=${e.message} endpoint=${sub.endpoint.slice(0, 60)}...`)
+              if (e.statusCode === 410 || e.statusCode === 404) {
                 await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint)
               }
-            })
-          )
+              return { ok: false, statusCode: e.statusCode, body: e.body, message: e.message }
+            }
+          })
         )
+
+        pushReport.results = results.map(r => r.status === 'fulfilled' ? r.value : { ok: false, rejected: true })
       }
     }
 
-    return new Response('ok', { status: 200 })
+    return new Response(JSON.stringify({ ok: true, push: pushReport }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
   } catch (err) {
     console.error(err)
     return new Response(String(err), { status: 500 })

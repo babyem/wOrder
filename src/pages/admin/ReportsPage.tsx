@@ -86,12 +86,10 @@ export default function ReportsPage() {
         </button>
       </div>
 
-      <div className="overflow-x-auto -mx-4 md:-mx-6 px-4 md:px-6">
-        <div className="flex gap-4 pb-4" style={{ minWidth: 'max-content' }}>
-          {periods.map(p => (
-            <PeriodColumn key={p.key} period={p} />
-          ))}
-        </div>
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        {periods.map(p => (
+          <PeriodColumn key={p.key} period={p} />
+        ))}
       </div>
     </div>
   )
@@ -116,7 +114,7 @@ function PeriodColumn({ period }: { period: PeriodDef }) {
   }, [data])
 
   return (
-    <div className="w-72 flex-none flex flex-col gap-2">
+    <div className="flex flex-col gap-2 min-w-0">
       <div className="px-2 flex items-baseline justify-between">
         <div className="flex items-center gap-1.5">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{period.label}</h2>

@@ -67,7 +67,7 @@ const ZERO_SHOP = (id: string, name: string): QoplaShopOverview => ({
 export default function ReportsPage() {
   const periods = useMemo(buildPeriods, [])
   const queryClient = useQueryClient()
-  const [expanded, setExpanded] = useState<string | null>(null) // key = `${periodKey}::${shopId}`
+  const [expanded, setExpanded] = useState<Set<string>>(new Set()) // keys = `${periodKey}::${shopId}`
 
   // Canonical shop order from "month" data (sales DESC)
   const monthPeriod = periods.find(p => p.key === 'month')!
@@ -90,7 +90,11 @@ export default function ReportsPage() {
 
   const toggleExpand = (periodKey: PeriodKey, shopId: string) => {
     const k = `${periodKey}::${shopId}`
-    setExpanded(prev => (prev === k ? null : k))
+    setExpanded(prev => {
+      const next = new Set(prev)
+      next.has(k) ? next.delete(k) : next.add(k)
+      return next
+    })
   }
 
   return (
@@ -116,7 +120,7 @@ export default function ReportsPage() {
             key={p.key}
             period={p}
             canonicalOrder={canonicalOrder}
-            expandedKey={expanded}
+            expandedKeys={expanded}
             onToggleExpand={toggleExpand}
           />
         ))}
@@ -128,11 +132,11 @@ export default function ReportsPage() {
 interface PeriodColumnProps {
   period: PeriodDef
   canonicalOrder: { shopId: string; shopName: string }[] | null
-  expandedKey: string | null
+  expandedKeys: Set<string>
   onToggleExpand: (periodKey: PeriodKey, shopId: string) => void
 }
 
-function PeriodColumn({ period, canonicalOrder, expandedKey, onToggleExpand }: PeriodColumnProps) {
+function PeriodColumn({ period, canonicalOrder, expandedKeys, onToggleExpand }: PeriodColumnProps) {
   const startISO = period.start.toISOString()
   const endISO = period.end.toISOString()
   const { data, isLoading, isError, isFetching } = useQoplaOverview({ startISO, endISO })
@@ -192,7 +196,7 @@ function PeriodColumn({ period, canonicalOrder, expandedKey, onToggleExpand }: P
                   key={s.shopId}
                   shop={s}
                   period={period}
-                  isExpanded={expandedKey === `${period.key}::${s.shopId}`}
+                  isExpanded={expandedKeys.has(`${period.key}::${s.shopId}`)}
                   canExpand={isDayPeriod}
                   onToggle={() => onToggleExpand(period.key, s.shopId)}
                 />

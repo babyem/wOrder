@@ -16,9 +16,15 @@ const INTEGRATOR_ID = process.env.DINKASSA_INTEGRATOR_ID || "cc7c4035-ce21-40a6-
 
 let SESSION = null; // { sessionId, expiresAt }
 
+// Strip whitespace and a single layer of matching surrounding quotes — common paste
+// artifacts in env values that otherwise cause "Invalid credentials".
+function cleanEnv(v) {
+  return (v || "").trim().replace(/^(['"])([\s\S]*)\1$/, "$2");
+}
+
 async function authenticate() {
-  const Username = process.env.DINKASSA_USERNAME;
-  const Password = process.env.DINKASSA_PASSWORD;
+  const Username = cleanEnv(process.env.DINKASSA_USERNAME);
+  const Password = cleanEnv(process.env.DINKASSA_PASSWORD);
   if (!Username || !Password) throw new Error("DINKASSA_USERNAME / DINKASSA_PASSWORD saknas i miljövariabler");
   const res = await fetch(`${BASE}/session/Authenticate`, {
     method: "POST",

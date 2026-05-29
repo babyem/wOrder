@@ -23,6 +23,17 @@ export default async function handler(req, res) {
   try {
     const action = req.query.action || "sales";
 
+    // Safe credential diagnostics (no values exposed) — to debug "Invalid credentials".
+    if (action === "debug") {
+      const u = process.env.DINKASSA_USERNAME || "";
+      const p = process.env.DINKASSA_PASSWORD || "";
+      return res.status(200).json({
+        username: { set: !!u, len: u.length, hasOuterWhitespace: u !== u.trim(), quoted: /^["']|["']$/.test(u) },
+        password: { set: !!p, len: p.length, hasOuterWhitespace: p !== p.trim(), quoted: /^["']|["']$/.test(p) },
+        integratorIdOverride: !!process.env.DINKASSA_INTEGRATOR_ID,
+      });
+    }
+
     if (action === "machines") {
       const machines = await listMachines();
       res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=600");

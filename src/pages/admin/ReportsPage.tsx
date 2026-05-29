@@ -93,12 +93,15 @@ export default function ReportsPage() {
   }, [data])
 
   const handleSie = (shopId: string, shopName: string) => {
-    const params = new URLSearchParams({ action: 'sie', shopId, start: startISO, end: endISO })
+    const ymd = (d: Date) =>
+      `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
+    const safeName = shopName.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_-]/g, '')
+    const fileName = `${safeName}_SIE${ymd(range.start)}-${ymd(range.end)}.se`
+    const params = new URLSearchParams({ action: 'sie', shopId, start: startISO, end: endISO, name: fileName })
     const url = `/api/qopla?${params.toString()}`
     const a = document.createElement('a')
     a.href = url
-    const ym = `${range.start.getFullYear()}-${String(range.start.getMonth() + 1).padStart(2, '0')}`
-    a.download = `${shopName.replace(/\s+/g, '-')}-${ym}.se`
+    a.download = fileName
     document.body.appendChild(a)
     a.click()
     a.remove()

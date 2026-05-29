@@ -215,7 +215,7 @@ function buildSieFile(payload) {
   return lines.join("\r\n") + "\r\n";
 }
 
-async function handleSie({ token, shopId, startDate, endDate, res }) {
+async function handleSie({ token, shopId, startDate, endDate, name, res }) {
   const data = await gql(SIE_MUTATION, { shopId, startDate, endDate }, token);
   const payload = data.createSIEFileByDate;
   if (!payload) {
@@ -223,9 +223,9 @@ async function handleSie({ token, shopId, startDate, endDate, res }) {
   }
 
   const text = buildSieFile(payload);
-  // SIE-filer använder CP437 (PC8). Skicka som ISO-8859-1 ger bättre kompatibilitet
-  // i Bokio/Visma; UTF-8 räcker oftast men varna inte här.
-  const fileName = `rapport-${shopId}-${(startDate || "").slice(0, 10)}.se`;
+  const fileName = (name && /^[\w.\-]+$/.test(name))
+    ? name
+    : `rapport-${shopId}-${(startDate || "").slice(0, 10)}.se`;
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
   return res.status(200).send(text);
@@ -272,10 +272,11 @@ export default async function handler(req, res) {
       const shopId = req.query.shopId;
       const start = req.query.start;
       const end = req.query.end;
+      const name = req.query.name || null;
       if (!shopId || !start || !end) {
         return res.status(400).json({ error: "shopId, start och end krävs" });
       }
-      return await handleSie({ token, shopId, startDate: start, endDate: end, res });
+      return await handleSie({ token, shopId, startDate: start, endDate: end, name, res });
     }
 
     // default: sales overview (idag/igår)

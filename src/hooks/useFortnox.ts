@@ -23,7 +23,7 @@ export interface FortnoxPosting {
   company_id: string | null
   voucher_series: string | null
   voucher_number: string | null
-  status: 'ok' | 'error' | 'skipped'
+  status: 'ok' | 'error' | 'skipped' | 'deleted'
   message: string | null
   created_at: string
 }
@@ -167,6 +167,25 @@ export function useRunFortnoxSync() {
       const token = session?.access_token
       if (!token) throw new Error('Ingen inloggad session')
       const res = await fetch('/api/fortnox-sync?force=1', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Synk misslyckades')
+      return json
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['fortnox-postings'] }),
+  })
+}
+
+// ---- Reconcile ("Synka status"): flag vouchers deleted in Fortnox ----
+export function useReconcileFortnox() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (): Promise<{ reconciledAt: string; changed: { shop: string; voucher: string; businessDate: string }[] }> => {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) throw new Error('Ingen inloggad session')
+      const res = await fetch('/api/fortnox-sync?action=reconcile', {
         headers: { Authorization: `Bearer ${token}` },
       })
       const json = await res.json()

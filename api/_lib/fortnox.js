@@ -78,6 +78,26 @@ export async function createVoucher(accessToken, voucher) {
   return json.Voucher;
 }
 
+// Fetch one voucher. Returns { found: false } if it no longer exists in Fortnox
+// (deleted), { found: true, voucher } otherwise. Throws on transient errors so the
+// caller can leave the row unchanged instead of falsely flagging it deleted.
+export async function getVoucher(accessToken, series, number, financialYearDate) {
+  const q = financialYearDate ? `?financialyeardate=${encodeURIComponent(financialYearDate)}` : "";
+  const res = await fetch(`${API_BASE}/vouchers/${encodeURIComponent(series)}/${encodeURIComponent(number)}${q}`, {
+    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+  });
+  if (res.status === 404) return { found: false };
+  const text = await res.text();
+  let json; try { json = JSON.parse(text); } catch { json = {}; }
+  if (!res.ok) {
+    const info = json && json.ErrorInformation;
+    const msg = (info && (info.message || info.Message)) || (json && json.message) || text.slice(0, 200);
+    if (/finns inte|not found|hittades inte|kunde inte hitta|saknas/i.test(msg)) return { found: false };
+    throw new Error(`Fortnox get voucher ${res.status}: ${msg}`); // transient — don't flag deleted
+  }
+  return { found: true, voucher: json.Voucher };
+}
+
 // Exchange an authorization code (from the OAuth consent redirect) for tokens.
 export async function exchangeAuthCode(code, redirectUri) {
   const id = process.env.FORTNOX_CLIENT_ID;

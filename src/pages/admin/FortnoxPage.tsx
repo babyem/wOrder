@@ -2,13 +2,13 @@ import { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
 import {
   ReceiptText, Plus, Trash2, Play, Building2, Pencil, Check, X,
-  CheckCircle2, AlertCircle, MinusCircle, Info, Plug, Link2,
+  CheckCircle2, AlertCircle, MinusCircle, Info, Plug, Link2, RefreshCw, Ban,
 } from 'lucide-react'
 import Spinner from '../../components/ui/Spinner'
 import { useQoplaSales } from '../../hooks/useQoplaSales'
 import {
   useFortnoxCompanies, useCreateFortnoxCompany, useRenameFortnoxCompany, useDeleteFortnoxCompany,
-  useFortnoxShopMap, useUpsertShopMap, useFortnoxPostings, useRunFortnoxSync,
+  useFortnoxShopMap, useUpsertShopMap, useFortnoxPostings, useRunFortnoxSync, useReconcileFortnox,
   useFortnoxConnections, startFortnoxConnect,
   type FortnoxCompany, type FortnoxShopMap,
 } from '../../hooks/useFortnox'
@@ -23,6 +23,7 @@ export default function FortnoxPage() {
   const createCompany = useCreateFortnoxCompany()
   const upsertMap = useUpsertShopMap()
   const runSync = useRunFortnoxSync()
+  const reconcile = useReconcileFortnox()
 
   const [newCompany, setNewCompany] = useState('')
 
@@ -79,6 +80,16 @@ export default function FortnoxPage() {
     })
   }
 
+  const handleReconcile = () => {
+    reconcile.mutate(undefined, {
+      onSuccess: (data) => {
+        if (!data.changed.length) toast.success('Synkad — inga ändringar')
+        else toast(`${data.changed.length} markerade som borttagna i Fortnox`)
+      },
+      onError: (e) => toast.error((e as Error).message),
+    })
+  }
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex items-start justify-between gap-4">
@@ -91,14 +102,25 @@ export default function FortnoxPage() {
             Koppla Qopla-butiker till Fortnox-bolag. Körs automatiskt 23:00 — verifikat skapas i serie F.
           </p>
         </div>
-        <button
-          onClick={handleRun}
-          disabled={runSync.isPending}
-          className="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-        >
-          {runSync.isPending ? <Spinner size={16} className="border-white border-t-white/30" /> : <Play size={16} />}
-          Kör nu
-        </button>
+        <div className="shrink-0 flex items-center gap-2">
+          <button
+            onClick={handleReconcile}
+            disabled={reconcile.isPending}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 transition-colors"
+            title="Kontrollera bokförda verifikat mot Fortnox och flagga borttagna"
+          >
+            {reconcile.isPending ? <Spinner size={16} /> : <RefreshCw size={16} />}
+            Synka status
+          </button>
+          <button
+            onClick={handleRun}
+            disabled={runSync.isPending}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+          >
+            {runSync.isPending ? <Spinner size={16} className="border-white border-t-white/30" /> : <Play size={16} />}
+            Kör nu
+          </button>
+        </div>
       </div>
 
       {/* Prerequisites note */}
@@ -223,7 +245,9 @@ export default function FortnoxPage() {
                     {p.message && <div className="text-xs text-slate-400 truncate">{p.message}</div>}
                   </div>
                   {p.voucher_number && (
-                    <span className="shrink-0 text-xs font-mono text-slate-500">{p.voucher_number}</span>
+                    <span className={`shrink-0 text-xs font-mono ${p.status === 'deleted' ? 'text-red-400 line-through' : 'text-slate-500'}`}>
+                      {p.voucher_number}
+                    </span>
                   )}
                 </div>
               ))}
@@ -240,6 +264,8 @@ function StatusBadge({ status }: { status: string }) {
     return <span className="shrink-0 inline-flex items-center gap-1 text-emerald-600"><CheckCircle2 size={15} /></span>
   if (status === 'error')
     return <span className="shrink-0 inline-flex items-center gap-1 text-red-500"><AlertCircle size={15} /></span>
+  if (status === 'deleted')
+    return <span className="shrink-0 inline-flex items-center gap-1 text-red-500" title="Borttagen i Fortnox"><Ban size={15} /></span>
   return <span className="shrink-0 inline-flex items-center gap-1 text-slate-300"><MinusCircle size={15} /></span>
 }
 

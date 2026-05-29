@@ -12,8 +12,14 @@
 //      SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY, QOPLA_EMAIL, QOPLA_PASSWORD.
 
 import { getSession, getDateRange, fetchSiePayload, stockholmHourNow } from "./_lib/qopla.js";
-import { sbSelect, sbInsert, getUserFromJwt } from "./_lib/supabaseAdmin.js";
-import { buildVouchersFromSie, getCompanyAccessToken, createVoucher } from "./_lib/fortnox.js";
+import { sbSelect, sbInsert, sbUpdate, getUserFromJwt } from "./_lib/supabaseAdmin.js";
+import { buildVouchersFromSie, getCompanyAccessToken, createVoucher, getVoucher } from "./_lib/fortnox.js";
+
+// Split a stored voucher token like "F327" into { series: "F", number: "327" }.
+function parseVoucher(token) {
+  const m = /^([A-Za-zÅÄÖåäö]+)\s*(\d+)$/.exec(String(token).trim());
+  return m ? { series: m[1], number: m[2] } : null;
+}
 
 function getBearer(req) {
   const h = req.headers.authorization || req.headers.Authorization || "";
@@ -47,6 +53,11 @@ export default async function handler(req, res) {
 
   if (!(await authorize(req))) {
     return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  // Reconcile: re-check posted vouchers against Fortnox; flag ones deleted there.
+  if (req.query.action === "reconcile") {
+    return await reconcile(res);
   }
 
   const force = req.query.force === "1" || req.query.force === "true";
@@ -153,4 +164,42 @@ async function record(shopId, businessDate, companyId, referenceReportId, status
   } catch {
     // Logging must never break the run.
   }
+}
+
+// Re-check the most recent successfully-posted vouchers against Fortnox. Any voucher
+// that no longer exists there (deleted in the Fortnox UI) is marked 'deleted' so the
+// admin list reflects reality. Capped to the latest 100 to stay under rate limits.
+async function reconcile(res) {
+  const rows = await sbSelect(
+    "fortnox_postings",
+    "select=*&status=eq.ok&voucher_number=not.is.null&order=created_at.desc&limit=100",
+  );
+  const tokens = await sbSelect("fortnox_tokens", "select=*");
+  const tokenByCompany = new Map((tokens || []).map(t => [t.company_id, t]));
+
+  const changed = [];
+  for (const p of rows || []) {
+    const tokenRow = tokenByCompany.get(p.company_id);
+    if (!tokenRow) continue;
+    try {
+      const accessToken = await getCompanyAccessToken(tokenRow);
+      const missing = [];
+      for (const tok of String(p.voucher_number).split(",").map(s => s.trim()).filter(Boolean)) {
+        const pv = parseVoucher(tok);
+        if (!pv) continue;
+        const r = await getVoucher(accessToken, pv.series, pv.number, p.business_date);
+        if (!r.found) missing.push(tok);
+      }
+      if (missing.length) {
+        await sbUpdate("fortnox_postings", `id=eq.${p.id}`, {
+          status: "deleted",
+          message: `Borttagen i Fortnox: ${missing.join(", ")}`,
+        });
+        changed.push({ shop: p.qopla_shop_id, voucher: p.voucher_number, businessDate: p.business_date });
+      }
+    } catch {
+      // Transient error (auth/network/rate limit) — leave the row unchanged.
+    }
+  }
+  return res.status(200).json({ reconciledAt: new Date().toISOString(), changed });
 }

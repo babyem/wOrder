@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { FileText, Download } from 'lucide-react'
+import { FileText, Download, RefreshCw } from 'lucide-react'
 import Spinner from '../../components/ui/Spinner'
 import { useQoplaOverview } from '../../plugins/qopla/useQoplaOverview'
 
@@ -82,7 +82,7 @@ export default function ReportsPage() {
   const startISO = range.start.toISOString()
   const endISO = range.end.toISOString()
 
-  const { data, isLoading, isError } = useQoplaOverview({ startISO, endISO })
+  const { data, isLoading, isError, isFetching, refetch, dataUpdatedAt } = useQoplaOverview({ startISO, endISO })
 
   const totals = useMemo(() => {
     if (!data) return { sales: 0, orders: 0 }
@@ -115,7 +115,21 @@ export default function ReportsPage() {
           <p className="text-sm text-slate-500">
             {range.label} · {formatDate(range.start)} – {formatDate(range.end)}
           </p>
+          {dataUpdatedAt > 0 && (
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Senast hämtad {new Date(dataUpdatedAt).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}
+            </p>
+          )}
         </div>
+        <button
+          onClick={() => refetch()}
+          disabled={isFetching}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 bg-white text-slate-700 hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-50 transition-colors"
+          title="Hämta senaste siffrorna"
+        >
+          <RefreshCw size={13} className={isFetching ? 'animate-spin' : ''} />
+          {isFetching ? 'Synkar…' : 'Synka'}
+        </button>
       </div>
 
       <div className="flex flex-wrap gap-2">

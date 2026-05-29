@@ -29,8 +29,11 @@ export function useQoplaOverview(opts: FetchOptions) {
   return useQuery({
     queryKey: ['qopla-overview', opts.startISO, opts.endISO],
     queryFn: () => fetchOverview(opts),
-    staleTime: 5 * 60 * 1000,
-    gcTime: 30 * 60 * 1000, // keep in memory for 30 min so preset switches feel instant
+    staleTime: Infinity,           // never auto-stale, manual refetch only
+    gcTime: 30 * 60 * 1000,        // keep in memory 30 min for preset switches
     placeholderData: prev => prev, // show last data while refetching
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   })
 }

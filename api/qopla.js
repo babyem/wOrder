@@ -176,80 +176,59 @@ async function handleReports({ companyId, token, reportType, pageNumber, pageIte
   return { reports: perShop };
 }
 
-// SIE-nedladdning — gissade endpoints, behöver verifieras mot Qopla
-async function handleSie({ companyId, token, reportId, shopId, startDate, endDate, res }) {
-  const qReportToken = await getQReportToken(companyId, shopId, token);
-
-  // GET-candidates (URL only)
-  const getCandidates = reportId
-    ? [
-        `${QREPORT_URL}/sie/${reportId}`,
-        `${QREPORT_URL}/sie?reportId=${reportId}`,
-        `${QREPORT_URL}/download/sie/${reportId}`,
-        `${QREPORT_URL}/report/${reportId}/sie`,
-      ]
-    : [
-        `${QREPORT_URL}/sie?shopId=${shopId}&startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`,
-        `${QREPORT_URL}/sie/${shopId}?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`,
-      ];
-
-  // POST-candidates (URL + body)
-  const postBody = JSON.stringify({ shopIDs: [shopId], startDate, endDate, reportId });
-  const postCandidates = [
-    `${QREPORT_URL}/sie`,
-    `${QREPORT_URL}/download/sie`,
-    `${QREPORT_URL}/sie/export`,
-  ];
-
-  const tried = [];
-  let lastStatus = 0;
-
-  const send = (r, fallbackName) => {
-    const ct = r.headers.get("content-type") || "application/octet-stream";
-    res.setHeader("Content-Type", ct);
-    res.setHeader("Content-Disposition", `attachment; filename="${fallbackName}"`);
-  };
-
-  for (const url of getCandidates) {
-    tried.push(`GET ${url}`);
-    const r = await fetch(url, {
-      headers: { Authorization: qReportToken, Accept: "application/octet-stream, */*" },
-    });
-    if (r.ok) {
-      const buf = Buffer.from(await r.arrayBuffer());
-      const name = reportId ? `zrapport-${reportId}.se` : `rapport-${shopId}-${startDate?.slice(0,10)}.se`;
-      send(r, name);
-      return res.status(200).send(buf);
+// SIE-nedladdning — GraphQL mutation createSIEFileByDate
+const SIE_MUTATION = `mutation createSIEFileByDate($shopId: String, $startDate: String, $endDate: String) {
+  createSIEFileByDate(shopId: $shopId, startDate: $startDate, endDate: $endDate) {
+    header
+    referenceReportId
+    verifications {
+      date
+      name
+      sieTransactions {
+        sieAccountNumber
+        amount
+        costCenter
+      }
     }
-    lastStatus = r.status;
+  }
+}`;
+
+function buildSieFile(payload) {
+  const lines = [];
+  // Header is already a multi-line string with CRLFs
+  lines.push((payload.header || "").replace(/\r?\n$/, ""));
+
+  let verNum = 1;
+  for (const v of payload.verifications || []) {
+    const date = (v.date || "").replace(/-/g, "").slice(0, 8);
+    const name = (v.name || "").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    lines.push(`#VER "A" "${verNum}" ${date} "${name}" ${date}`);
+    lines.push("{");
+    for (const t of v.sieTransactions || []) {
+      const cc = t.costCenter ? `{"1" "${t.costCenter}"}` : "{}";
+      const amt = Number(t.amount || 0).toFixed(2);
+      lines.push(`\t#TRANS ${t.sieAccountNumber} ${cc} ${amt}`);
+    }
+    lines.push("}");
+    verNum++;
+  }
+  return lines.join("\r\n") + "\r\n";
+}
+
+async function handleSie({ token, shopId, startDate, endDate, res }) {
+  const data = await gql(SIE_MUTATION, { shopId, startDate, endDate }, token);
+  const payload = data.createSIEFileByDate;
+  if (!payload) {
+    return res.status(500).json({ error: "createSIEFileByDate returnerade tomt" });
   }
 
-  for (const url of postCandidates) {
-    tried.push(`POST ${url}`);
-    const r = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: qReportToken,
-        "Content-Type": "application/json;charset=utf-8",
-        Accept: "application/octet-stream, */*",
-      },
-      body: postBody,
-    });
-    if (r.ok) {
-      const buf = Buffer.from(await r.arrayBuffer());
-      const name = reportId ? `zrapport-${reportId}.se` : `rapport-${shopId}-${startDate?.slice(0,10)}.se`;
-      send(r, name);
-      return res.status(200).send(buf);
-    }
-    lastStatus = r.status;
-  }
-
-  return res.status(404).json({
-    error: "SIE-endpoint hittades ej",
-    hint: "Capturer SIE-download-request från Qopla DevTools och uppdatera handleSie() med rätt URL",
-    lastStatus,
-    tried,
-  });
+  const text = buildSieFile(payload);
+  // SIE-filer använder CP437 (PC8). Skicka som ISO-8859-1 ger bättre kompatibilitet
+  // i Bokio/Visma; UTF-8 räcker oftast men varna inte här.
+  const fileName = `rapport-${shopId}-${(startDate || "").slice(0, 10)}.se`;
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+  return res.status(200).send(text);
 }
 
 export default async function handler(req, res) {
@@ -290,17 +269,13 @@ export default async function handler(req, res) {
     }
 
     if (action === "sie") {
-      const reportId = req.query.reportId || null;
       const shopId = req.query.shopId;
-      const start = req.query.start || null;
-      const end = req.query.end || null;
-      if (!shopId) {
-        return res.status(400).json({ error: "shopId krävs" });
+      const start = req.query.start;
+      const end = req.query.end;
+      if (!shopId || !start || !end) {
+        return res.status(400).json({ error: "shopId, start och end krävs" });
       }
-      if (!reportId && !(start && end)) {
-        return res.status(400).json({ error: "reportId ELLER start+end krävs" });
-      }
-      return await handleSie({ companyId, token, reportId, shopId, startDate: start, endDate: end, res });
+      return await handleSie({ token, shopId, startDate: start, endDate: end, res });
     }
 
     // default: sales overview (idag/igår)

@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, ShoppingBag, Package, Settings, LogOut, ChefHat, Menu, X, FileBarChart } from 'lucide-react'
+import { LayoutDashboard, ShoppingBag, Package, Settings, LogOut, ChefHat, Menu, X, FileBarChart, ReceiptText } from 'lucide-react'
 import { useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { QoplaSalesWidget } from '../../plugins/qopla/QoplaSalesWidget'
@@ -11,6 +11,7 @@ const navItems = [
   { to: '/admin/orders', label: 'Orders', icon: ShoppingBag, end: false },
   { to: '/admin/products', label: 'Products', icon: Package, end: false },
   { to: '/admin/reports', label: 'Rapporter', icon: FileBarChart, end: false },
+  { to: '/admin/fortnox', label: 'Fortnox', icon: ReceiptText, end: false },
   { to: '/admin/settings', label: 'Settings', icon: Settings, end: false },
 ]
 

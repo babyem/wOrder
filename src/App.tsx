@@ -11,6 +11,7 @@ import ProductsPage from './pages/admin/ProductsPage'
 import SettingsPage from './pages/admin/SettingsPage'
 import LocationPage from './pages/admin/LocationPage'
 import ReportsPage from './pages/admin/ReportsPage'
+import FortnoxPage from './pages/admin/FortnoxPage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const user = useAuthStore(s => s.user)
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="orders" element={<OrdersPage />} />
         <Route path="products" element={<ProductsPage />} />
         <Route path="reports" element={<ReportsPage />} />
+        <Route path="fortnox" element={<FortnoxPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="locations/:locationId" element={<LocationPage />} />
       </Route>

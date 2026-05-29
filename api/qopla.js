@@ -107,15 +107,19 @@ async function getQReportToken(companyId, shopId, token) {
   return qToken;
 }
 
-async function fetchShopOverview({ companyId, token, shop, startDate, endDate }) {
-  const qReportToken = await getQReportToken(companyId, shop.id, token);
+async function fetchOverviewRaw({ companyId, token, shopId, startDate, endDate }) {
+  const qReportToken = await getQReportToken(companyId, shopId, token);
   const r = await fetch(`${QREPORT_URL}/overview`, {
     method: "POST",
     headers: { "Content-Type": "application/json;charset=utf-8", Authorization: qReportToken },
-    body: JSON.stringify({ shopIDs: [shop.id], startDate, endDate }),
+    body: JSON.stringify({ shopIDs: [shopId], startDate, endDate }),
   });
   const text = await r.text();
-  const data = text ? JSON.parse(text) : { aggregatedReport: {} };
+  return text ? JSON.parse(text) : { aggregatedReport: {} };
+}
+
+async function fetchShopOverview({ companyId, token, shop, startDate, endDate }) {
+  const data = await fetchOverviewRaw({ companyId, token, shopId: shop.id, startDate, endDate });
   const report = data.aggregatedReport || {};
   let totalSum = 0, totalOrders = 0;
   const byChannel = {};
@@ -125,6 +129,40 @@ async function fetchShopOverview({ companyId, token, shop, startDate, endDate })
     byChannel[channel] = { sales: ch.totalSum || 0, orders: ch.quantityOfOrders || 0 };
   }
   return { totalSum, totalOrders, byChannel };
+}
+
+// Stockholm-timme (0–23) från unix-sekunder
+function stockholmHourFromUnixSeconds(unixSec) {
+  const d = new Date(unixSec * 1000);
+  const h = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Stockholm", hour: "2-digit", hour12: false,
+  }).format(d);
+  return parseInt(h, 10) % 24;
+}
+
+// Timme-försäljning: aggregatedReport[channel].saleStatsPerHour = { [hourUnix]: { total, totalNet } }
+async function handleHourly({ companyId, token, shopId, startDate, endDate, includeVat = true }) {
+  const data = await fetchOverviewRaw({ companyId, token, shopId, startDate, endDate });
+  const report = data.aggregatedReport || {};
+
+  // hour-of-day (0–23) -> { sales }
+  const byHour = new Map();
+  for (const ch of Object.values(report)) {
+    const stats = ch && ch.saleStatsPerHour;
+    if (!stats || typeof stats !== "object") continue;
+    for (const [hourUnix, v] of Object.entries(stats)) {
+      const amount = includeVat ? (v.total || 0) : (v.totalNet || 0);
+      if (!amount) continue;
+      const hour = stockholmHourFromUnixSeconds(parseInt(hourUnix, 10));
+      byHour.set(hour, (byHour.get(hour) || 0) + amount);
+    }
+  }
+
+  const hourly = [...byHour.entries()]
+    .map(([hour, sales]) => ({ hour, sales, orders: 0 }))
+    .sort((a, b) => a.hour - b.hour);
+
+  return { hourly };
 }
 
 async function handleSales({ companyId, token, shops, daysAgo }) {
@@ -211,71 +249,6 @@ async function handleReports({ token, shops, reportType, pageNumber, pageItems, 
     }
   }));
   return { reports };
-}
-
-// Timme-rapport — försök hitta endpoint. Capture verklig från Qopla analyticsDashboard
-async function handleHourly({ companyId, token, shopId, startDate, endDate }) {
-  const qReportToken = await getQReportToken(companyId, shopId, token);
-
-  // Försök 1: qreport.qopla.com/overview med groupBy=hour
-  const tried = [];
-  try {
-    tried.push("POST /overview { groupBy: 'hour' }");
-    const r = await fetch(`${QREPORT_URL}/overview`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json;charset=utf-8", Authorization: qReportToken },
-      body: JSON.stringify({ shopIDs: [shopId], startDate, endDate, groupBy: "hour" }),
-    });
-    if (r.ok) {
-      const text = await r.text();
-      const data = text ? JSON.parse(text) : null;
-      const buckets = parseHourlyResponse(data);
-      if (buckets) return { hourly: buckets, tried };
-    }
-  } catch {}
-
-  // Försök 2: /overview-per-hour
-  for (const path of ["/overview-per-hour", "/sales-per-hour", "/hourly"]) {
-    try {
-      tried.push(`POST ${path}`);
-      const r = await fetch(`${QREPORT_URL}${path}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json;charset=utf-8", Authorization: qReportToken },
-        body: JSON.stringify({ shopIDs: [shopId], startDate, endDate }),
-      });
-      if (r.ok) {
-        const text = await r.text();
-        const data = text ? JSON.parse(text) : null;
-        const buckets = parseHourlyResponse(data);
-        if (buckets) return { hourly: buckets, tried };
-      }
-    } catch {}
-  }
-
-  return {
-    error: "Timme-endpoint hittades ej",
-    hint: "Capturer hourly-request från Qopla analyticsDashboard och uppdatera handleHourly()",
-    tried,
-  };
-}
-
-function parseHourlyResponse(data) {
-  if (!data) return null;
-  // Olika möjliga shapes — försök hitta hour-buckets
-  if (Array.isArray(data?.hourly)) return data.hourly;
-  if (Array.isArray(data?.buckets)) return data.buckets;
-  if (data?.aggregatedReport && typeof data.aggregatedReport === "object") {
-    // Om response har hour-keys: { "00": {totalSum, quantityOfOrders}, ... }
-    const keys = Object.keys(data.aggregatedReport);
-    if (keys.length && /^\d{1,2}$/.test(keys[0])) {
-      return keys.map(h => ({
-        hour: parseInt(h, 10),
-        sales: data.aggregatedReport[h].totalSum || 0,
-        orders: data.aggregatedReport[h].quantityOfOrders || 0,
-      })).sort((a, b) => a.hour - b.hour);
-    }
-  }
-  return null;
 }
 
 // SIE-nedladdning — GraphQL mutation createSIEFileByDate
@@ -371,10 +344,8 @@ export default async function handler(req, res) {
       if (!shopId || !start || !end) {
         return res.status(400).json({ error: "shopId, start och end krävs" });
       }
-      const out = await handleHourly({ companyId, token, shopId, startDate: start, endDate: end });
-      if (out.error) {
-        return res.status(501).json(out);
-      }
+      const includeVat = req.query.vat !== "false";
+      const out = await handleHourly({ companyId, token, shopId, startDate: start, endDate: end, includeVat });
       res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
       return res.status(200).json({ ...out, fetchedAt: new Date().toISOString() });
     }

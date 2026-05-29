@@ -41,7 +41,15 @@ function getDateRange(daysAgo = 0) {
   return { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
 }
 
-async function login(email, password) {
+// ---------- Module-scope cache (per warm container) ----------
+// Login + shops are stable across requests; cache while serverless container stays warm
+let SESSION_CACHE = null; // { token, companyId, shops, expiresAt }
+// qReportToken per shop (or shared) cache
+const QR_TOKEN_CACHE = new Map(); // key=shopId -> { token, expiresAt }
+
+const SESSION_TTL_MS = 5 * 60 * 1000; // 5 min safe under Qopla's ttlTimeoutMs
+
+async function loginRaw(email, password) {
   const data = await gql(
     `mutation login($credentials: CredentialsInput) {
       login(userCredentials: $credentials) { token companyId }
@@ -49,10 +57,10 @@ async function login(email, password) {
     }`,
     { credentials: { username: email, password } }
   );
-  return data.login;
+  return { ...data.login, ttlTimeoutMs: data.ttlTimeoutMs };
 }
 
-async function getShops(companyId, token) {
+async function getShopsRaw(companyId, token) {
   const data = await gql(
     `query getCompanyShops($companyId: String!) {
       getCompanyShops(companyId: $companyId) { id name }
@@ -62,14 +70,41 @@ async function getShops(companyId, token) {
   return data.getCompanyShops;
 }
 
+async function getSession() {
+  const now = Date.now();
+  if (SESSION_CACHE && SESSION_CACHE.expiresAt > now) {
+    return SESSION_CACHE;
+  }
+  const email = process.env.QOPLA_EMAIL;
+  const password = process.env.QOPLA_PASSWORD;
+  if (!email || !password) {
+    throw new Error("QOPLA_EMAIL / QOPLA_PASSWORD saknas i miljövariabler");
+  }
+  const login = await loginRaw(email, password);
+  const shops = await getShopsRaw(login.companyId, login.token);
+  const ttl = Math.min(login.ttlTimeoutMs || SESSION_TTL_MS, SESSION_TTL_MS);
+  SESSION_CACHE = {
+    token: login.token,
+    companyId: login.companyId,
+    shops,
+    expiresAt: now + ttl - 30_000, // 30s safety margin
+  };
+  return SESSION_CACHE;
+}
+
 async function getQReportToken(companyId, shopId, token) {
+  const now = Date.now();
+  const cached = QR_TOKEN_CACHE.get(shopId);
+  if (cached && cached.expiresAt > now) return cached.token;
   const data = await gql(
     `query qReportToken($companyId: String, $shopIds: [String]) {
       getQReportToken(companyId: $companyId, shopIds: $shopIds)
     }`,
     { companyId, shopIds: [shopId] }, token
   );
-  return data.getQReportToken;
+  const qToken = data.getQReportToken;
+  QR_TOKEN_CACHE.set(shopId, { token: qToken, expiresAt: now + SESSION_TTL_MS - 30_000 });
+  return qToken;
 }
 
 async function fetchShopOverview({ companyId, token, shop, startDate, endDate }) {
@@ -92,36 +127,35 @@ async function fetchShopOverview({ companyId, token, shop, startDate, endDate })
   return { totalSum, totalOrders, byChannel };
 }
 
-async function handleSales({ companyId, token, daysAgo }) {
-  const shops = await getShops(companyId, token);
+async function handleSales({ companyId, token, shops, daysAgo }) {
   const { startDate, endDate } = getDateRange(daysAgo);
-
-  const sales = [];
-  for (const shop of shops) {
-    const o = await fetchShopOverview({ companyId, token, shop, startDate, endDate });
-    sales.push({ shopId: shop.id, restaurant: shop.name, sales: o.totalSum, orders: o.totalOrders, currency: "SEK" });
-  }
+  const sales = await Promise.all(shops.map(async shop => {
+    try {
+      const o = await fetchShopOverview({ companyId, token, shop, startDate, endDate });
+      return { shopId: shop.id, restaurant: shop.name, sales: o.totalSum, orders: o.totalOrders, currency: "SEK" };
+    } catch {
+      return { shopId: shop.id, restaurant: shop.name, sales: 0, orders: 0, currency: "SEK" };
+    }
+  }));
   return { sales };
 }
 
-async function handleOverview({ companyId, token, startDate, endDate }) {
-  const shops = await getShops(companyId, token);
-  const perShop = [];
-  for (const shop of shops) {
+async function handleOverview({ companyId, token, shops, startDate, endDate }) {
+  const overview = await Promise.all(shops.map(async shop => {
     try {
       const o = await fetchShopOverview({ companyId, token, shop, startDate, endDate });
-      perShop.push({
+      return {
         shopId: shop.id,
         shopName: shop.name,
         totalSales: o.totalSum,
         totalOrders: o.totalOrders,
         byChannel: o.byChannel,
-      });
+      };
     } catch {
-      perShop.push({ shopId: shop.id, shopName: shop.name, totalSales: 0, totalOrders: 0, byChannel: {} });
+      return { shopId: shop.id, shopName: shop.name, totalSales: 0, totalOrders: 0, byChannel: {} };
     }
-  }
-  return { overview: perShop };
+  }));
+  return { overview };
 }
 
 const REPORTS_QUERY = `query getReports($shopId: String, $posId: String, $reportType: ReportType, $pageNumber: Int, $pageItems: Int) {
@@ -154,26 +188,29 @@ const REPORTS_QUERY = `query getReports($shopId: String, $posId: String, $report
   }
 }`;
 
-async function handleReports({ companyId, token, reportType, pageNumber, pageItems, shopId }) {
-  const shops = shopId
-    ? [(await getShops(companyId, token)).find(s => s.id === shopId)].filter(Boolean)
-    : await getShops(companyId, token);
+async function handleReports({ token, shops, reportType, pageNumber, pageItems, shopId }) {
+  const targetShops = shopId
+    ? shops.filter(s => s.id === shopId)
+    : shops;
 
-  const perShop = [];
-  for (const shop of shops) {
-    const data = await gql(
-      REPORTS_QUERY,
-      { shopId: shop.id, reportType, pageNumber, pageItems },
-      token
-    );
-    perShop.push({
-      shopId: shop.id,
-      shopName: shop.name,
-      totalCount: data.numberOfReports || 0,
-      items: data.getReports || [],
-    });
-  }
-  return { reports: perShop };
+  const reports = await Promise.all(targetShops.map(async shop => {
+    try {
+      const data = await gql(
+        REPORTS_QUERY,
+        { shopId: shop.id, reportType, pageNumber, pageItems },
+        token
+      );
+      return {
+        shopId: shop.id,
+        shopName: shop.name,
+        totalCount: data.numberOfReports || 0,
+        items: data.getReports || [],
+      };
+    } catch {
+      return { shopId: shop.id, shopName: shop.name, totalCount: 0, items: [] };
+    }
+  }));
+  return { reports };
 }
 
 // SIE-nedladdning — GraphQL mutation createSIEFileByDate
@@ -195,7 +232,6 @@ const SIE_MUTATION = `mutation createSIEFileByDate($shopId: String, $startDate: 
 
 function buildSieFile(payload) {
   const lines = [];
-  // Header is already a multi-line string with CRLFs
   lines.push((payload.header || "").replace(/\r?\n$/, ""));
 
   let verNum = 1;
@@ -234,14 +270,8 @@ async function handleSie({ token, shopId, startDate, endDate, name, res }) {
 export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).end();
 
-  const email = process.env.QOPLA_EMAIL;
-  const password = process.env.QOPLA_PASSWORD;
-  if (!email || !password) {
-    return res.status(500).json({ error: "QOPLA_EMAIL / QOPLA_PASSWORD saknas i miljövariabler" });
-  }
-
   try {
-    const { token, companyId } = await login(email, password);
+    const { token, companyId, shops } = await getSession();
     const action = req.query.action || "sales";
 
     if (action === "reports") {
@@ -252,7 +282,7 @@ export default async function handler(req, res) {
       const pageNumber = parseInt(req.query.page || "1", 10);
       const pageItems = parseInt(req.query.items || "10", 10);
       const shopId = req.query.shopId || null;
-      const out = await handleReports({ companyId, token, reportType, pageNumber, pageItems, shopId });
+      const out = await handleReports({ token, shops, reportType, pageNumber, pageItems, shopId });
       res.setHeader("Cache-Control", reportType === "Z" ? "s-maxage=600" : "s-maxage=120");
       return res.status(200).json({ ...out, fetchedAt: new Date().toISOString() });
     }
@@ -263,8 +293,9 @@ export default async function handler(req, res) {
       if (!start || !end) {
         return res.status(400).json({ error: "start och end (ISO) krävs" });
       }
-      const out = await handleOverview({ companyId, token, startDate: start, endDate: end });
-      res.setHeader("Cache-Control", "s-maxage=300");
+      const out = await handleOverview({ companyId, token, shops, startDate: start, endDate: end });
+      // Vercel edge cache + browser cache
+      res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
       return res.status(200).json({ ...out, fetchedAt: new Date().toISOString() });
     }
 
@@ -279,12 +310,13 @@ export default async function handler(req, res) {
       return await handleSie({ token, shopId, startDate: start, endDate: end, name, res });
     }
 
-    // default: sales overview (idag/igår)
     const daysAgo = req.query.date === "yesterday" ? 1 : 0;
-    const out = await handleSales({ companyId, token, daysAgo });
-    res.setHeader("Cache-Control", "s-maxage=300");
+    const out = await handleSales({ companyId, token, shops, daysAgo });
+    res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
     return res.status(200).json({ ...out, fetchedAt: new Date().toISOString() });
   } catch (err) {
+    // Bust cache on auth errors so next request re-logins
+    if (/token|auth|login/i.test(err.message)) SESSION_CACHE = null;
     return res.status(500).json({ error: err.message });
   }
 }

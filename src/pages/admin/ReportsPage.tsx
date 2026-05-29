@@ -1,16 +1,14 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Download, RefreshCw } from 'lucide-react'
-import { useQueryClient } from '@tanstack/react-query'
 import Spinner from '../../components/ui/Spinner'
 import { useQoplaOverview, type QoplaShopOverview } from '../../plugins/qopla/useQoplaOverview'
 
-type PeriodKey = 'today' | 'yesterday' | 'week' | 'month' | 'lastMonth'
+type Preset = 'today' | 'yesterday' | 'week' | 'month' | 'lastMonth' | 'custom'
 
-interface PeriodDef {
-  key: PeriodKey
-  label: string
+interface DateRange {
   start: Date
   end: Date
+  label: string
 }
 
 function startOfDay(d: Date) {
@@ -24,23 +22,37 @@ function endOfDay(d: Date) {
   return x
 }
 
-function buildPeriods(): PeriodDef[] {
+function computeRange(preset: Preset, customStart?: string, customEnd?: string): DateRange {
   const now = new Date()
-  const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1)
-  const weekStart = new Date(now)
-  weekStart.setDate(now.getDate() - ((weekStart.getDay() + 6) % 7))
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-  const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0)
-
-  return [
-    { key: 'today', label: 'Idag', start: startOfDay(now), end: endOfDay(now) },
-    { key: 'yesterday', label: 'Igår', start: startOfDay(yesterday), end: endOfDay(yesterday) },
-    { key: 'week', label: 'Denna vecka', start: startOfDay(weekStart), end: endOfDay(now) },
-    { key: 'month', label: 'Denna månad', start: startOfDay(monthStart), end: endOfDay(monthEnd) },
-    { key: 'lastMonth', label: 'Föregående månad', start: startOfDay(lastMonthStart), end: endOfDay(lastMonthEnd) },
-  ]
+  switch (preset) {
+    case 'today':
+      return { start: startOfDay(now), end: endOfDay(now), label: 'Idag' }
+    case 'yesterday': {
+      const y = new Date(now); y.setDate(now.getDate() - 1)
+      return { start: startOfDay(y), end: endOfDay(y), label: 'Igår' }
+    }
+    case 'week': {
+      const d = new Date(now)
+      const day = (d.getDay() + 6) % 7
+      d.setDate(d.getDate() - day)
+      return { start: startOfDay(d), end: endOfDay(now), label: 'Denna vecka' }
+    }
+    case 'month': {
+      const s = new Date(now.getFullYear(), now.getMonth(), 1)
+      const e = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+      return { start: startOfDay(s), end: endOfDay(e), label: 'Denna månad' }
+    }
+    case 'lastMonth': {
+      const s = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      const e = new Date(now.getFullYear(), now.getMonth(), 0)
+      return { start: startOfDay(s), end: endOfDay(e), label: 'Föregående månad' }
+    }
+    case 'custom': {
+      const s = customStart ? new Date(customStart) : startOfDay(now)
+      const e = customEnd ? new Date(customEnd) : endOfDay(now)
+      return { start: startOfDay(s), end: endOfDay(e), label: 'Anpassat' }
+    }
+  }
 }
 
 function formatKr(n: number) {
@@ -59,45 +71,25 @@ function safeName(s: string) {
   return s.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_-]/g, '')
 }
 
-export default function ReportsPage() {
-  const periods = useMemo(buildPeriods, [])
-  const queryClient = useQueryClient()
-
-  const handleSync = () => {
-    queryClient.invalidateQueries({ queryKey: ['qopla-overview'] })
-    periods.forEach(p => {
-      queryClient.refetchQueries({ queryKey: ['qopla-overview', p.start.toISOString(), p.end.toISOString()] })
-    })
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Rapporter</h1>
-          <p className="text-sm text-slate-500">Alla perioder · alla restauranger</p>
-        </div>
-        <button
-          onClick={handleSync}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 bg-white text-slate-700 hover:border-indigo-300 hover:text-indigo-600 transition-colors"
-          title="Hämta senaste siffrorna"
-        >
-          <RefreshCw size={13} />
-          Synka
-        </button>
-      </div>
-
-      {periods.map(period => (
-        <PeriodSection key={period.key} period={period} />
-      ))}
-    </div>
-  )
+const PRESET_LABELS: Record<Preset, string> = {
+  today: 'Idag',
+  yesterday: 'Igår',
+  week: 'Denna vecka',
+  month: 'Denna månad',
+  lastMonth: 'Föregående månad',
+  custom: 'Anpassat',
 }
 
-function PeriodSection({ period }: { period: PeriodDef }) {
-  const startISO = period.start.toISOString()
-  const endISO = period.end.toISOString()
-  const { data, isLoading, isError, isFetching } = useQoplaOverview({ startISO, endISO })
+export default function ReportsPage() {
+  const [preset, setPreset] = useState<Preset>('month')
+  const [customStart, setCustomStart] = useState('')
+  const [customEnd, setCustomEnd] = useState('')
+
+  const range = useMemo(() => computeRange(preset, customStart, customEnd), [preset, customStart, customEnd])
+  const startISO = range.start.toISOString()
+  const endISO = range.end.toISOString()
+
+  const { data, isLoading, isError, isFetching, refetch, dataUpdatedAt } = useQoplaOverview({ startISO, endISO })
 
   const totals = useMemo(() => {
     if (!data) return { sales: 0, orders: 0 }
@@ -113,32 +105,78 @@ function PeriodSection({ period }: { period: PeriodDef }) {
   }, [data])
 
   return (
-    <div className="bg-white border border-slate-100 rounded-xl p-3">
-      <div className="flex items-baseline justify-between mb-2 px-1">
-        <h2 className="text-sm font-semibold text-slate-700">{period.label}</h2>
-        <span className="text-[11px] text-slate-400">
-          {formatDate(period.start)} – {formatDate(period.end)}
-          {isFetching && !isLoading && <span className="ml-2 text-indigo-500">synkar…</span>}
-        </span>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Rapporter</h1>
+          <p className="text-sm text-slate-500">
+            {range.label} · {formatDate(range.start)} – {formatDate(range.end)}
+          </p>
+          {dataUpdatedAt > 0 && (
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Senast hämtad {new Date(dataUpdatedAt).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}
+            </p>
+          )}
+        </div>
+        <button
+          onClick={() => refetch()}
+          disabled={isFetching}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 bg-white text-slate-700 hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-50 transition-colors"
+          title="Hämta senaste siffrorna"
+        >
+          <RefreshCw size={13} className={isFetching ? 'animate-spin' : ''} />
+          {isFetching ? 'Synkar…' : 'Synka'}
+        </button>
       </div>
 
-      {isLoading && (
-        <div className="flex justify-center py-6">
-          <Spinner size={20} />
-        </div>
-      )}
-      {isError && <p className="text-xs text-red-400 px-2 py-2">Kunde inte hämta data</p>}
+      <div className="flex flex-wrap gap-2">
+        {(Object.keys(PRESET_LABELS) as Preset[]).map(p => (
+          <button
+            key={p}
+            onClick={() => setPreset(p)}
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+              preset === p
+                ? 'bg-indigo-600 text-white border-indigo-600'
+                : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+            }`}
+          >
+            {PRESET_LABELS[p]}
+          </button>
+        ))}
+        {preset === 'custom' && (
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={customStart}
+              onChange={e => setCustomStart(e.target.value)}
+              className="text-xs px-2 py-1.5 border border-slate-200 rounded-lg"
+            />
+            <span className="text-slate-400">–</span>
+            <input
+              type="date"
+              value={customEnd}
+              onChange={e => setCustomEnd(e.target.value)}
+              className="text-xs px-2 py-1.5 border border-slate-200 rounded-lg"
+            />
+          </div>
+        )}
+      </div>
+
+      {isLoading && <div className="flex justify-center py-16"><Spinner size={32} /></div>}
+      {isError && <div className="bg-red-50 border border-red-200 text-red-600 rounded-xl p-4 text-sm">Kunde inte hämta data</div>}
 
       {data && (
-        <div className="space-y-0.5">
-          {sorted.map(s => (
-            <ShopRow key={s.shopId} shop={s} period={period} />
-          ))}
-          <div className="flex items-center gap-2 mt-1 pt-1.5 border-t border-slate-100 px-2 whitespace-nowrap">
-            <span className="flex-1 text-xs font-semibold text-slate-600">Totalt</span>
-            <span className="tabular-nums text-xs font-bold text-indigo-600 shrink-0 w-24 text-right">{formatKr(totals.sales)}</span>
-            <span className="tabular-nums text-[11px] text-slate-500 shrink-0 w-12 text-right">{totals.orders}</span>
-            <span className="shrink-0 w-12" />
+        <div className="bg-white border border-slate-100 rounded-xl p-3">
+          <div className="space-y-0.5">
+            {sorted.map(s => (
+              <ShopRow key={s.shopId} shop={s} range={range} />
+            ))}
+            <div className="flex items-center gap-2 mt-1 pt-1.5 border-t border-slate-100 px-2 whitespace-nowrap">
+              <span className="flex-1 text-xs font-semibold text-slate-600">Totalt</span>
+              <span className="tabular-nums text-xs font-bold text-indigo-600 shrink-0 w-24 text-right">{formatKr(totals.sales)}</span>
+              <span className="tabular-nums text-[11px] text-slate-500 shrink-0 w-12 text-right">{totals.orders}</span>
+              <span className="shrink-0 w-12" />
+            </div>
           </div>
         </div>
       )}
@@ -146,14 +184,14 @@ function PeriodSection({ period }: { period: PeriodDef }) {
   )
 }
 
-function ShopRow({ shop, period }: { shop: QoplaShopOverview; period: PeriodDef }) {
+function ShopRow({ shop, range }: { shop: QoplaShopOverview; range: DateRange }) {
   const handleSie = () => {
-    const fileName = `${safeName(shop.shopName)}_SIE${ymd(period.start)}-${ymd(period.end)}.se`
+    const fileName = `${safeName(shop.shopName)}_SIE${ymd(range.start)}-${ymd(range.end)}.se`
     const params = new URLSearchParams({
       action: 'sie',
       shopId: shop.shopId,
-      start: period.start.toISOString(),
-      end: period.end.toISOString(),
+      start: range.start.toISOString(),
+      end: range.end.toISOString(),
       name: fileName,
     })
     const url = `/api/qopla?${params.toString()}`
@@ -176,7 +214,7 @@ function ShopRow({ shop, period }: { shop: QoplaShopOverview; period: PeriodDef 
       </span>
       <button
         onClick={handleSie}
-        title={`Ladda ned SIE för ${period.label}`}
+        title={`Ladda ned SIE för ${range.label}`}
         className="shrink-0 inline-flex items-center justify-center gap-1 w-12 py-0.5 text-[10px] font-medium rounded text-indigo-600 hover:bg-indigo-50 transition-colors"
       >
         <Download size={10} />

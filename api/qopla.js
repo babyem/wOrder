@@ -213,6 +213,71 @@ async function handleReports({ token, shops, reportType, pageNumber, pageItems, 
   return { reports };
 }
 
+// Timme-rapport — försök hitta endpoint. Capture verklig från Qopla analyticsDashboard
+async function handleHourly({ companyId, token, shopId, startDate, endDate }) {
+  const qReportToken = await getQReportToken(companyId, shopId, token);
+
+  // Försök 1: qreport.qopla.com/overview med groupBy=hour
+  const tried = [];
+  try {
+    tried.push("POST /overview { groupBy: 'hour' }");
+    const r = await fetch(`${QREPORT_URL}/overview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json;charset=utf-8", Authorization: qReportToken },
+      body: JSON.stringify({ shopIDs: [shopId], startDate, endDate, groupBy: "hour" }),
+    });
+    if (r.ok) {
+      const text = await r.text();
+      const data = text ? JSON.parse(text) : null;
+      const buckets = parseHourlyResponse(data);
+      if (buckets) return { hourly: buckets, tried };
+    }
+  } catch {}
+
+  // Försök 2: /overview-per-hour
+  for (const path of ["/overview-per-hour", "/sales-per-hour", "/hourly"]) {
+    try {
+      tried.push(`POST ${path}`);
+      const r = await fetch(`${QREPORT_URL}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json;charset=utf-8", Authorization: qReportToken },
+        body: JSON.stringify({ shopIDs: [shopId], startDate, endDate }),
+      });
+      if (r.ok) {
+        const text = await r.text();
+        const data = text ? JSON.parse(text) : null;
+        const buckets = parseHourlyResponse(data);
+        if (buckets) return { hourly: buckets, tried };
+      }
+    } catch {}
+  }
+
+  return {
+    error: "Timme-endpoint hittades ej",
+    hint: "Capturer hourly-request från Qopla analyticsDashboard och uppdatera handleHourly()",
+    tried,
+  };
+}
+
+function parseHourlyResponse(data) {
+  if (!data) return null;
+  // Olika möjliga shapes — försök hitta hour-buckets
+  if (Array.isArray(data?.hourly)) return data.hourly;
+  if (Array.isArray(data?.buckets)) return data.buckets;
+  if (data?.aggregatedReport && typeof data.aggregatedReport === "object") {
+    // Om response har hour-keys: { "00": {totalSum, quantityOfOrders}, ... }
+    const keys = Object.keys(data.aggregatedReport);
+    if (keys.length && /^\d{1,2}$/.test(keys[0])) {
+      return keys.map(h => ({
+        hour: parseInt(h, 10),
+        sales: data.aggregatedReport[h].totalSum || 0,
+        orders: data.aggregatedReport[h].quantityOfOrders || 0,
+      })).sort((a, b) => a.hour - b.hour);
+    }
+  }
+  return null;
+}
+
 // SIE-nedladdning — GraphQL mutation createSIEFileByDate
 const SIE_MUTATION = `mutation createSIEFileByDate($shopId: String, $startDate: String, $endDate: String) {
   createSIEFileByDate(shopId: $shopId, startDate: $startDate, endDate: $endDate) {
@@ -295,6 +360,21 @@ export default async function handler(req, res) {
       }
       const out = await handleOverview({ companyId, token, shops, startDate: start, endDate: end });
       // Vercel edge cache + browser cache
+      res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
+      return res.status(200).json({ ...out, fetchedAt: new Date().toISOString() });
+    }
+
+    if (action === "hourly") {
+      const shopId = req.query.shopId;
+      const start = req.query.start;
+      const end = req.query.end;
+      if (!shopId || !start || !end) {
+        return res.status(400).json({ error: "shopId, start och end krävs" });
+      }
+      const out = await handleHourly({ companyId, token, shopId, startDate: start, endDate: end });
+      if (out.error) {
+        return res.status(501).json(out);
+      }
       res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
       return res.status(200).json({ ...out, fetchedAt: new Date().toISOString() });
     }

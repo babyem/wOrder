@@ -18,7 +18,8 @@ function startOfDay(d: Date) {
 }
 function endOfDay(d: Date) {
   const x = new Date(d)
-  x.setHours(23, 59, 59, 999)
+  // Match Qopla UI: 23:59:59.000 (not .999) for endDate ISO
+  x.setHours(23, 59, 59, 0)
   return x
 }
 

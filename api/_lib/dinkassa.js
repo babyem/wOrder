@@ -15,6 +15,8 @@ const BASE = "https://dinkassa.se/api";
 const INTEGRATOR_ID = process.env.DINKASSA_INTEGRATOR_ID || "cc7c4035-ce21-40a6-95e2-a39a641a1c27";
 
 let SESSION = null; // { sessionId, expiresAt }
+let AUTH_FAIL_UNTIL = 0; // backoff after a failed login (prevents hammering → account lockout)
+const AUTH_BACKOFF_MS = 10 * 60 * 1000;
 
 // Strip whitespace and a single layer of matching surrounding quotes — common paste
 // artifacts in env values that otherwise cause "Invalid credentials".
@@ -43,8 +45,16 @@ export function bustSession() { SESSION = null; }
 async function getSessionId() {
   const now = Date.now();
   if (SESSION && SESSION.expiresAt > now + 60_000) return SESSION.sessionId;
-  SESSION = await authenticate();
-  return SESSION.sessionId;
+  if (now < AUTH_FAIL_UNTIL) {
+    throw new Error("dinkassa login pausad (backoff efter tidigare auth-fel) — kontrollera DINKASSA_USERNAME/PASSWORD, vänta och försök igen");
+  }
+  try {
+    SESSION = await authenticate();
+    return SESSION.sessionId;
+  } catch (e) {
+    AUTH_FAIL_UNTIL = Date.now() + AUTH_BACKOFF_MS; // back off so a bad/locked credential can't hammer
+    throw e;
+  }
 }
 
 function authHeaders(sessionId) {

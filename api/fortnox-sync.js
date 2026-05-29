@@ -14,6 +14,7 @@
 import { getSession, getDateRange, fetchSiePayload, stockholmHourNow } from "./_lib/qopla.js";
 import { sbSelect, sbInsert, sbUpdate, getUserFromJwt } from "./_lib/supabaseAdmin.js";
 import { buildVouchersFromSie, getCompanyAccessToken, createVoucher, getVoucher } from "./_lib/fortnox.js";
+import { fetchZReports, zReportsToSiePayload } from "./_lib/dinkassa.js";
 
 // Split a stored voucher token like "F327" into { series: "F", number: "327" }.
 function parseVoucher(token) {
@@ -89,8 +90,12 @@ export default async function handler(req, res) {
       return res.status(200).json({ ranAt: new Date().toISOString(), businessDate, results: [], note: "Inga aktiva butik→bolag-mappningar" });
     }
 
-    // Qopla session (shared) for the SIE fetch.
-    const { token: qoplaToken } = await getSession();
+    // Qopla session is created lazily — only if a Qopla-sourced shop is mapped.
+    let qoplaToken = null;
+    const getQoplaToken = async () => {
+      if (!qoplaToken) qoplaToken = (await getSession()).token;
+      return qoplaToken;
+    };
 
     const results = [];
     for (const m of targets) {
@@ -112,7 +117,13 @@ export default async function handler(req, res) {
       }
 
       try {
-        const payload = await fetchSiePayload({ token: qoplaToken, shopId, startDate, endDate });
+        let payload;
+        if (m.source === "dinkassa") {
+          const z = await fetchZReports({ machineId: shopId, startDate: businessDate, endDate: businessDate });
+          payload = zReportsToSiePayload(z);
+        } else {
+          payload = await fetchSiePayload({ token: await getQoplaToken(), shopId, startDate, endDate });
+        }
         const { vouchers, warnings, referenceReportId } = buildVouchersFromSie(payload, {
           shopName,
           costCenterOverride: m.cost_center || null,

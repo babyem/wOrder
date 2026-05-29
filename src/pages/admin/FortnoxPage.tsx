@@ -9,16 +9,25 @@ import { useQoplaSales } from '../../hooks/useQoplaSales'
 import {
   useFortnoxCompanies, useCreateFortnoxCompany, useRenameFortnoxCompany, useDeleteFortnoxCompany,
   useFortnoxShopMap, useUpsertShopMap, useFortnoxPostings, useRunFortnoxSync, useReconcileFortnox,
-  useFortnoxConnections, startFortnoxConnect,
+  useFortnoxConnections, startFortnoxConnect, useDinkassaMachines,
   type FortnoxCompany, type FortnoxShopMap,
 } from '../../hooks/useFortnox'
 
+interface MappableShop { id: string; name: string; source: 'qopla' | 'dinkassa' }
+
 export default function FortnoxPage() {
   const { data: shops = [], isLoading: shopsLoading } = useQoplaSales()
+  const { data: dinMachines = [] } = useDinkassaMachines()
   const { data: companies = [] } = useFortnoxCompanies()
   const { data: maps = [] } = useFortnoxShopMap()
   const { data: postings = [] } = useFortnoxPostings()
   const { data: connections = {} } = useFortnoxConnections()
+
+  // Unified mappable shop list across POS sources.
+  const allShops: MappableShop[] = [
+    ...shops.map(s => ({ id: s.shopId, name: s.restaurant, source: 'qopla' as const })),
+    ...dinMachines.map(m => ({ id: m.id, name: `Chao – ${m.name}`, source: 'dinkassa' as const })),
+  ]
 
   const createCompany = useCreateFortnoxCompany()
   const upsertMap = useUpsertShopMap()
@@ -38,7 +47,7 @@ export default function FortnoxPage() {
   }, [])
 
   const mapByShop = new Map(maps.map(m => [m.qopla_shop_id, m]))
-  const nameByShop = new Map(shops.map(s => [s.shopId, s.restaurant]))
+  const nameByShop = new Map(allShops.map(s => [s.id, s.name]))
 
   const handleAddCompany = async () => {
     const name = newCompany.trim()
@@ -50,14 +59,15 @@ export default function FortnoxPage() {
     } catch { toast.error('Kunde inte lägga till bolag') }
   }
 
-  const saveMap = (shopId: string, patch: Partial<FortnoxShopMap>) => {
-    const existing = mapByShop.get(shopId)
+  const saveMap = (shop: MappableShop, patch: Partial<FortnoxShopMap>) => {
+    const existing = mapByShop.get(shop.id)
     const row: FortnoxShopMap = {
-      qopla_shop_id: shopId,
-      qopla_shop_name: nameByShop.get(shopId) ?? existing?.qopla_shop_name ?? shopId,
+      qopla_shop_id: shop.id,
+      qopla_shop_name: shop.name,
       company_id: existing?.company_id ?? null,
       cost_center: existing?.cost_center ?? null,
       enabled: existing?.enabled ?? true,
+      source: shop.source,
       ...patch,
     }
     upsertMap.mutate(row, {
@@ -172,23 +182,26 @@ export default function FortnoxPage() {
           <h2 className="font-semibold text-slate-900 text-sm">Butik → Bolag</h2>
         </div>
         <div className="p-5">
-          {shopsLoading ? (
+          {shopsLoading && allShops.length === 0 ? (
             <div className="flex justify-center py-6"><Spinner /></div>
-          ) : shops.length === 0 ? (
-            <p className="text-sm text-slate-400 py-2">Inga butiker hämtade från Qopla.</p>
+          ) : allShops.length === 0 ? (
+            <p className="text-sm text-slate-400 py-2">Inga butiker/kassor hämtade.</p>
           ) : (
             <div className="space-y-2">
-              {shops.map(shop => {
-                const m = mapByShop.get(shop.shopId)
+              {allShops.map(shop => {
+                const m = mapByShop.get(shop.id)
                 const enabled = m?.enabled ?? true
                 return (
-                  <div key={shop.shopId} className="flex flex-wrap items-center gap-2 py-1.5">
-                    <span className="flex-1 min-w-[8rem] text-sm font-medium text-slate-700 truncate">
-                      {shop.restaurant}
+                  <div key={shop.id} className="flex flex-wrap items-center gap-2 py-1.5">
+                    <span className="flex-1 min-w-[8rem] text-sm font-medium text-slate-700 truncate flex items-center gap-1.5">
+                      {shop.name}
+                      {shop.source === 'dinkassa' && (
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">dinkassa</span>
+                      )}
                     </span>
                     <select
                       value={m?.company_id ?? ''}
-                      onChange={e => saveMap(shop.shopId, { company_id: e.target.value || null })}
+                      onChange={e => saveMap(shop, { company_id: e.target.value || null })}
                       className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
                     >
                       <option value="">— ej kopplad —</option>
@@ -198,13 +211,13 @@ export default function FortnoxPage() {
                       defaultValue={m?.cost_center ?? ''}
                       onBlur={e => {
                         const val = e.target.value.trim()
-                        if (val !== (m?.cost_center ?? '')) saveMap(shop.shopId, { cost_center: val || null })
+                        if (val !== (m?.cost_center ?? '')) saveMap(shop, { cost_center: val || null })
                       }}
                       placeholder="Kostnadsställe"
                       className="w-32 px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
                     />
                     <button
-                      onClick={() => saveMap(shop.shopId, { enabled: !enabled })}
+                      onClick={() => saveMap(shop, { enabled: !enabled })}
                       title={enabled ? 'Aktiv — klicka för att pausa' : 'Pausad — klicka för att aktivera'}
                       className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                         enabled

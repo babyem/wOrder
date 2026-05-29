@@ -14,7 +14,10 @@ export interface FortnoxShopMap {
   company_id: string | null
   cost_center?: string | null
   enabled: boolean
+  source?: string
 }
+
+export interface DinkassaMachine { id: string; name: string }
 
 export interface FortnoxPosting {
   id: string
@@ -124,6 +127,20 @@ export function useFortnoxPostings(limit = 50) {
       if (error) return []
       return data
     },
+  })
+}
+
+// ---- dinkassa kassor (for the mapping list) ----
+export function useDinkassaMachines() {
+  return useQuery({
+    queryKey: ['dinkassa-machines'],
+    queryFn: async (): Promise<DinkassaMachine[]> => {
+      const res = await fetch('/api/dinkassa?action=machines')
+      if (!res.ok) return []
+      const json = await res.json()
+      return json.machines ?? []
+    },
+    staleTime: 10 * 60 * 1000,
   })
 }
 

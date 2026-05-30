@@ -138,12 +138,13 @@ export default async function handler(req, res) {
         results.push({ shop: shopName, shopId, status: "error", message: `Ingen Fortnox-token för bolaget "${companyName.get(m.company_id) || m.company_id}"` });
         continue;
       }
-      let byDate;
+      let byDate, dropped = [];
       try {
         const payload = await fetchSiePayload({ token: await getQoplaToken(), shopId, startDate: rangeStart, endDate: rangeEnd });
-        const { vouchers } = buildVouchersFromSie(payload, { shopName, costCenterOverride: m.cost_center || null });
+        const built = buildVouchersFromSie(payload, { shopName, costCenterOverride: m.cost_center || null });
+        dropped = built.skipped || [];
         byDate = new Map();
-        for (const v of vouchers) {
+        for (const v of built.vouchers) {
           const arr = byDate.get(v.TransactionDate) || [];
           arr.push(v);
           byDate.set(v.TransactionDate, arr);
@@ -152,8 +153,14 @@ export default async function handler(req, res) {
         results.push({ shop: shopName, shopId, status: "error", message: err.message });
         continue;
       }
+      // Surface verifications that couldn't be booked (e.g. unbalanced) as errors.
+      for (const s of dropped) {
+        if (okSet.has(`${shopId}|${s.date}`)) continue;
+        await record(shopId, s.date, m.company_id, null, "error", s.reason);
+        results.push({ shop: shopName, shopId, date: s.date, status: "error", message: s.reason });
+      }
       if (!byDate.size) {
-        results.push({ shop: shopName, shopId, status: "skipped", message: "Inga verifikationer i perioden" });
+        if (!dropped.length) results.push({ shop: shopName, shopId, status: "skipped", message: "Inga verifikationer i perioden" });
         continue;
       }
       for (const [date, vouchers] of byDate) {

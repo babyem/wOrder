@@ -67,8 +67,17 @@ export default async function handler(req, res) {
       if (!tokenRow) { results.push({ shop: shopName, status: "error", message: "Bolaget saknar Fortnox-token" }); continue; }
 
       const payload = zReportsToSiePayload(machine.zReports || []);
-      const { vouchers } = buildVouchersFromSie(payload, { shopName, costCenterOverride: m.cost_center || null });
-      if (!vouchers.length) { results.push({ shop: shopName, status: "skipped", message: "Inga verifikationer" }); continue; }
+      const { vouchers, skipped: dropped } = buildVouchersFromSie(payload, { shopName, costCenterOverride: m.cost_center || null });
+      // Surface verifications that couldn't be booked (e.g. unbalanced) as errors.
+      for (const s of dropped || []) {
+        if (okSet.has(`${shopId}|${s.date}`)) continue;
+        await record(shopId, s.date, m.company_id, null, "error", s.reason);
+        results.push({ shop: shopName, date: s.date, status: "error", message: s.reason });
+      }
+      if (!vouchers.length) {
+        if (!(dropped || []).length) results.push({ shop: shopName, status: "skipped", message: "Inga verifikationer" });
+        continue;
+      }
 
       const byDate = new Map();
       for (const v of vouchers) {

@@ -42,9 +42,20 @@ export default async function handler(req, res) {
     if (!tokenRow) return res.status(400).json({ error: "Bolaget saknar Fortnox-token (Anslut bolaget först)" });
 
     const payload = parseSie4(sie);
-    const { vouchers, warnings } = buildVouchersFromSie(payload, { shopName: source || "SIE-import" });
+    const { vouchers, warnings, skipped: dropped } = buildVouchersFromSie(payload, { shopName: source || "SIE-import" });
+
+    const results = [];
+    // Surface verifications that couldn't be booked (e.g. unbalanced) as errors.
+    for (const s of dropped || []) {
+      await record(`sie:${companyId}:unbalanced:${s.date}`, s.date, companyId, null, "error", s.reason);
+      results.push({ date: s.date, status: "error", message: s.reason });
+    }
+
     if (!vouchers.length) {
-      return res.status(200).json({ posted: 0, skipped: 0, results: [], warnings, message: "Inga verifikationer hittades i filen" });
+      return res.status(200).json({
+        posted: 0, skipped: 0, results, warnings,
+        message: results.length ? "Obalanserade/ej bokförbara verifikationer — se Senaste körningar" : "Inga verifikationer hittades i filen",
+      });
     }
 
     // Already-imported verifications for this company (content-hash keyed).
@@ -55,7 +66,6 @@ export default async function handler(req, res) {
     const okSet = new Set((existing || []).map(p => `${p.qopla_shop_id}|${p.business_date}`));
 
     const accessToken = await getCompanyAccessToken(tokenRow);
-    const results = [];
     for (const v of vouchers) {
       const shopKey = `sie:${companyId}:${voucherHash(v)}`;
       const date = v.TransactionDate;

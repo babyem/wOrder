@@ -135,6 +135,7 @@ export async function storeCompanyTokens(companyId, tokens) {
 export function buildVouchersFromSie(payload, { shopName, costCenterOverride, series = "F" } = {}) {
   const vouchers = [];
   const warnings = [];
+  const skipped = []; // [{ date, reason }] — verifications that could NOT be booked
   for (const v of (payload && payload.verifications) || []) {
     const date = (v.date || "").slice(0, 10); // YYYY-MM-DD
     const rows = [];
@@ -151,7 +152,9 @@ export function buildVouchersFromSie(payload, { shopName, costCenterOverride, se
     }
     if (!rows.length) continue;
     if (Math.abs(round2(sumDebit - sumCredit)) > 0.01) {
-      warnings.push(`Obalanserad verifikation ${date} (${shopName}): debet ${sumDebit.toFixed(2)} ≠ kredit ${sumCredit.toFixed(2)}`);
+      const reason = `Obalanserad i Qopla: debet ${sumDebit.toFixed(2)} ≠ kredit ${sumCredit.toFixed(2)} — ej bokförd`;
+      warnings.push(`Obalanserad verifikation ${date} (${shopName}): ${reason}`);
+      skipped.push({ date, reason });
       continue; // never post an unbalanced voucher
     }
     vouchers.push({
@@ -161,5 +164,5 @@ export function buildVouchersFromSie(payload, { shopName, costCenterOverride, se
       VoucherRows: rows,
     });
   }
-  return { vouchers, warnings, referenceReportId: (payload && payload.referenceReportId) || null };
+  return { vouchers, warnings, skipped, referenceReportId: (payload && payload.referenceReportId) || null };
 }

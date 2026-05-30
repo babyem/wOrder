@@ -33,7 +33,8 @@ async function main() {
   console.log(`dinkassa scrape ${from} .. ${to}`);
 
   const browser = await chromium.launch();
-  let machines;
+  let machines = [];
+  let salesDays = [];
   try {
     const page = await browser.newContext().then(c => c.newPage());
     await page.goto("https://dinkassa.se/v2/login", { waitUntil: "networkidle" });
@@ -49,28 +50,48 @@ async function main() {
     await page.waitForFunction(() => !!localStorage.getItem("sessionId"), null, { timeout: 30000 });
 
     // Pull machines + Z-reports from the authenticated page context.
-    machines = await page.evaluate(async ({ integrator, from, to }) => {
+    const scraped = await page.evaluate(async ({ integrator, from, to }) => {
       const sid = localStorage.getItem("sessionId");
       const H = { Accept: "application/json", SessionId: sid, IntegratorId: integrator };
-      const mjson = await (await fetch("https://dinkassa.se/api/machine", { headers: H })).json();
-      const list = (mjson.Items || []).map(m => ({ id: m.Id, name: m.Name }));
+      // Some responses are plain text (e.g. "No z-report found" for an unclosed day) — parse defensively.
+      const getJson = async (url, opts = {}) => {
+        const t = await (await fetch(url, { headers: H, ...opts })).text();
+        try { return JSON.parse(t); } catch { return null; }
+      };
+      const mjson = await getJson("https://dinkassa.se/api/machine");
+      const list = ((mjson && mjson.Items) || []).map(m => ({ id: m.Id, name: m.Name }));
       for (const m of list) {
         const url = `https://dinkassa.se/api/reports/download-z-report-by-date/json?machineId=${encodeURIComponent(m.id)}&startDate=${from}&endDate=${to}`;
-        const j = await (await fetch(url, { headers: H })).json();
-        m.zReports = j.ZReports || [];
+        const j = await getJson(url);
+        m.zReports = (j && j.ZReports) || [];
       }
-      return list;
+      // Real sales figures (combined, per day) from the sales overview report.
+      const ov = await getJson("https://dinkassa.se/api/reports/get-report-result/EHK_SalesOverview", {
+        method: "POST",
+        headers: { ...H, "Content-Type": "application/json" },
+        body: JSON.stringify({ Parameters: [
+          { Name: "Period-typ", Value: "Day" },
+          { Name: "Fr.o.m.-datum", Value: from },
+          { Name: "T.o.m.-datum", Value: to },
+        ] }),
+      });
+      const salesDays = ((ov && ov.Items) || [])
+        .map(it => ({ date: it.Period, sales: Number(it["**TOTAL**|BELOPP"] || 0), orders: Number(it["**TOTAL**|ANTAL KVITTON"] || 0) }))
+        .filter(d => d.date);
+      return { machines: list, salesDays };
     }, { integrator: INTEGRATOR_ID, from, to });
+    machines = scraped.machines;
+    salesDays = scraped.salesDays;
   } finally {
     await browser.close();
   }
 
-  console.log(`Fetched ${machines.length} kassor, ${machines.reduce((n, m) => n + (m.zReports?.length || 0), 0)} Z-reports`);
+  console.log(`Fetched ${machines.length} kassor, ${machines.reduce((n, m) => n + (m.zReports?.length || 0), 0)} Z-reports, ${salesDays.length} sales-days`);
 
   const res = await fetch(`${WORDER_URL.replace(/\/$/, "")}/api/dinkassa-book`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${CRON_SECRET}` },
-    body: JSON.stringify({ from, to, machines }),
+    body: JSON.stringify({ from, to, machines, salesDays }),
   });
   const out = await res.json().catch(() => ({}));
   console.log("Book result:", JSON.stringify(out, null, 2));

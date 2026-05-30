@@ -24,7 +24,7 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  const { from, to, businessDate, machines } = req.body || {};
+  const { from, to, businessDate, machines, salesDays } = req.body || {};
   const rangeFrom = from || businessDate;
   const rangeTo = to || businessDate || from;
   if (!Array.isArray(machines) || !rangeFrom) {
@@ -41,6 +41,20 @@ export default async function handler(req, res) {
     const tokenByCompany = new Map((tokens || []).map(t => [t.company_id, t]));
     const okSet = new Set((posted || []).filter(p => p.status === "ok").map(p => `${p.qopla_shop_id}|${p.business_date}`));
 
+    // Store combined Chao daily sales from the overview (real figures incl. orders),
+    // independent of mapping/booking, so the widget/reports can show Chao.
+    for (const d of Array.isArray(salesDays) ? salesDays : []) {
+      if (!d || !d.date) continue;
+      try {
+        await sbInsert("pos_daily_sales", {
+          qopla_shop_id: "dinkassa-chao", business_date: d.date, shop_name: "Chao", source: "dinkassa",
+          sales: Math.round(Number(d.sales || 0) * 100) / 100,
+          orders: d.orders != null ? Math.round(Number(d.orders)) : null,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "qopla_shop_id,business_date" });
+      } catch { /* sales storage must not break booking */ }
+    }
+
     const results = [];
     const pending = []; // { shopId, shopName, companyId, tokenRow, date, vouchers }
 
@@ -48,24 +62,6 @@ export default async function handler(req, res) {
     for (const machine of machines) {
       const shopId = machine.id;
       const shopName = machine.name || shopId;
-
-      // Store daily sales (sum of money-in accounts, incl VAT) per day — independent of
-      // mapping/booking, so the widget/reports can show Chao after a sync.
-      const salesByDate = new Map();
-      for (const z of machine.zReports || []) {
-        const d = (z.ReportDateTime || "").slice(0, 10);
-        if (!d) continue;
-        const s = (z.Accounts || []).reduce((sum, a) => sum + (Number(a.Amount) > 0 ? Number(a.Amount) : 0), 0);
-        salesByDate.set(d, (salesByDate.get(d) || 0) + s);
-      }
-      for (const [d, s] of salesByDate) {
-        try {
-          await sbInsert("pos_daily_sales", {
-            qopla_shop_id: shopId, business_date: d, shop_name: shopName, source: "dinkassa",
-            sales: Math.round(s * 100) / 100, updated_at: new Date().toISOString(),
-          }, { onConflict: "qopla_shop_id,business_date" });
-        } catch { /* sales storage must not break booking */ }
-      }
 
       let m = mapById.get(shopId);
       if (!m) {

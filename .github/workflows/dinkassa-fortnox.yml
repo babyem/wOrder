@@ -1,0 +1,37 @@
+name: dinkassa -> Fortnox
+
+# dinkassa's login only works in a real browser, so this runs Playwright on a
+# GitHub-hosted runner (free) and posts the Z-reports to wOrder for booking.
+# Books YESTERDAY by default (a fully closed day). Adjust the cron / DAY as needed.
+
+on:
+  schedule:
+    - cron: "0 4 * * *" # 04:00 UTC daily (~05–06 Europe/Stockholm)
+  workflow_dispatch:
+    inputs:
+      day:
+        description: "which day to book"
+        type: choice
+        options: [yesterday, today]
+        default: yesterday
+
+jobs:
+  book:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install Playwright (chromium)
+        run: |
+          npm i --no-save playwright
+          npx playwright install --with-deps chromium
+      - name: Scrape dinkassa + book to Fortnox
+        env:
+          DINKASSA_USERNAME: ${{ secrets.DINKASSA_USERNAME }}
+          DINKASSA_PASSWORD: ${{ secrets.DINKASSA_PASSWORD }}
+          WORDER_URL: ${{ secrets.WORDER_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          DAY: ${{ github.event.inputs.day || 'yesterday' }}
+        run: node scripts/dinkassa-scrape.mjs

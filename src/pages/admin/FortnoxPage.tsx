@@ -23,10 +23,16 @@ export default function FortnoxPage() {
   const { data: postings = [] } = useFortnoxPostings()
   const { data: connections = {} } = useFortnoxConnections()
 
-  // Unified mappable shop list across POS sources.
+  // Unified mappable shop list across POS sources. dinkassa kassor come from the live
+  // endpoint when available, plus any rows already seeded in the DB (e.g. by the
+  // GitHub Action) so they're mappable even when the live login is unavailable.
+  const dinLiveIds = new Set(dinMachines.map(m => m.id))
   const allShops: MappableShop[] = [
     ...shops.map(s => ({ id: s.shopId, name: s.restaurant, source: 'qopla' as const })),
     ...dinMachines.map(m => ({ id: m.id, name: `Chao – ${m.name}`, source: 'dinkassa' as const })),
+    ...maps
+      .filter(m => m.source === 'dinkassa' && !dinLiveIds.has(m.qopla_shop_id))
+      .map(m => ({ id: m.qopla_shop_id, name: m.qopla_shop_name || m.qopla_shop_id, source: 'dinkassa' as const })),
   ]
 
   const createCompany = useCreateFortnoxCompany()

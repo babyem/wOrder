@@ -191,7 +191,10 @@ export function useRunFortnoxSync() {
       const res = await fetch(`/api/fortnox-sync?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
-      const json = await res.json()
+      const text = await res.text()
+      let json: any = null
+      try { json = JSON.parse(text) } catch { /* non-JSON = Vercel timeout/error page */ }
+      if (!json) throw new Error('Körningen tog för lång tid och avbröts. Kör igen för att fortsätta — redan bokförda dagar hoppas över. (Tips: dela upp långa perioder.)')
       if (!res.ok) throw new Error(json.error ?? 'Synk misslyckades')
       return json
     },

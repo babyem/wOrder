@@ -137,7 +137,9 @@ export function buildVouchersFromSie(payload, { shopName, costCenterOverride, se
   const warnings = [];
   const skipped = []; // [{ date, reason }] — verifications that could NOT be booked
   for (const v of (payload && payload.verifications) || []) {
-    const date = (v.date || "").slice(0, 10); // YYYY-MM-DD
+    // Normalize to YYYY-MM-DD (Qopla returns YYYYMMDD; dinkassa returns ISO).
+    const raw = String(v.date || "");
+    const date = /^\d{8}$/.test(raw) ? `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}` : raw.slice(0, 10);
     const rows = [];
     let sumDebit = 0, sumCredit = 0;
     for (const t of v.sieTransactions || []) {

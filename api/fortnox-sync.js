@@ -127,6 +127,9 @@ export default async function handler(req, res) {
     const rangeEnd = dayRangeISO(dates[dates.length - 1]).endDate;
 
     const results = [];
+    const pending = []; // { shopId, shopName, companyId, tokenRow, date, vouchers }
+
+    // Phase 1: fetch each shop's range (one Qopla call each), collect un-booked days.
     for (const m of targets) {
       const shopId = m.qopla_shop_id;
       const shopName = m.qopla_shop_name || shopId;
@@ -135,9 +138,6 @@ export default async function handler(req, res) {
         results.push({ shop: shopName, shopId, status: "error", message: `Ingen Fortnox-token för bolaget "${companyName.get(m.company_id) || m.company_id}"` });
         continue;
       }
-
-      // ONE Qopla call for the whole range; group whatever it returns by each
-      // verification's own date (no matching against the requested date list).
       let byDate;
       try {
         const payload = await fetchSiePayload({ token: await getQoplaToken(), shopId, startDate: rangeStart, endDate: rangeEnd });
@@ -152,31 +152,34 @@ export default async function handler(req, res) {
         results.push({ shop: shopName, shopId, status: "error", message: err.message });
         continue;
       }
-
       if (!byDate.size) {
         results.push({ shop: shopName, shopId, status: "skipped", message: "Inga verifikationer i perioden" });
         continue;
       }
+      for (const [date, vouchers] of byDate) {
+        if (okSet.has(`${shopId}|${date}`)) { results.push({ shop: shopName, shopId, date, status: "skipped", message: "redan bokfört" }); continue; }
+        pending.push({ shopId, shopName, companyId: m.company_id, tokenRow, date, vouchers });
+      }
+    }
 
-      // Book each day Qopla returned.
-      let accessToken = null;
-      for (const [date, dayVouchers] of byDate) {
-        const base = { shop: shopName, shopId, date };
-        if (okSet.has(`${shopId}|${date}`)) { results.push({ ...base, status: "skipped", message: "redan bokfört" }); continue; }
-        try {
-          if (!accessToken) accessToken = await getCompanyAccessToken(tokenRow);
-          const voucherNumbers = [];
-          for (const v of dayVouchers) {
-            const created = await createVoucher(accessToken, v);
-            voucherNumbers.push(`${created.VoucherSeries}${created.VoucherNumber}`);
-          }
-          await record(shopId, date, m.company_id, null, "ok", "OK", voucherNumbers);
-          okSet.add(`${shopId}|${date}`);
-          results.push({ ...base, status: "ok", voucherNumbers });
-        } catch (err) {
-          await record(shopId, date, m.company_id, null, "error", err.message);
-          results.push({ ...base, status: "error", message: err.message });
+    // Phase 2: book in chronological order so Fortnox voucher numbers follow the dates.
+    pending.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.shopName.localeCompare(b.shopName)));
+    const accessByCompany = new Map();
+    for (const p of pending) {
+      const base = { shop: p.shopName, shopId: p.shopId, date: p.date };
+      try {
+        let accessToken = accessByCompany.get(p.companyId);
+        if (!accessToken) { accessToken = await getCompanyAccessToken(p.tokenRow); accessByCompany.set(p.companyId, accessToken); }
+        const voucherNumbers = [];
+        for (const v of p.vouchers) {
+          const created = await createVoucher(accessToken, v);
+          voucherNumbers.push(`${created.VoucherSeries}${created.VoucherNumber}`);
         }
+        await record(p.shopId, p.date, p.companyId, null, "ok", "OK", voucherNumbers);
+        results.push({ ...base, status: "ok", voucherNumbers });
+      } catch (err) {
+        await record(p.shopId, p.date, p.companyId, null, "error", err.message);
+        results.push({ ...base, status: "error", message: err.message });
       }
     }
 

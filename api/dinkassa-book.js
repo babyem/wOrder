@@ -4,10 +4,11 @@
 // Body: { from: "YYYY-MM-DD", to: "YYYY-MM-DD", machines: [{ id, name, zReports: [...] }] }
 //   (legacy: { businessDate, machines } — treated as from=to=businessDate)
 //
-// Each Z-report becomes one Fortnox voucher dated by its own ReportDateTime, so a date
-// range books one verification per kassa per day. Idempotent per (kassa, day).
+// Each Z-report becomes one Fortnox voucher dated by its own ReportDateTime. Days are
+// booked in chronological order so voucher numbers follow the dates. Idempotent per
+// (kassa, day).
 
-import { sbSelect, sbInsert, getUserFromJwt } from "./_lib/supabaseAdmin.js";
+import { sbSelect, sbInsert } from "./_lib/supabaseAdmin.js";
 import { zReportsToSiePayload } from "./_lib/dinkassa.js";
 import { buildVouchersFromSie, getCompanyAccessToken, createVoucher } from "./_lib/fortnox.js";
 
@@ -31,21 +32,23 @@ export default async function handler(req, res) {
   }
 
   try {
-    const maps = await sbSelect("fortnox_shop_map", "select=*&source=eq.dinkassa");
+    const [maps, tokens, posted] = await Promise.all([
+      sbSelect("fortnox_shop_map", "select=*&source=eq.dinkassa"),
+      sbSelect("fortnox_tokens", "select=*"),
+      sbSelect("fortnox_postings", `select=qopla_shop_id,business_date,status&business_date=gte.${rangeFrom}&business_date=lte.${rangeTo}`),
+    ]);
     const mapById = new Map((maps || []).map(m => [m.qopla_shop_id, m]));
-    const posted = await sbSelect(
-      "fortnox_postings",
-      `select=qopla_shop_id,business_date,status&business_date=gte.${rangeFrom}&business_date=lte.${rangeTo}`,
-    );
+    const tokenByCompany = new Map((tokens || []).map(t => [t.company_id, t]));
     const okSet = new Set((posted || []).filter(p => p.status === "ok").map(p => `${p.qopla_shop_id}|${p.business_date}`));
-    const tokenCache = new Map();
 
     const results = [];
+    const pending = []; // { shopId, shopName, companyId, tokenRow, date, vouchers }
+
+    // Phase 1: per machine — seed mapping row, validate, collect un-booked days.
     for (const machine of machines) {
       const shopId = machine.id;
       const shopName = machine.name || shopId;
 
-      // Ensure the kassa shows up in the mapping UI (insert once; never overwrite config).
       let m = mapById.get(shopId);
       if (!m) {
         try {
@@ -60,37 +63,46 @@ export default async function handler(req, res) {
       if (!m.company_id) { results.push({ shop: shopName, status: "unmapped", message: "Koppla kassan till ett bolag i /admin/fortnox" }); continue; }
       if (m.enabled === false) { results.push({ shop: shopName, status: "skipped", message: "pausad" }); continue; }
 
+      const tokenRow = tokenByCompany.get(m.company_id);
+      if (!tokenRow) { results.push({ shop: shopName, status: "error", message: "Bolaget saknar Fortnox-token" }); continue; }
+
       const payload = zReportsToSiePayload(machine.zReports || []);
-      const { vouchers, warnings } = buildVouchersFromSie(payload, { shopName, costCenterOverride: m.cost_center || null });
-      if (!vouchers.length) {
-        results.push({ shop: shopName, status: "skipped", message: warnings.length ? warnings.join("; ") : "Inga verifikationer" });
-        continue;
-      }
+      const { vouchers } = buildVouchersFromSie(payload, { shopName, costCenterOverride: m.cost_center || null });
+      if (!vouchers.length) { results.push({ shop: shopName, status: "skipped", message: "Inga verifikationer" }); continue; }
 
-      let token = tokenCache.get(m.company_id);
-      if (!token) {
-        const t = await sbSelect("fortnox_tokens", `select=*&company_id=eq.${m.company_id}`);
-        if (!t || !t[0]) { results.push({ shop: shopName, status: "error", message: "Bolaget saknar Fortnox-token" }); continue; }
-        token = t[0]; tokenCache.set(m.company_id, token);
-      }
-
-      // One voucher per day in the range.
+      const byDate = new Map();
       for (const v of vouchers) {
-        const date = v.TransactionDate;
+        const arr = byDate.get(v.TransactionDate) || [];
+        arr.push(v);
+        byDate.set(v.TransactionDate, arr);
+      }
+      for (const [date, dayVouchers] of byDate) {
         if (okSet.has(`${shopId}|${date}`)) { results.push({ shop: shopName, date, status: "skipped", message: "redan bokfört" }); continue; }
-        try {
-          const accessToken = await getCompanyAccessToken(token);
-          const created = await createVoucher(accessToken, v);
-          const num = `${created.VoucherSeries}${created.VoucherNumber}`;
-          await record(shopId, date, m.company_id, num, "ok", "OK");
-          okSet.add(`${shopId}|${date}`);
-          results.push({ shop: shopName, date, status: "ok", voucher: num });
-        } catch (e) {
-          await record(shopId, date, m.company_id, null, "error", e.message);
-          results.push({ shop: shopName, date, status: "error", message: e.message });
-        }
+        pending.push({ shopId, shopName, companyId: m.company_id, tokenRow, date, vouchers: dayVouchers });
       }
     }
+
+    // Phase 2: book chronologically so voucher numbers follow the dates.
+    pending.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.shopName.localeCompare(b.shopName)));
+    const accessByCompany = new Map();
+    for (const p of pending) {
+      const base = { shop: p.shopName, date: p.date };
+      try {
+        let accessToken = accessByCompany.get(p.companyId);
+        if (!accessToken) { accessToken = await getCompanyAccessToken(p.tokenRow); accessByCompany.set(p.companyId, accessToken); }
+        const voucherNumbers = [];
+        for (const v of p.vouchers) {
+          const created = await createVoucher(accessToken, v);
+          voucherNumbers.push(`${created.VoucherSeries}${created.VoucherNumber}`);
+        }
+        await record(p.shopId, p.date, p.companyId, voucherNumbers.join(", "), "ok", "OK");
+        results.push({ ...base, status: "ok", voucherNumbers });
+      } catch (e) {
+        await record(p.shopId, p.date, p.companyId, null, "error", e.message);
+        results.push({ ...base, status: "error", message: e.message });
+      }
+    }
+
     return res.status(200).json({ from: rangeFrom, to: rangeTo, results, ranAt: new Date().toISOString() });
   } catch (err) {
     return res.status(500).json({ error: err.message });

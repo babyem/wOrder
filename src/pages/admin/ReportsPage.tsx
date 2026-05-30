@@ -4,6 +4,9 @@ import { useQueryClient } from '@tanstack/react-query'
 import Spinner from '../../components/ui/Spinner'
 import { useQoplaOverview, type QoplaShopOverview } from '../../plugins/qopla/useQoplaOverview'
 import { useQoplaHourly } from '../../plugins/qopla/useQoplaHourly'
+import { usePosDailySales, type PosDailySale } from '../../hooks/useFortnox'
+
+const dymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
 type PeriodKey = 'today' | 'yesterday' | 'week' | 'month' | 'lastMonth'
 
@@ -68,6 +71,8 @@ export default function ReportsPage() {
   const periods = useMemo(buildPeriods, [])
   const queryClient = useQueryClient()
   const [expanded, setExpanded] = useState<Set<string>>(new Set()) // keys = `${periodKey}::${shopId}`
+  const { data: posSales = [] } = usePosDailySales()
+  const dinkassa = useMemo(() => posSales.filter(p => p.source === 'dinkassa'), [posSales])
 
   // Canonical shop order from "month" data (sales DESC)
   const monthPeriod = periods.find(p => p.key === 'month')!
@@ -86,6 +91,7 @@ export default function ReportsPage() {
     periods.forEach(p => {
       queryClient.refetchQueries({ queryKey: ['qopla-overview', p.start.toISOString(), p.end.toISOString()] })
     })
+    queryClient.refetchQueries({ queryKey: ['pos-daily-sales'] })
   }
 
   const toggleExpand = (periodKey: PeriodKey, shopId: string) => {
@@ -122,6 +128,7 @@ export default function ReportsPage() {
             canonicalOrder={canonicalOrder}
             expandedKeys={expanded}
             onToggleExpand={toggleExpand}
+            dinkassaRows={dinkassa}
           />
         ))}
       </div>
@@ -134,12 +141,19 @@ interface PeriodColumnProps {
   canonicalOrder: { shopId: string; shopName: string }[] | null
   expandedKeys: Set<string>
   onToggleExpand: (periodKey: PeriodKey, shopId: string) => void
+  dinkassaRows: PosDailySale[]
 }
 
-function PeriodColumn({ period, canonicalOrder, expandedKeys, onToggleExpand }: PeriodColumnProps) {
+function PeriodColumn({ period, canonicalOrder, expandedKeys, onToggleExpand, dinkassaRows }: PeriodColumnProps) {
   const startISO = period.start.toISOString()
   const endISO = period.end.toISOString()
   const { data, isLoading, isError, isFetching } = useQoplaOverview({ startISO, endISO })
+
+  // Chao (dinkassa) sales for this period, from stored daily sales.
+  const chaoSales = useMemo(() => {
+    const a = dymd(period.start), b = dymd(period.end)
+    return dinkassaRows.filter(r => r.business_date >= a && r.business_date <= b).reduce((s, r) => s + Number(r.sales), 0)
+  }, [dinkassaRows, period])
 
   const totals = useMemo(() => {
     if (!data) return { sales: 0, orders: 0 }
@@ -202,10 +216,20 @@ function PeriodColumn({ period, canonicalOrder, expandedKeys, onToggleExpand }: 
                 />
               ))
             )}
+            {chaoSales > 0 && (
+              <div className="flex items-center gap-1.5 py-1 px-1.5 whitespace-nowrap">
+                <span className="flex-1 truncate text-xs text-slate-700 flex items-center gap-1">
+                  Chao <span className="text-[9px] text-amber-600 bg-amber-50 px-1 rounded">synk</span>
+                </span>
+                <span className="tabular-nums text-xs font-semibold text-slate-800 shrink-0">{formatKrCompact(chaoSales)}</span>
+                <span className="tabular-nums text-[10px] text-slate-500 shrink-0 w-8 text-right" />
+                <span className="shrink-0 w-5" />
+              </div>
+            )}
             <div className="flex items-center gap-1.5 mt-1 pt-1.5 border-t border-slate-100 px-1.5 whitespace-nowrap">
               <span className="flex-1 text-[11px] font-semibold text-slate-600">Totalt</span>
               <span className="tabular-nums text-xs font-bold text-indigo-600 shrink-0">
-                {formatKrCompact(totals.sales)} kr
+                {formatKrCompact(totals.sales + chaoSales)} kr
               </span>
               <span className="tabular-nums text-[10px] text-slate-500 shrink-0 w-8 text-right">
                 {totals.orders}

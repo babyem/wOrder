@@ -2,14 +2,14 @@ import { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
 import {
   ReceiptText, Plus, Trash2, Play, Building2, Pencil, Check, X,
-  CheckCircle2, AlertCircle, MinusCircle, Info, Plug, Link2, RefreshCw, Ban,
+  CheckCircle2, AlertCircle, MinusCircle, Info, Plug, Link2, RefreshCw, Ban, FileUp,
 } from 'lucide-react'
 import Spinner from '../../components/ui/Spinner'
 import { useQoplaSales } from '../../hooks/useQoplaSales'
 import {
   useFortnoxCompanies, useCreateFortnoxCompany, useRenameFortnoxCompany, useDeleteFortnoxCompany,
   useFortnoxShopMap, useUpsertShopMap, useFortnoxPostings, useRunFortnoxSync, useReconcileFortnox,
-  useFortnoxConnections, startFortnoxConnect, useDinkassaMachines,
+  useFortnoxConnections, startFortnoxConnect, useDinkassaMachines, useImportSie,
   type FortnoxCompany, type FortnoxShopMap,
 } from '../../hooks/useFortnox'
 
@@ -33,8 +33,10 @@ export default function FortnoxPage() {
   const upsertMap = useUpsertShopMap()
   const runSync = useRunFortnoxSync()
   const reconcile = useReconcileFortnox()
+  const importSie = useImportSie()
 
   const [newCompany, setNewCompany] = useState('')
+  const [importCompany, setImportCompany] = useState('')
 
   // Toast the result of an OAuth connect redirect, then clean the URL.
   useEffect(() => {
@@ -95,6 +97,20 @@ export default function FortnoxPage() {
       onSuccess: (data) => {
         if (!data.changed.length) toast.success('Synkad — inga ändringar')
         else toast(`${data.changed.length} markerade som borttagna i Fortnox`)
+      },
+      onError: (e) => toast.error((e as Error).message),
+    })
+  }
+
+  const handleImportFile = async (file: File | undefined) => {
+    if (!file) return
+    if (!importCompany) { toast.error('Välj bolag först'); return }
+    const sie = await file.text()
+    importSie.mutate({ sie, companyId: importCompany, source: file.name }, {
+      onSuccess: (d) => {
+        const errs = d.results?.filter(r => r.status === 'error').length ?? 0
+        if (d.posted) toast.success(`${d.posted} verifikat bokförda${errs ? `, ${errs} fel` : ''}`)
+        else toast(d.message || 'Inget bokfört')
       },
       onError: (e) => toast.error((e as Error).message),
     })
@@ -233,6 +249,45 @@ export default function FortnoxPage() {
               })}
             </div>
           )}
+        </div>
+      </section>
+
+      {/* Importera SIE-fil (dinkassa m.fl.) */}
+      <section className="bg-white rounded-2xl border border-slate-100 shadow-sm">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
+          <FileUp size={16} className="text-slate-400" />
+          <h2 className="font-semibold text-slate-900 text-sm">Importera SIE-fil</h2>
+        </div>
+        <div className="p-5 space-y-3">
+          <p className="text-xs text-slate-500">
+            För kassasystem utan API (t.ex. dinkassa): ladda ner <code className="text-slate-700">.se</code>-filen
+            och bokför den mot valt bolag. Ladda inte upp samma fil två gånger (dubbelbokför).
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={importCompany}
+              onChange={e => setImportCompany(e.target.value)}
+              className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
+            >
+              <option value="">— välj bolag —</option>
+              {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <label className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium cursor-pointer transition-colors ${
+              importCompany && !importSie.isPending
+                ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+            }`}>
+              {importSie.isPending ? <Spinner size={14} className="border-white border-t-white/30" /> : <FileUp size={14} />}
+              Välj .se-fil & bokför
+              <input
+                type="file"
+                accept=".se,.si,.sie,.txt"
+                className="hidden"
+                disabled={!importCompany || importSie.isPending}
+                onChange={e => { handleImportFile(e.target.files?.[0]); e.target.value = '' }}
+              />
+            </label>
+          </div>
         </div>
       </section>
 

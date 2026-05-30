@@ -194,6 +194,34 @@ export function useRunFortnoxSync() {
   })
 }
 
+// ---- Manual SIE-file import (dinkassa etc.) ----
+export interface ImportResult {
+  posted: number
+  results: { date: string; voucher?: string; status: string; message?: string }[]
+  warnings: string[]
+  message?: string
+}
+
+export function useImportSie() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ sie, companyId, source }: { sie: string; companyId: string; source?: string }): Promise<ImportResult> => {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) throw new Error('Ingen inloggad session')
+      const res = await fetch('/api/fortnox-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ sie, companyId, source }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Import misslyckades')
+      return json
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['fortnox-postings'] }),
+  })
+}
+
 // ---- Reconcile ("Synka status"): flag vouchers deleted in Fortnox ----
 export function useReconcileFortnox() {
   const qc = useQueryClient()

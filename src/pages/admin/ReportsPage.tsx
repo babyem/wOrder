@@ -4,7 +4,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import Spinner from '../../components/ui/Spinner'
 import { useQoplaOverview, type QoplaShopOverview } from '../../plugins/qopla/useQoplaOverview'
 import { useQoplaHourly } from '../../plugins/qopla/useQoplaHourly'
-import { usePosDailySales, type PosDailySale } from '../../hooks/useFortnox'
+import toast from 'react-hot-toast'
+import { usePosDailySales, useRunDinkassa, type PosDailySale } from '../../hooks/useFortnox'
 
 const dymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
@@ -148,12 +149,25 @@ function PeriodColumn({ period, canonicalOrder, expandedKeys, onToggleExpand, di
   const startISO = period.start.toISOString()
   const endISO = period.end.toISOString()
   const { data, isLoading, isError, isFetching } = useQoplaOverview({ startISO, endISO })
+  const runDinkassa = useRunDinkassa()
 
-  // Chao (dinkassa) sales for this period, from stored daily sales.
-  const chaoSales = useMemo(() => {
+  // Chao (dinkassa) sales + orders for this period, from stored daily sales.
+  const chao = useMemo(() => {
     const a = dymd(period.start), b = dymd(period.end)
-    return dinkassaRows.filter(r => r.business_date >= a && r.business_date <= b).reduce((s, r) => s + Number(r.sales), 0)
+    const rows = dinkassaRows.filter(r => r.business_date >= a && r.business_date <= b)
+    return {
+      sales: rows.reduce((s, r) => s + Number(r.sales), 0),
+      orders: rows.reduce((s, r) => s + (Number(r.orders) || 0), 0),
+      synced: rows.length > 0,
+    }
   }, [dinkassaRows, period])
+
+  const handleChaoSync = () => {
+    runDinkassa.mutate({ from: dymd(period.start), to: dymd(period.end) }, {
+      onSuccess: () => toast.success('Synkar Chao — klart om ~1–2 min'),
+      onError: (e) => toast.error((e as Error).message),
+    })
+  }
 
   const totals = useMemo(() => {
     if (!data) return { sales: 0, orders: 0 }
@@ -216,23 +230,30 @@ function PeriodColumn({ period, canonicalOrder, expandedKeys, onToggleExpand, di
                 />
               ))
             )}
-            {chaoSales > 0 && (
-              <div className="flex items-center gap-1.5 py-1 px-1.5 whitespace-nowrap">
-                <span className="flex-1 truncate text-xs text-slate-700 flex items-center gap-1">
-                  Chao <span className="text-[9px] text-amber-600 bg-amber-50 px-1 rounded">synk</span>
-                </span>
-                <span className="tabular-nums text-xs font-semibold text-slate-800 shrink-0">{formatKrCompact(chaoSales)}</span>
-                <span className="tabular-nums text-[10px] text-slate-500 shrink-0 w-8 text-right" />
-                <span className="shrink-0 w-5" />
-              </div>
-            )}
+            <div className="flex items-center gap-1.5 py-1 px-1.5 whitespace-nowrap">
+              <span className="flex-1 truncate text-xs text-slate-700 flex items-center gap-1">
+                Chao <span className="text-[9px] text-amber-600 bg-amber-50 px-1 rounded">synk</span>
+              </span>
+              <span className="tabular-nums text-xs font-semibold text-slate-800 shrink-0">
+                {chao.synced ? formatKrCompact(chao.sales) : '—'}
+              </span>
+              <span className="tabular-nums text-[10px] text-slate-500 shrink-0 w-8 text-right">{chao.orders || ''}</span>
+              <button
+                onClick={handleChaoSync}
+                disabled={runDinkassa.isPending}
+                title="Synka Chao för perioden"
+                className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-indigo-500 hover:bg-indigo-50 disabled:opacity-50 transition-colors"
+              >
+                <RefreshCw size={11} className={runDinkassa.isPending ? 'animate-spin' : ''} />
+              </button>
+            </div>
             <div className="flex items-center gap-1.5 mt-1 pt-1.5 border-t border-slate-100 px-1.5 whitespace-nowrap">
               <span className="flex-1 text-[11px] font-semibold text-slate-600">Totalt</span>
               <span className="tabular-nums text-xs font-bold text-indigo-600 shrink-0">
-                {formatKrCompact(totals.sales + chaoSales)} kr
+                {formatKrCompact(totals.sales + chao.sales)} kr
               </span>
               <span className="tabular-nums text-[10px] text-slate-500 shrink-0 w-8 text-right">
-                {totals.orders}
+                {totals.orders + chao.orders}
               </span>
               <span className="shrink-0 w-5" />
             </div>

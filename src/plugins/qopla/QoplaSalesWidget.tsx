@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { useQoplaSales } from './useQoplaSales'
-import { usePosDailySales, useRunDinkassa } from '../../hooks/useFortnox'
+import { usePosDailySales, useRunDinkassa, useRunAncon } from '../../hooks/useFortnox'
 
 function stockholmDate(daysAgo: number): string {
   const s = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Stockholm', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
@@ -15,16 +15,26 @@ export function QoplaSalesWidget() {
   const { data, isLoading, isError } = useQoplaSales(daysAgo)
   const { data: posSales = [] } = usePosDailySales()
   const runDinkassa = useRunDinkassa()
+  const runAncon = useRunAncon()
 
   const targetDate = stockholmDate(daysAgo)
-  const dinkassa = posSales.filter(p => p.source === 'dinkassa')
-  const chaoRows = dinkassa.filter(p => p.business_date === targetDate)
-  const chaoSales = chaoRows.reduce((s, r) => s + Number(r.sales), 0)
-  const chaoLatest = dinkassa[0] // most recent (query sorted desc)
 
-  const handleSync = () => {
-    runDinkassa.mutate({ from: targetDate, to: targetDate }, {
-      onSuccess: () => toast.success('Synkar Chao från dinkassa — klart om ~1–2 min'),
+  // Distinct synced (non-live) shops from stored daily sales.
+  const seen = new Set<string>()
+  const syncedShops: { id: string; name: string; source: string }[] = []
+  for (const p of posSales) {
+    if (!seen.has(p.qopla_shop_id)) { seen.add(p.qopla_shop_id); syncedShops.push({ id: p.qopla_shop_id, name: p.shop_name || p.qopla_shop_id, source: p.source }) }
+  }
+  const salesFor = (id: string) => posSales.filter(p => p.qopla_shop_id === id && p.business_date === targetDate).reduce((s, r) => s + Number(r.sales), 0)
+  const hasFor = (id: string) => posSales.some(p => p.qopla_shop_id === id && p.business_date === targetDate)
+  const latestFor = (id: string) => posSales.filter(p => p.qopla_shop_id === id)[0]
+  const syncing = runDinkassa.isPending || runAncon.isPending
+
+  const syncShop = (shop: { name: string; source: string }) => {
+    const runner = shop.source === 'ancon' ? runAncon : runDinkassa
+    const live = shop.source === 'ancon' // server-side = instant
+    runner.mutate({ from: targetDate, to: targetDate }, {
+      onSuccess: () => toast.success(live ? `${shop.name} synkad` : `Synkar ${shop.name} — klart om ~1–2 min`),
       onError: (e) => toast.error((e as Error).message),
     })
   }
@@ -45,17 +55,13 @@ export function QoplaSalesWidget() {
         <div className="flex gap-1">
           <button
             onClick={() => setDaysAgo(0)}
-            className={`text-[10px] px-1.5 py-0.5 rounded font-medium transition-colors ${
-              daysAgo === 0 ? 'bg-indigo-100 text-indigo-600' : 'text-slate-400 hover:text-slate-600'
-            }`}
+            className={`text-[10px] px-1.5 py-0.5 rounded font-medium transition-colors ${daysAgo === 0 ? 'bg-indigo-100 text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
           >
             Idag
           </button>
           <button
             onClick={() => setDaysAgo(1)}
-            className={`text-[10px] px-1.5 py-0.5 rounded font-medium transition-colors ${
-              daysAgo === 1 ? 'bg-indigo-100 text-indigo-600' : 'text-slate-400 hover:text-slate-600'
-            }`}
+            className={`text-[10px] px-1.5 py-0.5 rounded font-medium transition-colors ${daysAgo === 1 ? 'bg-indigo-100 text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
           >
             Igår
           </button>
@@ -91,37 +97,43 @@ export function QoplaSalesWidget() {
         </div>
       )}
 
-      {/* Chao (dinkassa) — synced via the sync button, not live */}
-      <div className="border-t border-slate-200 mt-2 pt-2">
-        <div className="flex justify-between items-center gap-1">
-          <span className="text-xs text-slate-500 truncate flex items-center gap-1">
-            Chao
-            <span className="text-[9px] text-amber-600 bg-amber-50 px-1 rounded">synk</span>
-          </span>
-          <div className="flex items-center gap-1 shrink-0">
-            {chaoRows.length
-              ? <span className="text-xs font-semibold text-slate-700">{chaoSales.toLocaleString('sv-SE')} kr</span>
-              : <span className="text-xs text-slate-400">—</span>}
-            <button
-              onClick={handleSync}
-              disabled={runDinkassa.isPending}
-              title="Synka Chao från dinkassa"
-              className="p-0.5 rounded text-indigo-500 hover:bg-indigo-50 disabled:opacity-50 transition-colors"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={runDinkassa.isPending ? 'animate-spin' : ''}>
-                <polyline points="23 4 23 10 17 10" />
-                <polyline points="1 20 1 14 7 14" />
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-              </svg>
-            </button>
-          </div>
+      {/* Synced (non-live) shops: Chao (dinkassa), Woso Emporia (ancon) */}
+      {syncedShops.length > 0 && (
+        <div className="border-t border-slate-200 mt-2 pt-2 space-y-1">
+          {syncedShops.map(shop => (
+            <div key={shop.id}>
+              <div className="flex justify-between items-center gap-1">
+                <span className="text-xs text-slate-500 truncate flex items-center gap-1">
+                  {shop.name}
+                  <span className="text-[9px] text-amber-600 bg-amber-50 px-1 rounded">synk</span>
+                </span>
+                <div className="flex items-center gap-1 shrink-0">
+                  {hasFor(shop.id)
+                    ? <span className="text-xs font-semibold text-slate-700">{salesFor(shop.id).toLocaleString('sv-SE')} kr</span>
+                    : <span className="text-xs text-slate-400">—</span>}
+                  <button
+                    onClick={() => syncShop(shop)}
+                    disabled={syncing}
+                    title={`Synka ${shop.name}`}
+                    className="p-0.5 rounded text-indigo-500 hover:bg-indigo-50 disabled:opacity-50 transition-colors"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={syncing ? 'animate-spin' : ''}>
+                      <polyline points="23 4 23 10 17 10" />
+                      <polyline points="1 20 1 14 7 14" />
+                      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              {!hasFor(shop.id) && latestFor(shop.id) && (
+                <div className="text-[9px] text-slate-400">
+                  Senast: {latestFor(shop.id).business_date} · {Number(latestFor(shop.id).sales).toLocaleString('sv-SE')} kr
+                </div>
+              )}
+            </div>
+          ))}
         </div>
-        {chaoRows.length === 0 && chaoLatest && (
-          <div className="text-[9px] text-slate-400 mt-0.5">
-            Senast synkad: {chaoLatest.business_date} · {Number(chaoLatest.sales).toLocaleString('sv-SE')} kr
-          </div>
-        )}
-      </div>
+      )}
     </div>
   )
 }

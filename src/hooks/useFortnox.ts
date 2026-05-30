@@ -248,6 +248,33 @@ export function useRunDinkassa() {
   })
 }
 
+// ---- Run ancon (Woso Emporia) — server-side, returns results synchronously ----
+export function useRunAncon() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (range: { from?: string; to?: string } = {}): Promise<{ from: string; to: string; results: SyncResult[] }> => {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) throw new Error('Ingen inloggad session')
+      const params = new URLSearchParams()
+      if (range.from) params.set('from', range.from)
+      if (range.to) params.set('to', range.to)
+      const res = await fetch(`/api/ancon-sync?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } })
+      const text = await res.text()
+      let json: any = null
+      try { json = JSON.parse(text) } catch { /* non-JSON = timeout/error page */ }
+      if (!json) throw new Error('Körningen tog för lång tid och avbröts. Kör igen — redan bokförda dagar hoppas över.')
+      if (!res.ok) throw new Error(json.error ?? 'Ancon-körning misslyckades')
+      return json
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['fortnox-postings'] })
+      qc.invalidateQueries({ queryKey: ['pos-daily-sales'] })
+      qc.invalidateQueries({ queryKey: ['fortnox-shop-map'] })
+    },
+  })
+}
+
 // ---- Manual SIE-file import (dinkassa etc.) ----
 export interface ImportResult {
   posted: number

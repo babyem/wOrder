@@ -10,11 +10,11 @@ import { useQoplaSales } from '../../hooks/useQoplaSales'
 import {
   useFortnoxCompanies, useCreateFortnoxCompany, useRenameFortnoxCompany, useDeleteFortnoxCompany,
   useFortnoxShopMap, useUpsertShopMap, useFortnoxPostings, useRunFortnoxSync, useReconcileFortnox,
-  useFortnoxConnections, startFortnoxConnect, useDinkassaMachines, useImportSie, useRunDinkassa,
+  useFortnoxConnections, startFortnoxConnect, useDinkassaMachines, useImportSie, useRunDinkassa, useRunAncon,
   type FortnoxCompany, type FortnoxShopMap,
 } from '../../hooks/useFortnox'
 
-interface MappableShop { id: string; name: string; source: 'qopla' | 'dinkassa' }
+interface MappableShop { id: string; name: string; source: 'qopla' | 'dinkassa' | 'ancon' }
 interface RunRow { shop?: string; date?: string; status: string; voucherNumbers?: string[]; voucher?: string; message?: string }
 
 export default function FortnoxPage() {
@@ -35,6 +35,9 @@ export default function FortnoxPage() {
     ...maps
       .filter(m => m.source === 'dinkassa' && !dinLiveIds.has(m.qopla_shop_id))
       .map(m => ({ id: m.qopla_shop_id, name: m.qopla_shop_name || m.qopla_shop_id, source: 'dinkassa' as const })),
+    ...maps
+      .filter(m => m.source === 'ancon')
+      .map(m => ({ id: m.qopla_shop_id, name: m.qopla_shop_name || m.qopla_shop_id, source: 'ancon' as const })),
   ]
 
   const createCompany = useCreateFortnoxCompany()
@@ -43,6 +46,7 @@ export default function FortnoxPage() {
   const reconcile = useReconcileFortnox()
   const importSie = useImportSie()
   const runDinkassa = useRunDinkassa()
+  const runAncon = useRunAncon()
 
   const [newCompany, setNewCompany] = useState('')
   const [importCompany, setImportCompany] = useState('')
@@ -50,6 +54,8 @@ export default function FortnoxPage() {
   const [dinkassaTo, setDinkassaTo] = useState('')
   const [qoplaFrom, setQoplaFrom] = useState('')
   const [qoplaTo, setQoplaTo] = useState('')
+  const [anconFrom, setAnconFrom] = useState('')
+  const [anconTo, setAnconTo] = useState('')
   const [qoplaExcluded, setQoplaExcluded] = useState<Set<string>>(new Set()) // deselected shops
   const [runModal, setRunModal] = useState<{ title: string; results: RunRow[] } | null>(null)
 
@@ -124,6 +130,14 @@ export default function FortnoxPage() {
         if (!data.changed.length) toast.success('Synkad — inga ändringar')
         else toast(`${data.changed.length} markerade som borttagna i Fortnox`)
       },
+      onError: (e) => toast.error((e as Error).message),
+    })
+  }
+
+  const handleRunAncon = () => {
+    if (anconTo && anconFrom && anconTo < anconFrom) { toast.error('Till-datum före Från-datum'); return }
+    runAncon.mutate({ from: anconFrom || undefined, to: anconTo || undefined }, {
+      onSuccess: showRun('Woso Emporia (ancon)'),
       onError: (e) => toast.error((e as Error).message),
     })
   }
@@ -247,8 +261,8 @@ export default function FortnoxPage() {
                   <div key={shop.id} className="flex flex-wrap items-center gap-2 py-1.5">
                     <span className="flex-1 min-w-[8rem] text-sm font-medium text-slate-700 truncate flex items-center gap-1.5">
                       {shop.name}
-                      {shop.source === 'dinkassa' && (
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">dinkassa</span>
+                      {shop.source !== 'qopla' && (
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">{shop.source}</span>
                       )}
                     </span>
                     <select
@@ -394,6 +408,48 @@ export default function FortnoxPage() {
             >
               {runDinkassa.isPending ? <Spinner size={14} className="border-white border-t-white/30" /> : <Play size={14} />}
               Kör dinkassa
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* Kör Woso Emporia (ancon) */}
+      <section className="bg-white rounded-2xl border border-slate-100 shadow-sm">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
+          <Play size={16} className="text-slate-400" />
+          <h2 className="font-semibold text-slate-900 text-sm">Kör Woso Emporia</h2>
+        </div>
+        <div className="p-5 space-y-3">
+          <p className="text-xs text-slate-500">
+            Hämtar Woso Emporia (ancon) och bokför mot kopplat bolag. Tomt = idag, eller Från (+ Till) för en period.
+            En verifikation per dag. Redan bokförda dagar hoppas. Resultat visas direkt.
+          </p>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="text-xs text-slate-500">
+              Från
+              <input
+                type="date"
+                value={anconFrom}
+                onChange={e => setAnconFrom(e.target.value)}
+                className="block mt-0.5 px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
+              />
+            </label>
+            <label className="text-xs text-slate-500">
+              Till <span className="text-slate-400">(valfritt)</span>
+              <input
+                type="date"
+                value={anconTo}
+                onChange={e => setAnconTo(e.target.value)}
+                className="block mt-0.5 px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
+              />
+            </label>
+            <button
+              onClick={handleRunAncon}
+              disabled={runAncon.isPending}
+              className="inline-flex items-center gap-2 px-4 py-1.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            >
+              {runAncon.isPending ? <Spinner size={14} className="border-white border-t-white/30" /> : <Play size={14} />}
+              Kör Woso Emporia
             </button>
           </div>
         </div>

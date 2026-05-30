@@ -45,3 +45,10 @@ jobs:
           FROM_DATE: ${{ github.event.inputs.from || '' }}
           TO_DATE: ${{ github.event.inputs.to || '' }}
         run: node scripts/dinkassa-scrape.mjs
+      - name: Sync ancon (Woso Emporia) — server-side on Vercel
+        env:
+          WORDER_URL: ${{ secrets.WORDER_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          DAY: ${{ github.event.inputs.day || 'yesterday' }}
+        run: |
+          curl -fsS -X GET "${WORDER_URL%/}/api/ancon-sync?day=${DAY}" -H "Authorization: Bearer ${CRON_SECRET}" || echo "ancon-sync failed (non-fatal)"

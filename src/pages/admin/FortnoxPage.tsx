@@ -118,7 +118,9 @@ export default function FortnoxPage() {
     importSie.mutate({ sie, companyId: importCompany, source: file.name }, {
       onSuccess: (d) => {
         const errs = d.results?.filter(r => r.status === 'error').length ?? 0
-        if (d.posted) toast.success(`${d.posted} verifikat bokförda${errs ? `, ${errs} fel` : ''}`)
+        const skip = d.skipped ?? 0
+        if (d.posted) toast.success(`${d.posted} bokförda${skip ? `, ${skip} redan importerade` : ''}${errs ? `, ${errs} fel` : ''}`)
+        else if (skip) toast(`Allt redan importerat (${skip} hoppade) — ingen dubbelbokföring`)
         else toast(d.message || 'Inget bokfört')
       },
       onError: (e) => toast.error((e as Error).message),
@@ -324,7 +326,7 @@ export default function FortnoxPage() {
         <div className="p-5 space-y-3">
           <p className="text-xs text-slate-500">
             För kassasystem utan API (t.ex. dinkassa): ladda ner <code className="text-slate-700">.se</code>-filen
-            och bokför den mot valt bolag. Ladda inte upp samma fil två gånger (dubbelbokför).
+            och bokför den mot valt bolag. Samma verifikationer hoppas över automatiskt — ingen dubbelbokföring.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <select

@@ -216,6 +216,7 @@ export function useRunDinkassa() {
 // ---- Manual SIE-file import (dinkassa etc.) ----
 export interface ImportResult {
   posted: number
+  skipped?: number
   results: { date: string; voucher?: string; status: string; message?: string }[]
   warnings: string[]
   message?: string

@@ -9,7 +9,7 @@ import { useQoplaSales } from '../../hooks/useQoplaSales'
 import {
   useFortnoxCompanies, useCreateFortnoxCompany, useRenameFortnoxCompany, useDeleteFortnoxCompany,
   useFortnoxShopMap, useUpsertShopMap, useFortnoxPostings, useRunFortnoxSync, useReconcileFortnox,
-  useFortnoxConnections, startFortnoxConnect, useDinkassaMachines, useImportSie,
+  useFortnoxConnections, startFortnoxConnect, useDinkassaMachines, useImportSie, useRunDinkassa,
   type FortnoxCompany, type FortnoxShopMap,
 } from '../../hooks/useFortnox'
 
@@ -40,9 +40,11 @@ export default function FortnoxPage() {
   const runSync = useRunFortnoxSync()
   const reconcile = useReconcileFortnox()
   const importSie = useImportSie()
+  const runDinkassa = useRunDinkassa()
 
   const [newCompany, setNewCompany] = useState('')
   const [importCompany, setImportCompany] = useState('')
+  const [dinkassaDate, setDinkassaDate] = useState('')
 
   // Toast the result of an OAuth connect redirect, then clean the URL.
   useEffect(() => {
@@ -118,6 +120,13 @@ export default function FortnoxPage() {
         if (d.posted) toast.success(`${d.posted} verifikat bokförda${errs ? `, ${errs} fel` : ''}`)
         else toast(d.message || 'Inget bokfört')
       },
+      onError: (e) => toast.error((e as Error).message),
+    })
+  }
+
+  const handleRunDinkassa = () => {
+    runDinkassa.mutate(dinkassaDate || undefined, {
+      onSuccess: (d) => toast.success(`dinkassa-körning startad (${d.date}) — resultat dyker upp om ~1–2 min`),
       onError: (e) => toast.error((e as Error).message),
     })
   }
@@ -255,6 +264,36 @@ export default function FortnoxPage() {
               })}
             </div>
           )}
+        </div>
+      </section>
+
+      {/* Kör dinkassa (trigga GitHub Action) */}
+      <section className="bg-white rounded-2xl border border-slate-100 shadow-sm">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
+          <Play size={16} className="text-slate-400" />
+          <h2 className="font-semibold text-slate-900 text-sm">Kör dinkassa</h2>
+        </div>
+        <div className="p-5 space-y-3">
+          <p className="text-xs text-slate-500">
+            Startar dinkassa-hämtningen (via GitHub Actions) och bokför mot kopplade bolag.
+            Tomt datum = gårdagen. Körs annars automatiskt 04:00. Resultat syns i Senaste körningar om ~1–2 min.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="date"
+              value={dinkassaDate}
+              onChange={e => setDinkassaDate(e.target.value)}
+              className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
+            />
+            <button
+              onClick={handleRunDinkassa}
+              disabled={runDinkassa.isPending}
+              className="inline-flex items-center gap-2 px-4 py-1.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            >
+              {runDinkassa.isPending ? <Spinner size={14} className="border-white border-t-white/30" /> : <Play size={14} />}
+              Kör dinkassa
+            </button>
+          </div>
         </div>
       </section>
 

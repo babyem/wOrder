@@ -194,6 +194,25 @@ export function useRunFortnoxSync() {
   })
 }
 
+// ---- Trigger the dinkassa GitHub Action (scrape + book) for a date ----
+export function useRunDinkassa() {
+  return useMutation({
+    mutationFn: async (date?: string): Promise<{ triggered: boolean; date: string }> => {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) throw new Error('Ingen inloggad session')
+      const res = await fetch('/api/dinkassa-run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ date: date || undefined }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Kunde inte starta körning')
+      return json
+    },
+  })
+}
+
 // ---- Manual SIE-file import (dinkassa etc.) ----
 export interface ImportResult {
   posted: number

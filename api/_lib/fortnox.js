@@ -157,10 +157,14 @@ export function buildVouchersFromSie(payload, { shopName, costCenterOverride, se
       skipped.push({ date, reason });
       continue; // never post an unbalanced voucher
     }
+    // Label with the Z-report number (from the verification name), e.g. "IZAKAI EMPORIA 464".
+    const zname = (v.name || "").trim();
+    const znum = (zname.match(/(\d+)\s*$/) || [])[1];
+    const label = znum || zname || date;
     vouchers.push({
       VoucherSeries: series,
       TransactionDate: date,
-      Description: `${shopName || "Qopla"} ${date}`.slice(0, 100),
+      Description: `${shopName || "Qopla"} ${label}`.slice(0, 100),
       VoucherRows: rows,
     });
   }

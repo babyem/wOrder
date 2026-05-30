@@ -10,10 +10,14 @@ on:
   workflow_dispatch:
     inputs:
       day:
-        description: "which day to book"
+        description: "which day to book (ignored if 'date' is set)"
         type: choice
         options: [yesterday, today]
         default: yesterday
+      date:
+        description: "specific date YYYY-MM-DD (optional, overrides day)"
+        type: string
+        default: ""
 
 jobs:
   book:
@@ -34,4 +38,5 @@ jobs:
           WORDER_URL: ${{ secrets.WORDER_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           DAY: ${{ github.event.inputs.day || 'yesterday' }}
+          DATE: ${{ github.event.inputs.date || '' }}
         run: node scripts/dinkassa-scrape.mjs

@@ -13,6 +13,7 @@ const {
 } = process.env;
 const INTEGRATOR_ID = process.env.DINKASSA_INTEGRATOR_ID || "cc7c4035-ce21-40a6-95e2-a39a641a1c27";
 const DAY = process.env.DAY || "yesterday";
+const DATE = (process.env.DATE || "").trim(); // specific YYYY-MM-DD, overrides DAY
 
 function stockholmDate(daysAgo) {
   const s = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Stockholm", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -26,8 +27,8 @@ async function main() {
   for (const [k, v] of Object.entries({ DINKASSA_USERNAME, DINKASSA_PASSWORD, WORDER_URL, CRON_SECRET })) {
     if (!v) throw new Error(`Missing env: ${k}`);
   }
-  const businessDate = stockholmDate(DAY === "today" ? 0 : 1);
-  console.log(`dinkassa scrape for ${businessDate} (DAY=${DAY})`);
+  const businessDate = /^\d{4}-\d{2}-\d{2}$/.test(DATE) ? DATE : stockholmDate(DAY === "today" ? 0 : 1);
+  console.log(`dinkassa scrape for ${businessDate}` + (DATE ? " (specific date)" : ` (DAY=${DAY})`));
 
   const browser = await chromium.launch();
   let machines;

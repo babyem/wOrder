@@ -1,13 +1,13 @@
 // api/dinkassa-book.js — receives dinkassa Z-reports (scraped by the GitHub Action,
 // which can run a real browser) and books them to Fortnox. Auth: CRON_SECRET bearer.
 //
-// Body: { businessDate: "YYYY-MM-DD", machines: [{ id, name, zReports: [...] }] }
+// Body: { from: "YYYY-MM-DD", to: "YYYY-MM-DD", machines: [{ id, name, zReports: [...] }] }
+//   (legacy: { businessDate, machines } — treated as from=to=businessDate)
 //
-// Per machine: ensures a fortnox_shop_map row exists (so it shows in the mapping UI),
-// then — if mapped to a company and enabled and not already booked today — turns the
-// Z-reports into Fortnox vouchers (series F) via the shared helpers.
+// Each Z-report becomes one Fortnox voucher dated by its own ReportDateTime, so a date
+// range books one verification per kassa per day. Idempotent per (kassa, day).
 
-import { sbSelect, sbInsert, sbUpdate } from "./_lib/supabaseAdmin.js";
+import { sbSelect, sbInsert, getUserFromJwt } from "./_lib/supabaseAdmin.js";
 import { zReportsToSiePayload } from "./_lib/dinkassa.js";
 import { buildVouchersFromSie, getCompanyAccessToken, createVoucher } from "./_lib/fortnox.js";
 
@@ -23,71 +23,75 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  const { businessDate, machines } = req.body || {};
-  if (!businessDate || !Array.isArray(machines)) {
-    return res.status(400).json({ error: "businessDate + machines[] krävs" });
+  const { from, to, businessDate, machines } = req.body || {};
+  const rangeFrom = from || businessDate;
+  const rangeTo = to || businessDate || from;
+  if (!Array.isArray(machines) || !rangeFrom) {
+    return res.status(400).json({ error: "machines[] + from (eller businessDate) krävs" });
   }
 
   try {
     const maps = await sbSelect("fortnox_shop_map", "select=*&source=eq.dinkassa");
     const mapById = new Map((maps || []).map(m => [m.qopla_shop_id, m]));
-    const posted = await sbSelect("fortnox_postings", `select=qopla_shop_id,status&business_date=eq.${businessDate}`);
-    const alreadyOk = new Set((posted || []).filter(p => p.status === "ok").map(p => p.qopla_shop_id));
+    const posted = await sbSelect(
+      "fortnox_postings",
+      `select=qopla_shop_id,business_date,status&business_date=gte.${rangeFrom}&business_date=lte.${rangeTo}`,
+    );
+    const okSet = new Set((posted || []).filter(p => p.status === "ok").map(p => `${p.qopla_shop_id}|${p.business_date}`));
     const tokenCache = new Map();
 
     const results = [];
     for (const machine of machines) {
       const shopId = machine.id;
-      const base = { shop: machine.name || shopId, shopId };
+      const shopName = machine.name || shopId;
 
       // Ensure the kassa shows up in the mapping UI (insert once; never overwrite config).
       let m = mapById.get(shopId);
       if (!m) {
         try {
           const rows = await sbInsert("fortnox_shop_map", {
-            qopla_shop_id: shopId, qopla_shop_name: machine.name || shopId, source: "dinkassa", enabled: true, company_id: null,
+            qopla_shop_id: shopId, qopla_shop_name: shopName, source: "dinkassa", enabled: true, company_id: null,
           });
           m = (rows && rows[0]) || { company_id: null, enabled: true };
           mapById.set(shopId, m);
         } catch { m = { company_id: null, enabled: true }; }
       }
 
-      if (!m.company_id) { results.push({ ...base, status: "unmapped", message: "Koppla kassan till ett bolag i /admin/fortnox" }); continue; }
-      if (m.enabled === false) { results.push({ ...base, status: "skipped", message: "pausad" }); continue; }
-      if (alreadyOk.has(shopId)) { results.push({ ...base, status: "skipped", message: "redan bokfört" }); continue; }
+      if (!m.company_id) { results.push({ shop: shopName, status: "unmapped", message: "Koppla kassan till ett bolag i /admin/fortnox" }); continue; }
+      if (m.enabled === false) { results.push({ shop: shopName, status: "skipped", message: "pausad" }); continue; }
 
-      try {
-        const payload = zReportsToSiePayload(machine.zReports || []);
-        const { vouchers, warnings } = buildVouchersFromSie(payload, {
-          shopName: machine.name || shopId,
-          costCenterOverride: m.cost_center || null,
-        });
-        if (!vouchers.length) {
-          const msg = warnings.length ? warnings.join("; ") : "Inga verifikationer";
-          await record(shopId, businessDate, m.company_id, null, "skipped", msg);
-          results.push({ ...base, status: "skipped", message: msg });
-          continue;
-        }
-        let token = tokenCache.get(m.company_id);
-        if (!token) {
-          const t = await sbSelect("fortnox_tokens", `select=*&company_id=eq.${m.company_id}`);
-          if (!t || !t[0]) { results.push({ ...base, status: "error", message: "Bolaget saknar Fortnox-token" }); continue; }
-          token = t[0]; tokenCache.set(m.company_id, token);
-        }
-        const accessToken = await getCompanyAccessToken(token);
-        const voucherNumbers = [];
-        for (const v of vouchers) {
+      const payload = zReportsToSiePayload(machine.zReports || []);
+      const { vouchers, warnings } = buildVouchersFromSie(payload, { shopName, costCenterOverride: m.cost_center || null });
+      if (!vouchers.length) {
+        results.push({ shop: shopName, status: "skipped", message: warnings.length ? warnings.join("; ") : "Inga verifikationer" });
+        continue;
+      }
+
+      let token = tokenCache.get(m.company_id);
+      if (!token) {
+        const t = await sbSelect("fortnox_tokens", `select=*&company_id=eq.${m.company_id}`);
+        if (!t || !t[0]) { results.push({ shop: shopName, status: "error", message: "Bolaget saknar Fortnox-token" }); continue; }
+        token = t[0]; tokenCache.set(m.company_id, token);
+      }
+
+      // One voucher per day in the range.
+      for (const v of vouchers) {
+        const date = v.TransactionDate;
+        if (okSet.has(`${shopId}|${date}`)) { results.push({ shop: shopName, date, status: "skipped", message: "redan bokfört" }); continue; }
+        try {
+          const accessToken = await getCompanyAccessToken(token);
           const created = await createVoucher(accessToken, v);
-          voucherNumbers.push(`${created.VoucherSeries}${created.VoucherNumber}`);
+          const num = `${created.VoucherSeries}${created.VoucherNumber}`;
+          await record(shopId, date, m.company_id, num, "ok", "OK");
+          okSet.add(`${shopId}|${date}`);
+          results.push({ shop: shopName, date, status: "ok", voucher: num });
+        } catch (e) {
+          await record(shopId, date, m.company_id, null, "error", e.message);
+          results.push({ shop: shopName, date, status: "error", message: e.message });
         }
-        await record(shopId, businessDate, m.company_id, voucherNumbers.join(", "), "ok", warnings.length ? warnings.join("; ") : "OK");
-        results.push({ ...base, status: "ok", voucherNumbers });
-      } catch (e) {
-        await record(shopId, businessDate, m.company_id, null, "error", e.message);
-        results.push({ ...base, status: "error", message: e.message });
       }
     }
-    return res.status(200).json({ businessDate, results, ranAt: new Date().toISOString() });
+    return res.status(200).json({ from: rangeFrom, to: rangeTo, results, ranAt: new Date().toISOString() });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

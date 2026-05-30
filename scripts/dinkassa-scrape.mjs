@@ -13,7 +13,8 @@ const {
 } = process.env;
 const INTEGRATOR_ID = process.env.DINKASSA_INTEGRATOR_ID || "cc7c4035-ce21-40a6-95e2-a39a641a1c27";
 const DAY = process.env.DAY || "yesterday";
-const DATE = (process.env.DATE || "").trim(); // specific YYYY-MM-DD, overrides DAY
+const FROM = (process.env.FROM_DATE || process.env.DATE || "").trim(); // YYYY-MM-DD, overrides DAY
+const TO = (process.env.TO_DATE || "").trim(); // optional range end; defaults to FROM
 
 function stockholmDate(daysAgo) {
   const s = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Stockholm", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -27,8 +28,9 @@ async function main() {
   for (const [k, v] of Object.entries({ DINKASSA_USERNAME, DINKASSA_PASSWORD, WORDER_URL, CRON_SECRET })) {
     if (!v) throw new Error(`Missing env: ${k}`);
   }
-  const businessDate = /^\d{4}-\d{2}-\d{2}$/.test(DATE) ? DATE : stockholmDate(DAY === "today" ? 0 : 1);
-  console.log(`dinkassa scrape for ${businessDate}` + (DATE ? " (specific date)" : ` (DAY=${DAY})`));
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(FROM) ? FROM : stockholmDate(DAY === "today" ? 0 : 1);
+  const to = /^\d{4}-\d{2}-\d{2}$/.test(TO) ? TO : from;
+  console.log(`dinkassa scrape ${from} .. ${to}`);
 
   const browser = await chromium.launch();
   let machines;
@@ -47,18 +49,18 @@ async function main() {
     await page.waitForFunction(() => !!localStorage.getItem("sessionId"), null, { timeout: 30000 });
 
     // Pull machines + Z-reports from the authenticated page context.
-    machines = await page.evaluate(async ({ integrator, date }) => {
+    machines = await page.evaluate(async ({ integrator, from, to }) => {
       const sid = localStorage.getItem("sessionId");
       const H = { Accept: "application/json", SessionId: sid, IntegratorId: integrator };
       const mjson = await (await fetch("https://dinkassa.se/api/machine", { headers: H })).json();
       const list = (mjson.Items || []).map(m => ({ id: m.Id, name: m.Name }));
       for (const m of list) {
-        const url = `https://dinkassa.se/api/reports/download-z-report-by-date/json?machineId=${encodeURIComponent(m.id)}&startDate=${date}&endDate=${date}`;
+        const url = `https://dinkassa.se/api/reports/download-z-report-by-date/json?machineId=${encodeURIComponent(m.id)}&startDate=${from}&endDate=${to}`;
         const j = await (await fetch(url, { headers: H })).json();
         m.zReports = j.ZReports || [];
       }
       return list;
-    }, { integrator: INTEGRATOR_ID, date: businessDate });
+    }, { integrator: INTEGRATOR_ID, from, to });
   } finally {
     await browser.close();
   }
@@ -68,7 +70,7 @@ async function main() {
   const res = await fetch(`${WORDER_URL.replace(/\/$/, "")}/api/dinkassa-book`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${CRON_SECRET}` },
-    body: JSON.stringify({ businessDate, machines }),
+    body: JSON.stringify({ from, to, machines }),
   });
   const out = await res.json().catch(() => ({}));
   console.log("Book result:", JSON.stringify(out, null, 2));

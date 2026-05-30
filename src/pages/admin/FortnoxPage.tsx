@@ -44,7 +44,8 @@ export default function FortnoxPage() {
 
   const [newCompany, setNewCompany] = useState('')
   const [importCompany, setImportCompany] = useState('')
-  const [dinkassaDate, setDinkassaDate] = useState('')
+  const [dinkassaFrom, setDinkassaFrom] = useState('')
+  const [dinkassaTo, setDinkassaTo] = useState('')
 
   // Toast the result of an OAuth connect redirect, then clean the URL.
   useEffect(() => {
@@ -125,8 +126,12 @@ export default function FortnoxPage() {
   }
 
   const handleRunDinkassa = () => {
-    runDinkassa.mutate(dinkassaDate || undefined, {
-      onSuccess: (d) => toast.success(`dinkassa-körning startad (${d.date}) — resultat dyker upp om ~1–2 min`),
+    if (dinkassaTo && dinkassaFrom && dinkassaTo < dinkassaFrom) { toast.error('Till-datum före Från-datum'); return }
+    runDinkassa.mutate({ from: dinkassaFrom || undefined, to: dinkassaTo || undefined }, {
+      onSuccess: (d) => {
+        const span = d.to && d.to !== d.from ? `${d.from}…${d.to}` : d.from
+        toast.success(`dinkassa-körning startad (${span}) — resultat om ~1–2 min`)
+      },
       onError: (e) => toast.error((e as Error).message),
     })
   }
@@ -276,15 +281,28 @@ export default function FortnoxPage() {
         <div className="p-5 space-y-3">
           <p className="text-xs text-slate-500">
             Startar dinkassa-hämtningen (via GitHub Actions) och bokför mot kopplade bolag.
-            Tomt datum = gårdagen. Körs annars automatiskt 04:00. Resultat syns i Senaste körningar om ~1–2 min.
+            Tomt = gårdagen. Ange Från för en dag, eller Från + Till för en period. En verifikation per kassa per dag.
+            Redan bokförda dagar hoppas över. Resultat syns i Senaste körningar om ~1–2 min.
           </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              type="date"
-              value={dinkassaDate}
-              onChange={e => setDinkassaDate(e.target.value)}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
-            />
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="text-xs text-slate-500">
+              Från
+              <input
+                type="date"
+                value={dinkassaFrom}
+                onChange={e => setDinkassaFrom(e.target.value)}
+                className="block mt-0.5 px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
+              />
+            </label>
+            <label className="text-xs text-slate-500">
+              Till <span className="text-slate-400">(valfritt)</span>
+              <input
+                type="date"
+                value={dinkassaTo}
+                onChange={e => setDinkassaTo(e.target.value)}
+                className="block mt-0.5 px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
+              />
+            </label>
             <button
               onClick={handleRunDinkassa}
               disabled={runDinkassa.isPending}

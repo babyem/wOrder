@@ -23,11 +23,17 @@ export default async function handler(req, res) {
   const repo = process.env.GITHUB_REPO || "babyem/wOrder";
   const workflow = process.env.GH_WORKFLOW_FILE || "dinkassa-fortnox.yml";
 
-  const { date } = req.body || {};
+  const { from, to, date } = req.body || {};
+  const start = from || date; // accept legacy 'date' too
+  const ymd = /^\d{4}-\d{2}-\d{2}$/;
   const inputs = {};
-  if (date) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: "date måste vara YYYY-MM-DD" });
-    inputs.date = date;
+  if (start) {
+    if (!ymd.test(start)) return res.status(400).json({ error: "from måste vara YYYY-MM-DD" });
+    inputs.from = start;
+    if (to) {
+      if (!ymd.test(to)) return res.status(400).json({ error: "to måste vara YYYY-MM-DD" });
+      inputs.to = to;
+    }
   }
 
   try {
@@ -42,7 +48,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({ ref: "main", inputs }),
     });
-    if (r.status === 204) return res.status(200).json({ triggered: true, date: date || "yesterday" });
+    if (r.status === 204) return res.status(200).json({ triggered: true, from: start || "yesterday", to: to || start || "" });
     const t = await r.text();
     return res.status(500).json({ error: `GitHub dispatch ${r.status}: ${t.slice(0, 200)}` });
   } catch (err) {

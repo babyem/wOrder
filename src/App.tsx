@@ -15,6 +15,10 @@ import FortnoxPage from './pages/admin/FortnoxPage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const user = useAuthStore(s => s.user)
+  const initialized = useAuthStore(s => s.initialized)
+  // Wait for the initial session check before deciding — otherwise a page refresh
+  // briefly sees user=null and redirects away from the current admin page.
+  if (!initialized) return null
   if (!user) return <Navigate to="/admin/login" replace />
   return <>{children}</>
 }

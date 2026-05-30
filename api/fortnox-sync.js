@@ -123,42 +123,58 @@ export default async function handler(req, res) {
       return qoplaToken;
     };
 
+    const dateSet = new Set(dates);
+    const rangeStart = dayRangeISO(dates[0]).startDate;
+    const rangeEnd = dayRangeISO(dates[dates.length - 1]).endDate;
+
     const results = [];
     for (const m of targets) {
       const shopId = m.qopla_shop_id;
       const shopName = m.qopla_shop_name || shopId;
       const tokenRow = tokenByCompany.get(m.company_id);
+      if (!tokenRow) {
+        results.push({ shop: shopName, shopId, status: "error", message: `Ingen Fortnox-token för bolaget "${companyName.get(m.company_id) || m.company_id}"` });
+        continue;
+      }
 
+      // ONE Qopla call for the whole range; Qopla returns one verification per day.
+      let byDate;
+      try {
+        const payload = await fetchSiePayload({ token: await getQoplaToken(), shopId, startDate: rangeStart, endDate: rangeEnd });
+        const { vouchers } = buildVouchersFromSie(payload, { shopName, costCenterOverride: m.cost_center || null });
+        byDate = new Map();
+        for (const v of vouchers) {
+          if (!dateSet.has(v.TransactionDate)) continue;
+          const arr = byDate.get(v.TransactionDate) || [];
+          arr.push(v);
+          byDate.set(v.TransactionDate, arr);
+        }
+      } catch (err) {
+        results.push({ shop: shopName, shopId, status: "error", message: err.message });
+        continue;
+      }
+
+      // Book per day from the cached result.
+      let accessToken = null;
       for (const date of dates) {
         const base = { shop: shopName, shopId, date };
         if (okSet.has(`${shopId}|${date}`)) { results.push({ ...base, status: "skipped", message: "redan bokfört" }); continue; }
-        if (!tokenRow) {
-          const msg = `Ingen Fortnox-token för bolaget "${companyName.get(m.company_id) || m.company_id}"`;
-          await record(shopId, date, m.company_id, null, "error", msg);
-          results.push({ ...base, status: "error", message: msg });
+        const dayVouchers = byDate.get(date) || [];
+        if (!dayVouchers.length) {
+          await record(shopId, date, m.company_id, null, "skipped", "Inga verifikationer");
+          results.push({ ...base, status: "skipped", message: "Inga verifikationer" });
           continue;
         }
         try {
-          const { startDate, endDate } = dayRangeISO(date);
-          const payload = await fetchSiePayload({ token: await getQoplaToken(), shopId, startDate, endDate });
-          const { vouchers, warnings, referenceReportId } = buildVouchersFromSie(payload, {
-            shopName, costCenterOverride: m.cost_center || null,
-          });
-          if (!vouchers.length) {
-            const msg = warnings.length ? warnings.join("; ") : "Inga verifikationer";
-            await record(shopId, date, m.company_id, referenceReportId, "skipped", msg);
-            results.push({ ...base, status: "skipped", message: msg });
-            continue;
-          }
-          const accessToken = await getCompanyAccessToken(tokenRow);
+          if (!accessToken) accessToken = await getCompanyAccessToken(tokenRow);
           const voucherNumbers = [];
-          for (const v of vouchers) {
+          for (const v of dayVouchers) {
             const created = await createVoucher(accessToken, v);
             voucherNumbers.push(`${created.VoucherSeries}${created.VoucherNumber}`);
           }
-          await record(shopId, date, m.company_id, referenceReportId, "ok", warnings.length ? `OK (${warnings.join("; ")})` : "OK", voucherNumbers);
+          await record(shopId, date, m.company_id, null, "ok", "OK", voucherNumbers);
           okSet.add(`${shopId}|${date}`);
-          results.push({ ...base, status: "ok", voucherNumbers, warnings });
+          results.push({ ...base, status: "ok", voucherNumbers });
         } catch (err) {
           await record(shopId, date, m.company_id, null, "error", err.message);
           results.push({ ...base, status: "error", message: err.message });

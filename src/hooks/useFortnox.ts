@@ -131,6 +131,33 @@ export function useFortnoxPostings(limit = 50) {
   })
 }
 
+// ---- Stored daily POS sales (dinkassa/Chao), populated by the sync ----
+export interface PosDailySale {
+  qopla_shop_id: string
+  business_date: string
+  shop_name: string | null
+  source: string
+  sales: number
+  orders: number | null
+}
+
+export function usePosDailySales() {
+  return useQuery({
+    queryKey: ['pos-daily-sales'],
+    queryFn: async (): Promise<PosDailySale[]> => {
+      const { data, error } = await supabase
+        .from('pos_daily_sales')
+        .select('*')
+        .order('business_date', { ascending: false })
+        .limit(400)
+      if (error) return []
+      return data
+    },
+    staleTime: 60 * 1000,
+    refetchInterval: 30 * 1000, // pick up data after a sync completes
+  })
+}
+
 // ---- dinkassa kassor (for the mapping list) ----
 export function useDinkassaMachines() {
   return useQuery({

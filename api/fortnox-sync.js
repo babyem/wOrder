@@ -116,79 +116,75 @@ export default async function handler(req, res) {
       return res.status(200).json({ ranAt: new Date().toISOString(), dates, results: [], note: "Inga matchande Qopla-mappningar" });
     }
 
-    // Qopla session is created lazily.
-    let qoplaToken = null;
-    const getQoplaToken = async () => {
-      if (!qoplaToken) qoplaToken = (await getSession()).token;
-      return qoplaToken;
-    };
-
     const rangeStart = dayRangeISO(dates[0]).startDate;
     const rangeEnd = dayRangeISO(dates[dates.length - 1]).endDate;
-
     const results = [];
-    const pending = []; // { shopId, shopName, companyId, tokenRow, date, vouchers }
 
-    // Phase 1: fetch each shop's range (one Qopla call each), collect un-booked days.
-    for (const m of targets) {
+    // Phase 1: fetch every shop's range concurrently (one Qopla call each).
+    const qToken = (await getSession()).token;
+    const fetched = await Promise.all(targets.map(async (m) => {
       const shopId = m.qopla_shop_id;
       const shopName = m.qopla_shop_name || shopId;
       const tokenRow = tokenByCompany.get(m.company_id);
-      if (!tokenRow) {
-        results.push({ shop: shopName, shopId, status: "error", message: `Ingen Fortnox-token för bolaget "${companyName.get(m.company_id) || m.company_id}"` });
-        continue;
-      }
-      let byDate, dropped = [];
+      if (!tokenRow) return { shopId, shopName, error: `Ingen Fortnox-token för bolaget "${companyName.get(m.company_id) || m.company_id}"` };
       try {
-        const payload = await fetchSiePayload({ token: await getQoplaToken(), shopId, startDate: rangeStart, endDate: rangeEnd });
+        const payload = await fetchSiePayload({ token: qToken, shopId, startDate: rangeStart, endDate: rangeEnd });
         const built = buildVouchersFromSie(payload, { shopName, costCenterOverride: m.cost_center || null });
-        dropped = built.skipped || [];
-        byDate = new Map();
-        for (const v of built.vouchers) {
-          const arr = byDate.get(v.TransactionDate) || [];
-          arr.push(v);
-          byDate.set(v.TransactionDate, arr);
-        }
+        return { shopId, shopName, companyId: m.company_id, tokenRow, vouchers: built.vouchers, dropped: built.skipped || [] };
       } catch (err) {
-        results.push({ shop: shopName, shopId, status: "error", message: err.message });
-        continue;
+        return { shopId, shopName, error: err.message };
       }
-      // Surface verifications that couldn't be booked (e.g. unbalanced) as errors.
-      for (const s of dropped) {
-        if (okSet.has(`${shopId}|${s.date}`)) continue;
-        await record(shopId, s.date, m.company_id, null, "error", s.reason);
-        results.push({ shop: shopName, shopId, date: s.date, status: "error", message: s.reason });
+    }));
+
+    // Phase 1b: record un-bookable days + collect pending bookings (cheap, sequential).
+    const pending = []; // { shopId, shopName, companyId, tokenRow, date, vouchers }
+    for (const f of fetched) {
+      if (f.error) { results.push({ shop: f.shopName, shopId: f.shopId, status: "error", message: f.error }); continue; }
+      for (const s of f.dropped) {
+        if (okSet.has(`${f.shopId}|${s.date}`)) continue;
+        await record(f.shopId, s.date, f.companyId, null, "error", s.reason);
+        results.push({ shop: f.shopName, shopId: f.shopId, date: s.date, status: "error", message: s.reason });
+      }
+      const byDate = new Map();
+      for (const v of f.vouchers) {
+        const arr = byDate.get(v.TransactionDate) || [];
+        arr.push(v);
+        byDate.set(v.TransactionDate, arr);
       }
       if (!byDate.size) {
-        if (!dropped.length) results.push({ shop: shopName, shopId, status: "skipped", message: "Inga verifikationer i perioden" });
+        if (!f.dropped.length) results.push({ shop: f.shopName, shopId: f.shopId, status: "skipped", message: "Inga verifikationer i perioden" });
         continue;
       }
       for (const [date, vouchers] of byDate) {
-        if (okSet.has(`${shopId}|${date}`)) { results.push({ shop: shopName, shopId, date, status: "skipped", message: "redan bokfört" }); continue; }
-        pending.push({ shopId, shopName, companyId: m.company_id, tokenRow, date, vouchers });
+        if (okSet.has(`${f.shopId}|${date}`)) { results.push({ shop: f.shopName, shopId: f.shopId, date, status: "skipped", message: "redan bokfört" }); continue; }
+        pending.push({ shopId: f.shopId, shopName: f.shopName, companyId: f.companyId, tokenRow: f.tokenRow, date, vouchers });
       }
     }
 
-    // Phase 2: book in chronological order so Fortnox voucher numbers follow the dates.
-    pending.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.shopName.localeCompare(b.shopName)));
-    const accessByCompany = new Map();
-    for (const p of pending) {
-      const base = { shop: p.shopName, shopId: p.shopId, date: p.date };
-      try {
-        let accessToken = accessByCompany.get(p.companyId);
-        if (!accessToken) { accessToken = await getCompanyAccessToken(p.tokenRow); accessByCompany.set(p.companyId, accessToken); }
-        const voucherNumbers = [];
-        for (const v of p.vouchers) {
-          const created = await createVoucher(accessToken, v);
-          voucherNumbers.push(`${created.VoucherSeries}${created.VoucherNumber}`);
+    // Phase 2: book per company sequentially (so each F-series stays date-ordered),
+    // but run different companies concurrently for speed.
+    const byCompany = new Map();
+    for (const p of pending) { const a = byCompany.get(p.companyId) || []; a.push(p); byCompany.set(p.companyId, a); }
+    await Promise.all([...byCompany.values()].map(async (list) => {
+      list.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.shopName.localeCompare(b.shopName)));
+      let accessToken = null;
+      for (const p of list) {
+        const base = { shop: p.shopName, shopId: p.shopId, date: p.date };
+        try {
+          if (!accessToken) accessToken = await getCompanyAccessToken(p.tokenRow);
+          const voucherNumbers = [];
+          for (const v of p.vouchers) {
+            const created = await createVoucher(accessToken, v);
+            voucherNumbers.push(`${created.VoucherSeries}${created.VoucherNumber}`);
+          }
+          await record(p.shopId, p.date, p.companyId, null, "ok", "OK", voucherNumbers);
+          results.push({ ...base, status: "ok", voucherNumbers });
+        } catch (err) {
+          await record(p.shopId, p.date, p.companyId, null, "error", err.message);
+          results.push({ ...base, status: "error", message: err.message });
         }
-        await record(p.shopId, p.date, p.companyId, null, "ok", "OK", voucherNumbers);
-        results.push({ ...base, status: "ok", voucherNumbers });
-      } catch (err) {
-        await record(p.shopId, p.date, p.companyId, null, "error", err.message);
-        results.push({ ...base, status: "error", message: err.message });
       }
-    }
+    }));
 
     return res.status(200).json({ ranAt: new Date().toISOString(), dates, results });
   } catch (err) {

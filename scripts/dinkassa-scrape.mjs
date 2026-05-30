@@ -35,10 +35,11 @@ async function main() {
     const page = await browser.newContext().then(c => c.newPage());
     await page.goto("https://dinkassa.se/v2/login", { waitUntil: "networkidle" });
 
-    // Fill the login form (the only path dinkassa accepts).
-    await page.locator("input[type=password]").first().waitFor({ timeout: 30000 });
-    await page.locator("input:not([type=password])").first().fill(DINKASSA_USERNAME);
-    await page.locator("input[type=password]").first().fill(DINKASSA_PASSWORD);
+    // Fill the login form (the only path dinkassa accepts). Field is input[name=username]
+    // — NOT the first text input (that's the language selector).
+    await page.locator("input[name=username]").waitFor({ timeout: 30000 });
+    await page.locator("input[name=username]").fill(DINKASSA_USERNAME);
+    await page.locator("input[name=password]").fill(DINKASSA_PASSWORD);
     await page.getByRole("button", { name: /logga in/i }).click();
 
     // Session lands in localStorage on success.

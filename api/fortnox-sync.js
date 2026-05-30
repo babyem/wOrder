@@ -104,10 +104,16 @@ export default async function handler(req, res) {
     const tokenByCompany = new Map((tokens || []).map(t => [t.company_id, t]));
     const okSet = new Set((postedRows || []).filter(p => p.status === "ok").map(p => `${p.qopla_shop_id}|${p.business_date}`));
 
+    // Optional shop filter (?shops=id1,id2) — run only selected restaurants.
+    const shopFilter = req.query.shops
+      ? new Set(String(req.query.shops).split(",").map(s => s.trim()).filter(Boolean))
+      : null;
+
     // Qopla shops only — dinkassa rows are booked by the GitHub Action (login is browser-bound).
-    const targets = (maps || []).filter(m => m.company_id && m.source !== "dinkassa");
+    const targets = (maps || []).filter(m =>
+      m.company_id && m.source !== "dinkassa" && (!shopFilter || shopFilter.has(m.qopla_shop_id)));
     if (!targets.length) {
-      return res.status(200).json({ ranAt: new Date().toISOString(), dates, results: [], note: "Inga aktiva Qopla-mappningar" });
+      return res.status(200).json({ ranAt: new Date().toISOString(), dates, results: [], note: "Inga matchande Qopla-mappningar" });
     }
 
     // Qopla session is created lazily.

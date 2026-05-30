@@ -48,6 +48,7 @@ export default function FortnoxPage() {
   const [dinkassaTo, setDinkassaTo] = useState('')
   const [qoplaFrom, setQoplaFrom] = useState('')
   const [qoplaTo, setQoplaTo] = useState('')
+  const [qoplaExcluded, setQoplaExcluded] = useState<Set<string>>(new Set()) // deselected shops
 
   // Toast the result of an OAuth connect redirect, then clean the URL.
   useEffect(() => {
@@ -102,9 +103,15 @@ export default function FortnoxPage() {
     runSync.mutate({}, { onSuccess: syncToast, onError: (e) => toast.error((e as Error).message) })
   }
 
+  const toggleQoplaShop = (id: string) => setQoplaExcluded(prev => {
+    const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n
+  })
+
   const handleRunQopla = () => {
+    const selected = shops.filter(s => !qoplaExcluded.has(s.shopId)).map(s => s.shopId)
+    if (!selected.length) { toast.error('Välj minst en butik'); return }
     if (qoplaTo && qoplaFrom && qoplaTo < qoplaFrom) { toast.error('Till-datum före Från-datum'); return }
-    runSync.mutate({ from: qoplaFrom || undefined, to: qoplaTo || undefined }, {
+    runSync.mutate({ from: qoplaFrom || undefined, to: qoplaTo || undefined, shops: selected }, {
       onSuccess: syncToast,
       onError: (e) => toast.error((e as Error).message),
     })
@@ -291,9 +298,35 @@ export default function FortnoxPage() {
         </div>
         <div className="p-5 space-y-3">
           <p className="text-xs text-slate-500">
-            Bokför Qopla-butikerna för valt datum eller period. Tomt = idag ("Kör nu" uppe).
-            En verifikation per butik per dag. Redan bokförda dagar hoppas över.
+            Bokför valda Qopla-butiker för valt datum eller period (olika bolag kan köras separat).
+            Tomt datum = idag. En verifikation per butik per dag. Redan bokförda dagar hoppas över.
           </p>
+          {shops.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-slate-600">
+                  Butiker ({shops.filter(s => !qoplaExcluded.has(s.shopId)).length}/{shops.length})
+                </span>
+                <div className="flex gap-3 text-xs">
+                  <button onClick={() => setQoplaExcluded(new Set())} className="text-indigo-600 hover:underline">Alla</button>
+                  <button onClick={() => setQoplaExcluded(new Set(shops.map(s => s.shopId)))} className="text-slate-400 hover:underline">Inga</button>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-40 overflow-auto pr-1">
+                {shops.map(s => (
+                  <label key={s.shopId} className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!qoplaExcluded.has(s.shopId)}
+                      onChange={() => toggleQoplaShop(s.shopId)}
+                      className="rounded border-slate-300"
+                    />
+                    <span className="truncate">{s.restaurant}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="flex flex-wrap items-end gap-2">
             <label className="text-xs text-slate-500">
               Från

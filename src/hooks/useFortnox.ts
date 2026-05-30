@@ -180,13 +180,14 @@ export async function startFortnoxConnect(companyId: string): Promise<void> {
 export function useRunFortnoxSync() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (range: { from?: string; to?: string } = {}): Promise<{ ranAt: string; dates?: string[]; results: SyncResult[]; note?: string }> => {
+    mutationFn: async (range: { from?: string; to?: string; shops?: string[] } = {}): Promise<{ ranAt: string; dates?: string[]; results: SyncResult[]; note?: string }> => {
       const { data: { session } } = await supabase.auth.getSession()
       const token = session?.access_token
       if (!token) throw new Error('Ingen inloggad session')
       const params = new URLSearchParams({ action: 'run', force: '1' })
       if (range.from) params.set('from', range.from)
       if (range.to) params.set('to', range.to)
+      if (range.shops && range.shops.length) params.set('shops', range.shops.join(','))
       const res = await fetch(`/api/fortnox-sync?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       })

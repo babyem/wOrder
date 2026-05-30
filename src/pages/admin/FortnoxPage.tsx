@@ -5,6 +5,7 @@ import {
   CheckCircle2, AlertCircle, MinusCircle, Info, Plug, Link2, RefreshCw, Ban, FileUp,
 } from 'lucide-react'
 import Spinner from '../../components/ui/Spinner'
+import Modal from '../../components/ui/Modal'
 import { useQoplaSales } from '../../hooks/useQoplaSales'
 import {
   useFortnoxCompanies, useCreateFortnoxCompany, useRenameFortnoxCompany, useDeleteFortnoxCompany,
@@ -14,6 +15,7 @@ import {
 } from '../../hooks/useFortnox'
 
 interface MappableShop { id: string; name: string; source: 'qopla' | 'dinkassa' }
+interface RunRow { shop?: string; date?: string; status: string; voucherNumbers?: string[]; voucher?: string; message?: string }
 
 export default function FortnoxPage() {
   const { data: shops = [], isLoading: shopsLoading } = useQoplaSales()
@@ -49,6 +51,7 @@ export default function FortnoxPage() {
   const [qoplaFrom, setQoplaFrom] = useState('')
   const [qoplaTo, setQoplaTo] = useState('')
   const [qoplaExcluded, setQoplaExcluded] = useState<Set<string>>(new Set()) // deselected shops
+  const [runModal, setRunModal] = useState<{ title: string; results: RunRow[] } | null>(null)
 
   // Toast the result of an OAuth connect redirect, then clean the URL.
   useEffect(() => {
@@ -90,17 +93,15 @@ export default function FortnoxPage() {
     })
   }
 
-  const syncToast = (data: { note?: string; results: { status: string }[] }) => {
-    if (data.note && !data.results.length) { toast(data.note); return }
-    const ok = data.results.filter(r => r.status === 'ok').length
-    const err = data.results.filter(r => r.status === 'error').length
-    const skip = data.results.filter(r => r.status === 'skipped').length
-    if (err) toast.error(`${ok} bokförda, ${skip} hoppade, ${err} fel`)
-    else toast.success(`${ok} bokförda, ${skip} hoppade`)
+  const showRun = (title: string) => (data: { note?: string; results?: RunRow[] }) => {
+    if (data.note && !(data.results || []).length) { toast(data.note); return }
+    const results = [...(data.results || [])].sort((a, b) =>
+      (a.date || '') < (b.date || '') ? -1 : (a.date || '') > (b.date || '') ? 1 : (a.shop || '').localeCompare(b.shop || ''))
+    setRunModal({ title, results })
   }
 
   const handleRun = () => {
-    runSync.mutate({}, { onSuccess: syncToast, onError: (e) => toast.error((e as Error).message) })
+    runSync.mutate({}, { onSuccess: showRun('Qopla — idag'), onError: (e) => toast.error((e as Error).message) })
   }
 
   const toggleQoplaShop = (id: string) => setQoplaExcluded(prev => {
@@ -112,7 +113,7 @@ export default function FortnoxPage() {
     if (!selected.length) { toast.error('Välj minst en butik'); return }
     if (qoplaTo && qoplaFrom && qoplaTo < qoplaFrom) { toast.error('Till-datum före Från-datum'); return }
     runSync.mutate({ from: qoplaFrom || undefined, to: qoplaTo || undefined, shops: selected }, {
-      onSuccess: syncToast,
+      onSuccess: showRun(`Qopla ${qoplaFrom || 'idag'}${qoplaTo && qoplaTo !== qoplaFrom ? `…${qoplaTo}` : ''}`),
       onError: (e) => toast.error((e as Error).message),
     })
   }
@@ -133,11 +134,8 @@ export default function FortnoxPage() {
     const sie = await file.text()
     importSie.mutate({ sie, companyId: importCompany, source: file.name }, {
       onSuccess: (d) => {
-        const errs = d.results?.filter(r => r.status === 'error').length ?? 0
-        const skip = d.skipped ?? 0
-        if (d.posted) toast.success(`${d.posted} bokförda${skip ? `, ${skip} redan importerade` : ''}${errs ? `, ${errs} fel` : ''}`)
-        else if (skip) toast(`Allt redan importerat (${skip} hoppade) — ingen dubbelbokföring`)
-        else toast(d.message || 'Inget bokfört')
+        if (!d.results?.length) { toast(d.message || 'Inget bokfört'); return }
+        showRun(`SIE-import (${file.name})`)(d)
       },
       onError: (e) => toast.error((e as Error).message),
     })
@@ -472,6 +470,47 @@ export default function FortnoxPage() {
           )}
         </div>
       </section>
+
+      <Modal open={!!runModal} onClose={() => setRunModal(null)} title={runModal?.title ?? 'Körning'}>
+        {runModal && <RunResults results={runModal.results} />}
+      </Modal>
+    </div>
+  )
+}
+
+function RunResults({ results }: { results: RunRow[] }) {
+  const ok = results.filter(r => r.status === 'ok').length
+  const skip = results.filter(r => r.status === 'skipped').length
+  const err = results.filter(r => r.status === 'error' || r.status === 'unmapped').length
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-3 text-sm">
+        <span className="text-emerald-600 font-semibold">{ok} bokförda</span>
+        <span className="text-slate-400">{skip} hoppade</span>
+        {err > 0 && <span className="text-red-500 font-semibold">{err} fel</span>}
+      </div>
+      {results.length === 0 ? (
+        <p className="text-sm text-slate-400 py-2">Inget att visa.</p>
+      ) : (
+        <div className="divide-y divide-slate-50 max-h-[55vh] overflow-auto -mx-1 px-1">
+          {results.map((r, i) => {
+            const num = r.voucherNumbers?.length ? r.voucherNumbers.join(', ') : r.voucher
+            return (
+              <div key={i} className="flex items-center gap-3 py-2 text-sm">
+                <StatusBadge status={r.status} />
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-slate-700 truncate">
+                    {r.shop || r.date || '—'}
+                    {r.shop && r.date && <span className="text-slate-400 font-normal"> · {r.date}</span>}
+                  </div>
+                  {r.message && r.status !== 'ok' && <div className="text-xs text-slate-400 truncate">{r.message}</div>}
+                </div>
+                {num && <span className="shrink-0 text-xs font-mono text-slate-500">{num}</span>}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

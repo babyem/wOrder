@@ -123,7 +123,6 @@ export default async function handler(req, res) {
       return qoplaToken;
     };
 
-    const dateSet = new Set(dates);
     const rangeStart = dayRangeISO(dates[0]).startDate;
     const rangeEnd = dayRangeISO(dates[dates.length - 1]).endDate;
 
@@ -137,14 +136,14 @@ export default async function handler(req, res) {
         continue;
       }
 
-      // ONE Qopla call for the whole range; Qopla returns one verification per day.
+      // ONE Qopla call for the whole range; group whatever it returns by each
+      // verification's own date (no matching against the requested date list).
       let byDate;
       try {
         const payload = await fetchSiePayload({ token: await getQoplaToken(), shopId, startDate: rangeStart, endDate: rangeEnd });
         const { vouchers } = buildVouchersFromSie(payload, { shopName, costCenterOverride: m.cost_center || null });
         byDate = new Map();
         for (const v of vouchers) {
-          if (!dateSet.has(v.TransactionDate)) continue;
           const arr = byDate.get(v.TransactionDate) || [];
           arr.push(v);
           byDate.set(v.TransactionDate, arr);
@@ -154,17 +153,16 @@ export default async function handler(req, res) {
         continue;
       }
 
-      // Book per day from the cached result.
+      if (!byDate.size) {
+        results.push({ shop: shopName, shopId, status: "skipped", message: "Inga verifikationer i perioden" });
+        continue;
+      }
+
+      // Book each day Qopla returned.
       let accessToken = null;
-      for (const date of dates) {
+      for (const [date, dayVouchers] of byDate) {
         const base = { shop: shopName, shopId, date };
         if (okSet.has(`${shopId}|${date}`)) { results.push({ ...base, status: "skipped", message: "redan bokfört" }); continue; }
-        const dayVouchers = byDate.get(date) || [];
-        if (!dayVouchers.length) {
-          await record(shopId, date, m.company_id, null, "skipped", "Inga verifikationer");
-          results.push({ ...base, status: "skipped", message: "Inga verifikationer" });
-          continue;
-        }
         try {
           if (!accessToken) accessToken = await getCompanyAccessToken(tokenRow);
           const voucherNumbers = [];

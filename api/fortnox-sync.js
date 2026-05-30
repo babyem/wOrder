@@ -11,10 +11,9 @@
 // Env: FORTNOX_CLIENT_ID, FORTNOX_CLIENT_SECRET, CRON_SECRET, SUPABASE_URL,
 //      SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY, QOPLA_EMAIL, QOPLA_PASSWORD.
 
-import { getSession, getDateRange, fetchSiePayload, stockholmHourNow } from "./_lib/qopla.js";
+import { getSession, dayRangeISO, fetchSiePayload, stockholmHourNow } from "./_lib/qopla.js";
 import { sbSelect, sbInsert, sbUpdate, getUserFromJwt } from "./_lib/supabaseAdmin.js";
 import { buildVouchersFromSie, getCompanyAccessToken, createVoucher, getVoucher } from "./_lib/fortnox.js";
-import { fetchZReports, zReportsToSiePayload } from "./_lib/dinkassa.js";
 
 // Split a stored voucher token like "F327" into { series: "F", number: "327" }.
 function parseVoucher(token) {
@@ -41,6 +40,20 @@ function stockholmDateStr(daysAgo = 0) {
   }).format(base);
 }
 
+function addDay(ymd) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: "UTC", year: "numeric", month: "2-digit", day: "2-digit" })
+    .format(new Date(Date.UTC(y, m - 1, d + 1)));
+}
+
+// Inclusive list of YYYY-MM-DD from `from` to `to` (capped at 366 days).
+function dateList(from, to) {
+  const out = [];
+  let cur = from;
+  while (cur <= to && out.length < 366) { out.push(cur); cur = addDay(cur); }
+  return out;
+}
+
 async function authorize(req) {
   const bearer = getBearer(req);
   if (!bearer) return false;
@@ -62,35 +75,42 @@ export default async function handler(req, res) {
   }
 
   const force = req.query.force === "1" || req.query.force === "true";
-  const daysAgo = req.query.day === "yesterday" ? 1 : 0;
 
-  // Time gate: only run at 23:00 Stockholm unless manually forced.
-  if (!force && stockholmHourNow() !== 23) {
-    return res.status(200).json({ skipped: true, reason: "not 23:00 Europe/Stockholm" });
+  // Date selection: ?from=&to= (range, manual) takes precedence; else ?day=yesterday/today.
+  const ymd = /^\d{4}-\d{2}-\d{2}$/;
+  const from = req.query.from && ymd.test(req.query.from) ? req.query.from : null;
+  const to = req.query.to && ymd.test(req.query.to) ? req.query.to : from;
+  let dates;
+  if (from) {
+    dates = to >= from ? dateList(from, to) : [from];
+  } else {
+    // No explicit dates: the nightly cron books today, gated to 23:00 Stockholm.
+    if (!force && stockholmHourNow() !== 23) {
+      return res.status(200).json({ skipped: true, reason: "not 23:00 Europe/Stockholm" });
+    }
+    dates = [stockholmDateStr(req.query.day === "yesterday" ? 1 : 0)];
   }
 
   try {
-    const businessDate = stockholmDateStr(daysAgo);
-    const { startDate, endDate } = getDateRange(daysAgo);
-
     // Load config + secrets (service role; tokens table is anon-denied).
     const [maps, companies, tokens, postedRows] = await Promise.all([
       sbSelect("fortnox_shop_map", "select=*&enabled=eq.true"),
       sbSelect("fortnox_companies", "select=id,name"),
       sbSelect("fortnox_tokens", "select=*"),
-      sbSelect("fortnox_postings", `select=qopla_shop_id,status&business_date=eq.${businessDate}`),
+      sbSelect("fortnox_postings", `select=qopla_shop_id,business_date,status&business_date=gte.${dates[0]}&business_date=lte.${dates[dates.length - 1]}`),
     ]);
 
     const companyName = new Map((companies || []).map(c => [c.id, c.name]));
     const tokenByCompany = new Map((tokens || []).map(t => [t.company_id, t]));
-    const alreadyOk = new Set((postedRows || []).filter(p => p.status === "ok").map(p => p.qopla_shop_id));
+    const okSet = new Set((postedRows || []).filter(p => p.status === "ok").map(p => `${p.qopla_shop_id}|${p.business_date}`));
 
-    const targets = (maps || []).filter(m => m.company_id);
+    // Qopla shops only — dinkassa rows are booked by the GitHub Action (login is browser-bound).
+    const targets = (maps || []).filter(m => m.company_id && m.source !== "dinkassa");
     if (!targets.length) {
-      return res.status(200).json({ ranAt: new Date().toISOString(), businessDate, results: [], note: "Inga aktiva butik→bolag-mappningar" });
+      return res.status(200).json({ ranAt: new Date().toISOString(), dates, results: [], note: "Inga aktiva Qopla-mappningar" });
     }
 
-    // Qopla session is created lazily — only if a Qopla-sourced shop is mapped.
+    // Qopla session is created lazily.
     let qoplaToken = null;
     const getQoplaToken = async () => {
       if (!qoplaToken) qoplaToken = (await getSession()).token;
@@ -101,58 +121,46 @@ export default async function handler(req, res) {
     for (const m of targets) {
       const shopId = m.qopla_shop_id;
       const shopName = m.qopla_shop_name || shopId;
-      const base = { shop: shopName, shopId };
-
-      if (alreadyOk.has(shopId)) {
-        results.push({ ...base, status: "skipped", message: "redan bokfört idag" });
-        continue;
-      }
-
       const tokenRow = tokenByCompany.get(m.company_id);
-      if (!tokenRow) {
-        const msg = `Ingen Fortnox-token för bolaget "${companyName.get(m.company_id) || m.company_id}"`;
-        await record(shopId, businessDate, m.company_id, null, "error", msg);
-        results.push({ ...base, status: "error", message: msg });
-        continue;
-      }
 
-      try {
-        let payload;
-        if (m.source === "dinkassa") {
-          const z = await fetchZReports({ machineId: shopId, startDate: businessDate, endDate: businessDate });
-          payload = zReportsToSiePayload(z);
-        } else {
-          payload = await fetchSiePayload({ token: await getQoplaToken(), shopId, startDate, endDate });
-        }
-        const { vouchers, warnings, referenceReportId } = buildVouchersFromSie(payload, {
-          shopName,
-          costCenterOverride: m.cost_center || null,
-        });
-
-        if (!vouchers.length) {
-          const msg = warnings.length ? warnings.join("; ") : "Inga verifikationer att bokföra";
-          await record(shopId, businessDate, m.company_id, referenceReportId, "skipped", msg);
-          results.push({ ...base, status: "skipped", message: msg });
+      for (const date of dates) {
+        const base = { shop: shopName, shopId, date };
+        if (okSet.has(`${shopId}|${date}`)) { results.push({ ...base, status: "skipped", message: "redan bokfört" }); continue; }
+        if (!tokenRow) {
+          const msg = `Ingen Fortnox-token för bolaget "${companyName.get(m.company_id) || m.company_id}"`;
+          await record(shopId, date, m.company_id, null, "error", msg);
+          results.push({ ...base, status: "error", message: msg });
           continue;
         }
-
-        const accessToken = await getCompanyAccessToken(tokenRow);
-        const voucherNumbers = [];
-        for (const v of vouchers) {
-          const created = await createVoucher(accessToken, v);
-          voucherNumbers.push(`${created.VoucherSeries}${created.VoucherNumber}`);
+        try {
+          const { startDate, endDate } = dayRangeISO(date);
+          const payload = await fetchSiePayload({ token: await getQoplaToken(), shopId, startDate, endDate });
+          const { vouchers, warnings, referenceReportId } = buildVouchersFromSie(payload, {
+            shopName, costCenterOverride: m.cost_center || null,
+          });
+          if (!vouchers.length) {
+            const msg = warnings.length ? warnings.join("; ") : "Inga verifikationer";
+            await record(shopId, date, m.company_id, referenceReportId, "skipped", msg);
+            results.push({ ...base, status: "skipped", message: msg });
+            continue;
+          }
+          const accessToken = await getCompanyAccessToken(tokenRow);
+          const voucherNumbers = [];
+          for (const v of vouchers) {
+            const created = await createVoucher(accessToken, v);
+            voucherNumbers.push(`${created.VoucherSeries}${created.VoucherNumber}`);
+          }
+          await record(shopId, date, m.company_id, referenceReportId, "ok", warnings.length ? `OK (${warnings.join("; ")})` : "OK", voucherNumbers);
+          okSet.add(`${shopId}|${date}`);
+          results.push({ ...base, status: "ok", voucherNumbers, warnings });
+        } catch (err) {
+          await record(shopId, date, m.company_id, null, "error", err.message);
+          results.push({ ...base, status: "error", message: err.message });
         }
-
-        const msg = warnings.length ? `OK (varningar: ${warnings.join("; ")})` : "OK";
-        await record(shopId, businessDate, m.company_id, referenceReportId, "ok", msg, voucherNumbers);
-        results.push({ ...base, status: "ok", voucherNumbers, warnings });
-      } catch (err) {
-        await record(shopId, businessDate, m.company_id, null, "error", err.message);
-        results.push({ ...base, status: "error", message: err.message });
       }
     }
 
-    return res.status(200).json({ ranAt: new Date().toISOString(), businessDate, results });
+    return res.status(200).json({ ranAt: new Date().toISOString(), dates, results });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

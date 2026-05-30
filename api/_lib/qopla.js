@@ -41,6 +41,19 @@ export function getDateRange(daysAgo = 0) {
   return { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
 }
 
+// ISO start/end of a specific Europe/Stockholm calendar day ("YYYY-MM-DD").
+export function dayRangeISO(ymd) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const noonUTC = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  const stockholmHour = parseInt(new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Stockholm", hour: "2-digit", hour12: false,
+  }).format(noonUTC), 10);
+  const offsetMs = (stockholmHour - 12) * 3600 * 1000;
+  const startDate = new Date(Date.UTC(y, m - 1, d) - offsetMs);
+  const endDate = new Date(startDate.getTime() + 24 * 3600 * 1000 - 1);
+  return { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
+}
+
 // Current hour-of-day (0–23) in Europe/Stockholm.
 export function stockholmHourNow() {
   const h = new Intl.DateTimeFormat("sv-SE", {

@@ -46,6 +46,8 @@ export default function FortnoxPage() {
   const [importCompany, setImportCompany] = useState('')
   const [dinkassaFrom, setDinkassaFrom] = useState('')
   const [dinkassaTo, setDinkassaTo] = useState('')
+  const [qoplaFrom, setQoplaFrom] = useState('')
+  const [qoplaTo, setQoplaTo] = useState('')
 
   // Toast the result of an OAuth connect redirect, then clean the URL.
   useEffect(() => {
@@ -87,16 +89,23 @@ export default function FortnoxPage() {
     })
   }
 
+  const syncToast = (data: { note?: string; results: { status: string }[] }) => {
+    if (data.note && !data.results.length) { toast(data.note); return }
+    const ok = data.results.filter(r => r.status === 'ok').length
+    const err = data.results.filter(r => r.status === 'error').length
+    const skip = data.results.filter(r => r.status === 'skipped').length
+    if (err) toast.error(`${ok} bokförda, ${skip} hoppade, ${err} fel`)
+    else toast.success(`${ok} bokförda, ${skip} hoppade`)
+  }
+
   const handleRun = () => {
-    runSync.mutate(undefined, {
-      onSuccess: (data) => {
-        if (data.note && !data.results.length) { toast(data.note); return }
-        const ok = data.results.filter(r => r.status === 'ok').length
-        const err = data.results.filter(r => r.status === 'error').length
-        const skip = data.results.filter(r => r.status === 'skipped').length
-        if (err) toast.error(`${ok} bokförda, ${skip} hoppade, ${err} fel`)
-        else toast.success(`${ok} bokförda, ${skip} hoppade`)
-      },
+    runSync.mutate({}, { onSuccess: syncToast, onError: (e) => toast.error((e as Error).message) })
+  }
+
+  const handleRunQopla = () => {
+    if (qoplaTo && qoplaFrom && qoplaTo < qoplaFrom) { toast.error('Till-datum före Från-datum'); return }
+    runSync.mutate({ from: qoplaFrom || undefined, to: qoplaTo || undefined }, {
+      onSuccess: syncToast,
       onError: (e) => toast.error((e as Error).message),
     })
   }
@@ -271,6 +280,48 @@ export default function FortnoxPage() {
               })}
             </div>
           )}
+        </div>
+      </section>
+
+      {/* Kör Qopla för datum/period */}
+      <section className="bg-white rounded-2xl border border-slate-100 shadow-sm">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
+          <Play size={16} className="text-slate-400" />
+          <h2 className="font-semibold text-slate-900 text-sm">Kör Qopla</h2>
+        </div>
+        <div className="p-5 space-y-3">
+          <p className="text-xs text-slate-500">
+            Bokför Qopla-butikerna för valt datum eller period. Tomt = idag ("Kör nu" uppe).
+            En verifikation per butik per dag. Redan bokförda dagar hoppas över.
+          </p>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="text-xs text-slate-500">
+              Från
+              <input
+                type="date"
+                value={qoplaFrom}
+                onChange={e => setQoplaFrom(e.target.value)}
+                className="block mt-0.5 px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
+              />
+            </label>
+            <label className="text-xs text-slate-500">
+              Till <span className="text-slate-400">(valfritt)</span>
+              <input
+                type="date"
+                value={qoplaTo}
+                onChange={e => setQoplaTo(e.target.value)}
+                className="block mt-0.5 px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
+              />
+            </label>
+            <button
+              onClick={handleRunQopla}
+              disabled={runSync.isPending || !qoplaFrom}
+              className="inline-flex items-center gap-2 px-4 py-1.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            >
+              {runSync.isPending ? <Spinner size={14} className="border-white border-t-white/30" /> : <Play size={14} />}
+              Kör Qopla
+            </button>
+          </div>
         </div>
       </section>
 

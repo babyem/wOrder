@@ -175,7 +175,7 @@ function PeriodColumn({ period, canonicalOrder, expandedKeys, onToggleExpand, po
       onError: (e) => toast.error((e as Error).message),
     })
   }
-  const syncing = runDinkassa.isPending || runAncon.isPending
+  const shopBusy = (src: string) => (src === 'ancon' ? runAncon.isPending : runDinkassa.isPending)
 
   const totals = useMemo(() => {
     if (!data) return { sales: 0, orders: 0 }
@@ -249,11 +249,11 @@ function PeriodColumn({ period, canonicalOrder, expandedKeys, onToggleExpand, po
                 <span className="tabular-nums text-[10px] text-slate-500 shrink-0 w-8 text-right">{sh.orders || ''}</span>
                 <button
                   onClick={() => syncShop(sh)}
-                  disabled={syncing}
+                  disabled={shopBusy(sh.source)}
                   title={`Synka ${sh.name} för perioden`}
                   className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-indigo-500 hover:bg-indigo-50 disabled:opacity-50 transition-colors"
                 >
-                  <RefreshCw size={11} className={syncing ? 'animate-spin' : ''} />
+                  <RefreshCw size={11} className={shopBusy(sh.source) ? 'animate-spin' : ''} />
                 </button>
               </div>
             ))}

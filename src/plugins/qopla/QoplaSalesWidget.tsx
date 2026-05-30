@@ -28,7 +28,7 @@ export function QoplaSalesWidget() {
   const salesFor = (id: string) => posSales.filter(p => p.qopla_shop_id === id && p.business_date === targetDate).reduce((s, r) => s + Number(r.sales), 0)
   const hasFor = (id: string) => posSales.some(p => p.qopla_shop_id === id && p.business_date === targetDate)
   const latestFor = (id: string) => posSales.filter(p => p.qopla_shop_id === id)[0]
-  const syncing = runDinkassa.isPending || runAncon.isPending
+  const shopBusy = (src: string) => (src === 'ancon' ? runAncon.isPending : runDinkassa.isPending)
 
   const syncShop = (shop: { name: string; source: string }) => {
     const runner = shop.source === 'ancon' ? runAncon : runDinkassa
@@ -113,11 +113,11 @@ export function QoplaSalesWidget() {
                     : <span className="text-xs text-slate-400">—</span>}
                   <button
                     onClick={() => syncShop(shop)}
-                    disabled={syncing}
+                    disabled={shopBusy(shop.source)}
                     title={`Synka ${shop.name}`}
                     className="p-0.5 rounded text-indigo-500 hover:bg-indigo-50 disabled:opacity-50 transition-colors"
                   >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={syncing ? 'animate-spin' : ''}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={shopBusy(shop.source) ? 'animate-spin' : ''}>
                       <polyline points="23 4 23 10 17 10" />
                       <polyline points="1 20 1 14 7 14" />
                       <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />

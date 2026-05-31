@@ -113,9 +113,14 @@ export async function getSIE(id) {
 }
 
 // "Total Z" day rows within [from, to] (YYYY-MM-DD), oldest first.
-// Returns [{ id, date, sales }].
+// Returns [{ id, date, sales }]. Fetches only as many rows as needed to reach `from`
+// (reports are newest-first), so a single recent day is fast.
 export async function getDailyTotals({ from, to }) {
-  const rows = await getZReports({ length: 800 });
+  const dayMs = 86400000;
+  const daysBack = Math.max(0, Math.round((Date.now() - Date.parse(`${from}T12:00:00Z`)) / dayMs));
+  const span = Math.max(1, Math.round((Date.parse(to) - Date.parse(from)) / dayMs) + 1);
+  const length = Math.min(1000, Math.max(20, (daysBack + span + 4) * 3)); // ~3 rows/day + buffer
+  const rows = await getZReports({ length });
   return rows
     .filter(r => r.PosName === "Total Z")
     .map(r => ({ id: r.ID, date: String(r.DateTime || "").slice(0, 10), sales: Number(r.TotalSaleGross || 0) }))

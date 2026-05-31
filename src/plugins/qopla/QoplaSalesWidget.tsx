@@ -28,15 +28,21 @@ export function QoplaSalesWidget() {
   const salesFor = (id: string) => posSales.filter(p => p.qopla_shop_id === id && p.business_date === targetDate).reduce((s, r) => s + Number(r.sales), 0)
   const hasFor = (id: string) => posSales.some(p => p.qopla_shop_id === id && p.business_date === targetDate)
   const latestFor = (id: string) => posSales.filter(p => p.qopla_shop_id === id)[0]
-  const shopBusy = (src: string) => (src === 'ancon' ? runAncon.isPending : runDinkassa.isPending)
+  const today = stockholmDate(0)
+  const [syncingId, setSyncingId] = useState<string | null>(null)
 
-  const syncShop = (shop: { name: string; source: string }) => {
-    const runner = shop.source === 'ancon' ? runAncon : runDinkassa
-    const live = shop.source === 'ancon' // server-side = instant
-    runner.mutate({ from: targetDate, to: targetDate }, {
-      onSuccess: () => toast.success(live ? `${shop.name} synkad` : `Synkar ${shop.name} — klart om ~1–2 min`),
-      onError: (e) => toast.error((e as Error).message),
-    })
+  // ancon TODAY intraday renders only in a real browser -> trigger the Playwright
+  // Action (async ~1–2 min). Past ancon days + dinkassa use the server-side syncs.
+  const syncShop = (shop: { id: string; name: string; source: string }) => {
+    setSyncingId(shop.id)
+    const done = () => setSyncingId(null)
+    const onError = (e: unknown) => { toast.error((e as Error).message); done() }
+    const args = { from: targetDate, to: targetDate }
+    if (shop.source === 'ancon' && targetDate !== today) {
+      runAncon.mutate(args, { onSuccess: () => { toast.success(`${shop.name} synkad`); done() }, onError })
+    } else {
+      runDinkassa.mutate(args, { onSuccess: () => { toast.success(`Synkar ${shop.name} — klart om ~1–2 min`); done() }, onError })
+    }
   }
 
   return (
@@ -113,11 +119,11 @@ export function QoplaSalesWidget() {
                     : <span className="text-xs text-slate-400">—</span>}
                   <button
                     onClick={() => syncShop(shop)}
-                    disabled={shopBusy(shop.source)}
+                    disabled={syncingId === shop.id}
                     title={`Synka ${shop.name}`}
                     className="p-0.5 rounded text-indigo-500 hover:bg-indigo-50 disabled:opacity-50 transition-colors"
                   >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={shopBusy(shop.source) ? 'animate-spin' : ''}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={syncingId === shop.id ? 'animate-spin' : ''}>
                       <polyline points="23 4 23 10 17 10" />
                       <polyline points="1 20 1 14 7 14" />
                       <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />

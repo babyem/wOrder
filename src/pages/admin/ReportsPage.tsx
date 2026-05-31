@@ -168,14 +168,21 @@ function PeriodColumn({ period, canonicalOrder, expandedKeys, onToggleExpand, po
     [syncedShops],
   )
 
-  const syncShop = (shop: { name: string; source: string }) => {
-    const runner = shop.source === 'ancon' ? runAncon : runDinkassa
-    runner.mutate({ from: a, to: b }, {
-      onSuccess: () => toast.success(shop.source === 'ancon' ? `${shop.name} synkad` : `Synkar ${shop.name} — klart om ~1–2 min`),
-      onError: (e) => toast.error((e as Error).message),
-    })
+  const [syncingId, setSyncingId] = useState<string | null>(null)
+
+  // ancon TODAY intraday renders only in a real browser -> trigger the Playwright
+  // Action (async ~1–2 min). Past ancon ranges + dinkassa use the server-side syncs.
+  const syncShop = (shop: { id: string; name: string; source: string }) => {
+    setSyncingId(shop.id)
+    const done = () => setSyncingId(null)
+    const onError = (e: unknown) => { toast.error((e as Error).message); done() }
+    const args = { from: a, to: b }
+    if (shop.source === 'ancon' && period.key !== 'today') {
+      runAncon.mutate(args, { onSuccess: () => { toast.success(`${shop.name} synkad`); done() }, onError })
+    } else {
+      runDinkassa.mutate(args, { onSuccess: () => { toast.success(`Synkar ${shop.name} — klart om ~1–2 min`); done() }, onError })
+    }
   }
-  const shopBusy = (src: string) => (src === 'ancon' ? runAncon.isPending : runDinkassa.isPending)
 
   const totals = useMemo(() => {
     if (!data) return { sales: 0, orders: 0 }
@@ -249,11 +256,11 @@ function PeriodColumn({ period, canonicalOrder, expandedKeys, onToggleExpand, po
                 <span className="tabular-nums text-[10px] text-slate-500 shrink-0 w-8 text-right">{sh.orders || ''}</span>
                 <button
                   onClick={() => syncShop(sh)}
-                  disabled={shopBusy(sh.source)}
+                  disabled={syncingId === sh.id}
                   title={`Synka ${sh.name} för perioden`}
                   className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-indigo-500 hover:bg-indigo-50 disabled:opacity-50 transition-colors"
                 >
-                  <RefreshCw size={11} className={shopBusy(sh.source) ? 'animate-spin' : ''} />
+                  <RefreshCw size={11} className={syncingId === sh.id ? 'animate-spin' : ''} />
                 </button>
               </div>
             ))}

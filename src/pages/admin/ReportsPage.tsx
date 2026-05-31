@@ -5,7 +5,7 @@ import Spinner from '../../components/ui/Spinner'
 import { useQoplaOverview, type QoplaShopOverview } from '../../plugins/qopla/useQoplaOverview'
 import { useQoplaHourly } from '../../plugins/qopla/useQoplaHourly'
 import toast from 'react-hot-toast'
-import { usePosDailySales, useRunDinkassa, useRunAncon, type PosDailySale } from '../../hooks/useFortnox'
+import { usePosDailySales, useRunDinkassa, useRunAncon, useRunAnconLive, type PosDailySale } from '../../hooks/useFortnox'
 
 const dymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
@@ -150,6 +150,7 @@ function PeriodColumn({ period, canonicalOrder, expandedKeys, onToggleExpand, po
   const { data, isLoading, isError, isFetching } = useQoplaOverview({ startISO, endISO })
   const runDinkassa = useRunDinkassa()
   const runAncon = useRunAncon()
+  const runAnconLive = useRunAnconLive()
   const a = dymd(period.start), b = dymd(period.end)
 
   // Synced (non-live) shops with their period sales/orders.
@@ -170,14 +171,16 @@ function PeriodColumn({ period, canonicalOrder, expandedKeys, onToggleExpand, po
 
   const [syncingId, setSyncingId] = useState<string | null>(null)
 
-  // ancon TODAY intraday renders only in a real browser -> trigger the Playwright
-  // Action (async ~1–2 min). Past ancon ranges + dinkassa use the server-side syncs.
+  // ancon TODAY = server-side intraday fetch (~1-2s). Past ancon ranges = server-side
+  // Z-report sync. dinkassa = Playwright Action (~1-2 min).
   const syncShop = (shop: { id: string; name: string; source: string }) => {
     setSyncingId(shop.id)
     const done = () => setSyncingId(null)
     const onError = (e: unknown) => { toast.error((e as Error).message); done() }
     const args = { from: a, to: b }
-    if (shop.source === 'ancon' && period.key !== 'today') {
+    if (shop.source === 'ancon' && period.key === 'today') {
+      runAnconLive.mutate(undefined, { onSuccess: (r) => { toast.success(`${shop.name}: ${Number(r.sales).toLocaleString('sv-SE')} kr`); done() }, onError })
+    } else if (shop.source === 'ancon') {
       runAncon.mutate(args, { onSuccess: () => { toast.success(`${shop.name} synkad`); done() }, onError })
     } else {
       runDinkassa.mutate(args, { onSuccess: () => { toast.success(`Synkar ${shop.name} — klart om ~1–2 min`); done() }, onError })

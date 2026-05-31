@@ -112,6 +112,43 @@ export async function getSIE(id) {
   return Buffer.from(b64, "base64").toString("latin1");
 }
 
+function stockholmYmd() {
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Stockholm", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+}
+
+// TODAY's intraday sales via the Försäljningsöversikt report data endpoint.
+// The report's data call (POST /{tenant}/Reporting/GetData) takes a single `request`
+// field (a JSON filter) and authenticates with the session cookie alone — no token,
+// no per-page request-id — so it replicates cleanly server-side (no browser needed).
+// The restaurant business day starts at 04:00, so "today" = checks closed after 04:00.
+// Returns { date, sales (gross/incl. VAT), orders }.
+export async function getTodayLive() {
+  const s = await getSession();
+  const date = stockholmYmd();
+  const reqObj = {
+    reportId: "10",
+    filter: {
+      $type: "DTFilter", condOp: "and",
+      conditions: [{
+        $type: "DTSimpleCondition", prop: "Check.Closed", op: "gt", valueType: "",
+        value: { $type: "ObjectSearchValue", Value: `${date} 04:00` },
+      }],
+    },
+  };
+  const body = "request=" + encodeURIComponent(JSON.stringify(reqObj));
+  const r = await fetch(`${BASE}/${tenant()}/Reporting/GetData`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", Cookie: cookieHeader(s.jar), "X-Requested-With": "XMLHttpRequest", "User-Agent": UA },
+    body,
+  });
+  const t = await r.text();
+  let j; try { j = JSON.parse(t); } catch { bustSession(); throw new Error(`ancon GetData ${r.status}: ej JSON (utloggad?)`); }
+  const rows = (((j.Data || {}).Data || {}).Sales) || []; // one entry per kassa
+  const sales = rows.reduce((n, x) => n + Number(x.SoldSum || 0), 0); // incl. VAT (gross)
+  const orders = rows.reduce((n, x) => n + Number(x.CheckCount || 0), 0);
+  return { date, sales: Math.round(sales * 100) / 100, orders };
+}
+
 // "Total Z" day rows within [from, to] (YYYY-MM-DD), oldest first.
 // Returns [{ id, date, sales }]. Fetches only as many rows as needed to reach `from`
 // (reports are newest-first), so a single recent day is fast.

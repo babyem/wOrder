@@ -275,6 +275,24 @@ export function useRunAncon() {
   })
 }
 
+// Ancon TODAY intraday sales — fetched server-side in ~1-2s (no Action/browser).
+export function useRunAnconLive() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (): Promise<{ date: string; sales: number; orders: number }> => {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) throw new Error('Ingen inloggad session')
+      const res = await fetch('/api/ancon-live', { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
+      const json = await res.json().catch(() => null)
+      if (!json) throw new Error('Ancon live: ogiltigt svar')
+      if (!res.ok) throw new Error(json.error ?? 'Ancon live misslyckades')
+      return json
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['pos-daily-sales'] }),
+  })
+}
+
 // ---- Manual SIE-file import (dinkassa etc.) ----
 export interface ImportResult {
   posted: number

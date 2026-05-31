@@ -52,11 +52,3 @@ jobs:
           DAY: ${{ github.event.inputs.day || 'yesterday' }}
         run: |
           curl -fsS -X GET "${WORDER_URL%/}/api/ancon-sync?day=${DAY}" -H "Authorization: Bearer ${CRON_SECRET}" || echo "ancon-sync failed (non-fatal)"
-      - name: Scrape ancon TODAY intraday (Woso Emporia, browser-rendered)
-        env:
-          ANCON_EMAIL: ${{ secrets.ANCON_EMAIL }}
-          ANCON_PASSWORD: ${{ secrets.ANCON_PASSWORD }}
-          ANCON_TENANT: ${{ secrets.ANCON_TENANT }}
-          WORDER_URL: ${{ secrets.WORDER_URL }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-        run: node scripts/ancon-today.mjs || echo "ancon-today failed (non-fatal)"

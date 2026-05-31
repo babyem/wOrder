@@ -141,8 +141,8 @@ function MetaSection({ icon, title, items, loading, onAdd, onDelete, onRename, p
 
 // ── Vendor section (with reorder support) ────────────────────────────────────
 
-function SortableVendorRow({ id, name, email, phone, hide_unit, onDelete }: {
-  id: string; name: string; email?: string; phone?: string; hide_unit?: boolean; onDelete: () => void
+function SortableVendorRow({ id, name, email, phone, hide_unit, use_chefsculinar, onDelete }: {
+  id: string; name: string; email?: string; phone?: string; hide_unit?: boolean; use_chefsculinar?: boolean; onDelete: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }
@@ -256,6 +256,14 @@ function SortableVendorRow({ id, name, email, phone, hide_unit, onDelete }: {
             <span className="tabular-nums">#</span>
             {hide_unit ? 'Antal only' : 'Antal only'}
           </button>
+          {/* ChefsCulinar toggle */}
+          <button
+            onClick={() => updateVendor.mutate({ id, use_chefsculinar: !use_chefsculinar })}
+            title={use_chefsculinar ? 'Skickas via ChefsCulinar-webhook — klicka för att inaktivera' : 'Klicka för att aktivera ChefsCulinar-webhook för denna leverantör'}
+            className={`flex items-center gap-1 text-xs transition-colors rounded px-1 ${use_chefsculinar ? 'text-orange-600 font-medium' : 'text-slate-300 hover:text-slate-500'}`}
+          >
+            🍴 {use_chefsculinar ? 'ChefsCulinar' : 'ChefsCulinar'}
+          </button>
         </div>
       </div>
       <button
@@ -334,6 +342,7 @@ function VendorSection() {
                       email={v.email}
                       phone={v.phone}
                       hide_unit={v.hide_unit}
+                      use_chefsculinar={v.use_chefsculinar}
                       onDelete={async () => {
                         try { await deleteVendor.mutateAsync(v.id) }
                         catch { toast.error('Delete failed — vendor may be in use') }

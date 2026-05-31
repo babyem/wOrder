@@ -144,7 +144,9 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
     }
   }
 
-  const chefsItems = order.items.filter(i => i.product?.chefsculinar_id)
+  const chefsItems = order.items.filter(i =>
+    i.product?.chefsculinar_id && vendorMap[effectiveVendor(i)]?.use_chefsculinar
+  )
   // Which vendor the ChefsCulinar items belong to
   const chefsVendorName = chefsItems.length > 0 ? effectiveVendor(chefsItems[0]) : null
 

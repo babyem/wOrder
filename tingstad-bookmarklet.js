@@ -35,7 +35,7 @@
 
   W('wOrder → Tingstad', '<div style="padding:14px;color:#64748b">Laddar ordrar…</div>');
 
-  const SEL = 'id,created_at,location:locations(name),items:order_items(quantity,product:products(name,tingstad_id))';
+  const SEL = 'id,created_at,location:locations(name),items:order_items(quantity,product:products(name,tingstad_id,tingstad_alt_id))';
   let O;
   try {
     const r = await fetch(SB + '/rest/v1/orders?status=eq.pending&select=' + encodeURIComponent(SEL) + '&order=created_at.desc&limit=50', { headers: H });
@@ -65,14 +65,19 @@
     const o = O[+el.dataset.i];
     W(o.loc, '<div style="padding:14px" id="woP">Lägger till…</div>');
     const fa = [];
+    const alt = [];
     let n = 0;
     for (const it of o.items) {
       document.getElementById('woP').textContent = 'Lägger till ' + (n + 1) + '/' + o.items.length + '…';
-      const ok = await A(it.product.tingstad_id, it.quantity);
+      let ok = await A(it.product.tingstad_id, it.quantity);
+      if (!ok && it.product.tingstad_alt_id) {
+        if (await A(it.product.tingstad_alt_id, it.quantity)) { alt.push(it.product); ok = true; }
+      }
       if (!ok) fa.push(it.product);
       n++;
     }
     W('Klart', '<div style="padding:14px"><b>' + (o.items.length - fa.length) + ' varor</b> i varukorgen.' +
+      (alt.length ? '<br><br>↪ Alternativ användes för:<br>' + alt.map((f) => '• ' + E(f.name) + ' → ' + E(f.tingstad_alt_id)).join('<br>') : '') +
       (fa.length ? '<br><br>⚠️ Ej tillagda (slut i lager / fel artnr):<br>' + fa.map((f) => '• ' + E(f.name) + ' <a href="https://www.tingstad.com/se-sv/sokresultat?q=' + encodeURIComponent(f.tingstad_id) + '" target="_blank" style="color:#0f766e">sök ›</a>').join('<br>') : '') +
       '<br><br>Öppna varukorgen och granska.</div>');
   });

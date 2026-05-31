@@ -189,10 +189,8 @@ function InlineEditRow({ product: p, onDelete, onDuplicate, showVendorHeader, ve
   const [chefsQty, setChefsQty] = useState(String(p.chefsculinar_unit_qty ?? ''))
   const [editingTingstadId, setEditingTingstadId] = useState(false)
   const [tingstadId, setTingstadId] = useState(p.tingstad_id ?? '')
-  const [editingTingstadUnit, setEditingTingstadUnit] = useState(false)
-  const [tingstadUnit, setTingstadUnit] = useState(p.tingstad_unit ?? '')
-  const [editingTingstadQty, setEditingTingstadQty] = useState(false)
-  const [tingstadQty, setTingstadQty] = useState(String(p.tingstad_unit_qty ?? ''))
+  const [editingTingstadAlt, setEditingTingstadAlt] = useState(false)
+  const [tingstadAlt, setTingstadAlt] = useState(p.tingstad_alt_id ?? '')
 
   useEffect(() => { setName(p.name) }, [p.name])
   useEffect(() => { setVendorName(p.vendor_name ?? '') }, [p.vendor_name])
@@ -200,8 +198,7 @@ function InlineEditRow({ product: p, onDelete, onDuplicate, showVendorHeader, ve
   useEffect(() => { setChefsUnit(p.chefsculinar_unit ?? '') }, [p.chefsculinar_unit])
   useEffect(() => { setChefsQty(String(p.chefsculinar_unit_qty ?? '')) }, [p.chefsculinar_unit_qty])
   useEffect(() => { setTingstadId(p.tingstad_id ?? '') }, [p.tingstad_id])
-  useEffect(() => { setTingstadUnit(p.tingstad_unit ?? '') }, [p.tingstad_unit])
-  useEffect(() => { setTingstadQty(String(p.tingstad_unit_qty ?? '')) }, [p.tingstad_unit_qty])
+  useEffect(() => { setTingstadAlt(p.tingstad_alt_id ?? '') }, [p.tingstad_alt_id])
 
   const toggleField = (field: Exclude<OpenField, null>) =>
     setOpenField(prev => prev === field ? null : field)
@@ -252,19 +249,11 @@ function InlineEditRow({ product: p, onDelete, onDuplicate, showVendorHeader, ve
     setEditingTingstadId(false)
   }
 
-  const saveTingstadUnit = () => {
-    const trimmed = tingstadUnit.trim()
-    if (trimmed !== (p.tingstad_unit ?? '')) save({ tingstad_unit: trimmed || null })
-    else setTingstadUnit(p.tingstad_unit ?? '')
-    setEditingTingstadUnit(false)
-  }
-
-  const saveTingstadQty = () => {
-    const num = parseFloat(tingstadQty)
-    const val = isNaN(num) ? null : num
-    if (val !== (p.tingstad_unit_qty ?? null)) save({ tingstad_unit_qty: val })
-    else setTingstadQty(String(p.tingstad_unit_qty ?? ''))
-    setEditingTingstadQty(false)
+  const saveTingstadAlt = () => {
+    const trimmed = tingstadAlt.trim()
+    if (trimmed !== (p.tingstad_alt_id ?? '')) save({ tingstad_alt_id: trimmed || null })
+    else setTingstadAlt(p.tingstad_alt_id ?? '')
+    setEditingTingstadAlt(false)
   }
 
   const toggleLoc = (id: string) => {
@@ -370,7 +359,7 @@ function InlineEditRow({ product: p, onDelete, onDuplicate, showVendorHeader, ve
         </div>
       </div>
 
-      {/* Tingstad article ID + unit */}
+      {/* Tingstad article ID + alternative (fallback if primary is out of stock) */}
       <div className="flex flex-col shrink-0 w-20">
         {editingTingstadId ? (
           <input value={tingstadId} onChange={e => setTingstadId(e.target.value)} onBlur={saveTingstadId}
@@ -383,32 +372,17 @@ function InlineEditRow({ product: p, onDelete, onDuplicate, showVendorHeader, ve
             {p.tingstad_id ?? '+ tingstad'}
           </button>
         )}
-        <div className="flex gap-1">
-          {editingTingstadUnit ? (
-            <input value={tingstadUnit} onChange={e => setTingstadUnit(e.target.value)} onBlur={saveTingstadUnit}
-              onKeyDown={e => { if (e.key === 'Enter') saveTingstadUnit(); if (e.key === 'Escape') { setTingstadUnit(p.tingstad_unit ?? ''); setEditingTingstadUnit(false) } }}
-              placeholder="Enhet…"
-              className="w-10 px-1.5 py-0.5 rounded border border-teal-300 text-xs focus:outline-none bg-white" autoFocus />
-          ) : (
-            <button onClick={() => setEditingTingstadUnit(true)}
-              className={`text-xs truncate text-left leading-tight ${p.tingstad_unit ? 'text-teal-400 hover:text-teal-600' : 'text-slate-300 hover:text-slate-400'}`}>
-              {p.tingstad_unit ?? '+ enhet'}
-            </button>
-          )}
-          {editingTingstadQty ? (
-            <input value={tingstadQty} onChange={e => setTingstadQty(e.target.value)} onBlur={saveTingstadQty}
-              onKeyDown={e => { if (e.key === 'Enter') saveTingstadQty(); if (e.key === 'Escape') { setTingstadQty(String(p.tingstad_unit_qty ?? '')); setEditingTingstadQty(false) } }}
-              placeholder="1"
-              className="w-8 px-1.5 py-0.5 rounded border border-teal-300 text-xs focus:outline-none bg-white" autoFocus />
-          ) : (p.tingstad_unit_qty && p.tingstad_unit_qty !== 1) ? (
-            <button onClick={() => setEditingTingstadQty(true)}
-              className="text-xs text-teal-300 hover:text-teal-500 leading-tight">
-              ×{p.tingstad_unit_qty}
-            </button>
-          ) : (
-            <button onClick={() => setEditingTingstadQty(true)} className="text-xs text-slate-200 hover:text-slate-400 leading-tight">×1</button>
-          )}
-        </div>
+        {editingTingstadAlt ? (
+          <input value={tingstadAlt} onChange={e => setTingstadAlt(e.target.value)} onBlur={saveTingstadAlt}
+            onKeyDown={e => { if (e.key === 'Enter') saveTingstadAlt(); if (e.key === 'Escape') { setTingstadAlt(p.tingstad_alt_id ?? ''); setEditingTingstadAlt(false) } }}
+            placeholder="Alt nr…"
+            className="w-full px-1.5 py-0.5 rounded border border-teal-300 text-xs focus:outline-none bg-white" autoFocus />
+        ) : (
+          <button onClick={() => setEditingTingstadAlt(true)} title="Alternativ artikel om förstahandsvalet är slut"
+            className={`text-xs truncate text-left leading-tight ${p.tingstad_alt_id ? 'text-teal-400 hover:text-teal-600' : 'text-slate-300 hover:text-slate-400'}`}>
+            {p.tingstad_alt_id ? `alt: ${p.tingstad_alt_id}` : '+ alt'}
+          </button>
+        )}
       </div>
 
       {/* Field dropdowns: vendor, category, unit */}
@@ -863,13 +837,12 @@ export default function ProductsPage() {
         'ChefsCulinar Unit': p.chefsculinar_unit ?? '',
         'ChefsCulinar Unit Qty': p.chefsculinar_unit_qty ?? '',
         'Tingstad ID': p.tingstad_id ?? '',
-        'Tingstad Unit': p.tingstad_unit ?? '',
-        'Tingstad Unit Qty': p.tingstad_unit_qty ?? '',
+        'Tingstad Alt ID': p.tingstad_alt_id ?? '',
         ...locCols,
       }
     }
 
-    const colWidths = [{ wch: 36 }, { wch: 28 }, { wch: 28 }, { wch: 18 }, { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 60 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, ...locs.map(() => ({ wch: 18 }))]
+    const colWidths = [{ wch: 36 }, { wch: 28 }, { wch: 28 }, { wch: 18 }, { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 60 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, ...locs.map(() => ({ wch: 18 }))]
 
     const wb = XLSX.utils.book_new()
 
@@ -915,7 +888,6 @@ export default function ProductsPage() {
         if (!name) { skipped++; continue }
         const sortRaw = row['Sort Order']?.toString().trim()
         const unitQtyRaw = row['ChefsCulinar Unit Qty']?.toString().trim()
-        const tingstadQtyRaw = row['Tingstad Unit Qty']?.toString().trim()
         const fields = {
           name,
           vendor_name: row['Vendor Name (notifications)']?.toString().trim() || null,
@@ -929,8 +901,7 @@ export default function ProductsPage() {
           chefsculinar_unit: row['ChefsCulinar Unit']?.toString().trim() || null,
           chefsculinar_unit_qty: unitQtyRaw ? parseFloat(unitQtyRaw) : null,
           tingstad_id: row['Tingstad ID']?.toString().trim() || null,
-          tingstad_unit: row['Tingstad Unit']?.toString().trim() || null,
-          tingstad_unit_qty: tingstadQtyRaw ? parseFloat(tingstadQtyRaw) : null,
+          tingstad_alt_id: row['Tingstad Alt ID']?.toString().trim() || null,
         }
         const id = row['ID']?.toString().trim()
         let productId: string

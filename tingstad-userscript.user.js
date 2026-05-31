@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         wOrder → Tingstad varukorg
 // @namespace    worder.tingstad
-// @version      1.1
+// @version      1.2
 // @description  Fyll Tingstad-varukorgen från en väntande wOrder-order. Körs i din inloggade session — varorna hamnar i DIN varukorg. Lägger ingen order.
 // @match        https://www.tingstad.com/*
 // @run-at       document-idle
@@ -49,7 +49,7 @@
 
   // ── Load pending wOrder orders that have Tingstad-mapped items ───────────────
   async function loadOrders() {
-    const sel = 'id,created_at,note,location:locations(name),items:order_items(quantity,product:products(name,tingstad_id,tingstad_unit_qty))';
+    const sel = 'id,created_at,note,location:locations(name),items:order_items(quantity,product:products(name,tingstad_id,tingstad_alt_id))';
     const rows = await sbGet('orders?status=eq.pending&select=' + encodeURIComponent(sel) + '&order=created_at.desc&limit=50');
     return rows
       .map((o) => ({
@@ -128,11 +128,15 @@
     const btn = panel.querySelector('#wo-fill');
     btn.disabled = true;
     const failed = [];
+    const altUsed = [];
     let done = 0;
     for (const it of order.items) {
       btn.textContent = `Lägger till ${done + 1}/${order.items.length}…`;
       try {
-        const ok = await addToCart(it.product.tingstad_id, it.quantity);
+        let ok = await addToCart(it.product.tingstad_id, it.quantity);
+        if (!ok && it.product.tingstad_alt_id) {
+          if (await addToCart(it.product.tingstad_alt_id, it.quantity)) { altUsed.push({ name: it.product.name, art: it.product.tingstad_alt_id }); ok = true; }
+        }
         if (!ok) failed.push({ name: it.product.name, art: it.product.tingstad_id });
       } catch (e) { failed.push({ name: it.product.name, art: it.product.tingstad_id }); }
       done++;
@@ -141,6 +145,10 @@
     const searchUrl = (art) => 'https://www.tingstad.com/se-sv/sokresultat?q=' + encodeURIComponent(art);
     panel.innerHTML = header('Klart') +
       `<div class="wo-msg"><b>${okCount} varor</b> lagda i varukorgen.` +
+      (altUsed.length
+        ? `<br><br>↪ <b>Alternativ användes</b> för:<br>` +
+          altUsed.map((f) => `• ${esc(f.name)} → ${esc(f.art)}`).join('<br>')
+        : '') +
       (failed.length
         ? `<br><br>⚠️ <b>${failed.length} kunde inte läggas till</b> (slut i lager eller fel artikelnr):<br>` +
           failed.map((f) => `• ${esc(f.name)} <span style="color:#94a3b8">(${esc(f.art)})</span> — ` +

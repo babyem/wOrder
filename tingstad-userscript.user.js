@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         wOrder → Tingstad varukorg
 // @namespace    worder.tingstad
-// @version      1.0
+// @version      1.1
 // @description  Fyll Tingstad-varukorgen från en väntande wOrder-order. Körs i din inloggade session — varorna hamnar i DIN varukorg. Lägger ingen order.
 // @match        https://www.tingstad.com/*
 // @run-at       document-idle
@@ -133,14 +133,20 @@
       btn.textContent = `Lägger till ${done + 1}/${order.items.length}…`;
       try {
         const ok = await addToCart(it.product.tingstad_id, it.quantity);
-        if (!ok) failed.push(it.product.name);
-      } catch (e) { failed.push(it.product.name); }
+        if (!ok) failed.push({ name: it.product.name, art: it.product.tingstad_id });
+      } catch (e) { failed.push({ name: it.product.name, art: it.product.tingstad_id }); }
       done++;
     }
     const okCount = order.items.length - failed.length;
+    const searchUrl = (art) => 'https://www.tingstad.com/se-sv/sokresultat?q=' + encodeURIComponent(art);
     panel.innerHTML = header('Klart') +
       `<div class="wo-msg"><b>${okCount} varor</b> lagda i varukorgen.` +
-      (failed.length ? `<br><br>⚠️ Misslyckades (slut i lager / ej beställningsbara):<br>${failed.map(esc).join('<br>')}` : '') +
+      (failed.length
+        ? `<br><br>⚠️ <b>${failed.length} kunde inte läggas till</b> (slut i lager eller fel artikelnr):<br>` +
+          failed.map((f) => `• ${esc(f.name)} <span style="color:#94a3b8">(${esc(f.art)})</span> — ` +
+            `<a href="${searchUrl(f.art)}" target="_blank" style="color:#0f766e;font-weight:600">sök på Tingstad ›</a>`).join('<br>') +
+          `<br><br>Lägg dessa manuellt (eller välj ersättning) via sök-länken.`
+        : '') +
       `<br><br>Öppna varukorgen, granska och lägg ordern.</div>`;
     panel.querySelector('.wo-x').onclick = close;
   }

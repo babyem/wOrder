@@ -50,6 +50,18 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
     else localStorage.setItem(`chefs_status_${order.id}`, status)
   }
 
+  const [sendingTingstad, setSendingTingstad] = useState(false)
+  const [tingstadStatus, setTingstadStatus] = useState<null | 'pending' | 'failed'>(
+    () => (localStorage.getItem(`tingstad_status_${order.id}`) as null | 'pending' | 'failed') ?? null
+  )
+  const tingstadOrderFailed = tingstadStatus === 'failed'
+
+  const setTingstadState = (status: null | 'pending' | 'failed') => {
+    setTingstadStatus(status)
+    if (status === null) localStorage.removeItem(`tingstad_status_${order.id}`)
+    else localStorage.setItem(`tingstad_status_${order.id}`, status)
+  }
+
   // Local state for instant feedback — initialised from server, persisted to DB in background
   const [excluded, setExcluded] = useState<Set<string>>(
     () => new Set(order.items.filter(i => i.notify_excluded).map(i => i.id))
@@ -148,6 +160,10 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
   // Which vendor the ChefsCulinar items belong to
   const chefsVendorName = chefsItems.length > 0 ? effectiveVendor(chefsItems[0]) : null
 
+  const tingstadItems = order.items.filter(i => i.product?.tingstad_id)
+  // Which vendor the Tingstad items belong to
+  const tingstadVendorName = tingstadItems.length > 0 ? effectiveVendor(tingstadItems[0]) : null
+
   const handleSendToChefs = async () => {
     const webhookUrl = import.meta.env.VITE_N8N_CHEFSCULINAR_WEBHOOK
     if (!webhookUrl) { toast.error('Webhook URL saknas'); return }
@@ -210,6 +226,62 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
       toast.error(`Misslyckades: ${msg}`)
     } finally {
       setSendingChefs(false)
+    }
+  }
+
+  const handleSendToTingstad = async () => {
+    const webhookUrl = import.meta.env.VITE_N8N_TINGSTAD_WEBHOOK
+    if (!webhookUrl) { toast.error('Webhook URL saknas'); return }
+    const products = tingstadItems.map(i => ({
+      tingstad_id: i.product!.tingstad_id,
+      quantity: i.quantity,
+      unit: i.product!.tingstad_unit ?? 'st',
+      unit_qty: i.product!.tingstad_unit_qty ?? 1,
+    }))
+    setSendingTingstad(true)
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 30_000)
+    try {
+      const res = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location_id: order.location_id,
+          location_name: order.location?.name ?? '',
+          products,
+        }),
+        signal: controller.signal,
+      })
+      clearTimeout(timeout)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+
+      // Inspect response body (n8n may wrap as [{json:{...}}] or {...})
+      let body: unknown
+      try { body = await res.clone().json() } catch { /* not JSON, ignore */ }
+      const unwrap = (v: unknown): Record<string, unknown> | null => {
+        if (!v || typeof v !== 'object') return null
+        const arr = Array.isArray(v) ? v[0] : v
+        if (!arr || typeof arr !== 'object') return null
+        const rec = arr as Record<string, unknown>
+        return (rec.json && typeof rec.json === 'object') ? rec.json as Record<string, unknown> : rec
+      }
+      const b = unwrap(body)
+      if (b && (b.error || b.ok === false || (typeof b.failed === 'number' && b.failed > 0))) {
+        throw new Error(String(b.error ?? `${b.failed} varor kunde inte läggas till`))
+      }
+      // Cart filled on Tingstad — user reviews and places the order there manually
+      const added = typeof b?.added === 'number' ? b.added : (typeof b?.count === 'number' ? b.count : tingstadItems.length)
+      setTingstadState('pending')
+      toast.success(`✓ ${added} varor i Tingstad-varukorgen — granska & lägg order`, { duration: 6000 })
+    } catch (err) {
+      clearTimeout(timeout)
+      const msg = err instanceof Error
+        ? (err.name === 'AbortError' ? 'Timeout — inget svar från Tingstad' : err.message)
+        : String(err)
+      setTingstadState('failed')
+      toast.error(`Misslyckades: ${msg}`)
+    } finally {
+      setSendingTingstad(false)
     }
   }
 
@@ -371,11 +443,59 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
     </div>
   )
 
+  // Tingstad controls — rendered inside whichever vendor card owns the Tingstad items
+  const renderTingstadControls = () => (
+    <div className="mt-2 space-y-1.5">
+      {isPending && tingstadStatus !== 'pending' && (
+        <button
+          onClick={handleSendToTingstad}
+          disabled={sendingTingstad}
+          className={`flex w-full items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium disabled:opacity-50 transition-colors ${tingstadStatus === 'failed' ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'bg-teal-50 text-teal-600 hover:bg-teal-100'}`}
+        >
+          {sendingTingstad
+            ? <Loader2 size={12} className="animate-spin" />
+            : tingstadStatus === 'failed'
+              ? <><RotateCcw size={12} /> Försök igen</>
+              : <><ShoppingBag size={12} /> Skicka till Tingstad</>}
+        </button>
+      )}
+      {tingstadStatus === 'pending' && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-700 space-y-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={13} className="shrink-0" />
+            <span className="font-medium">Varukorg fylld — lägg order på Tingstad</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <a href="https://www.tingstad.com/se-sv/kassa" target="_blank" rel="noreferrer"
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 font-medium transition-colors">
+              Öppna
+            </a>
+            <button
+              onClick={() => { setTingstadState(null); if (tingstadVendorName) markVendorDone(tingstadVendorName, true, allVendorNames) }}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 hover:bg-emerald-200 font-medium transition-colors">
+              <CheckCircle size={11} /> OK
+            </button>
+            <button onClick={() => setTingstadState('failed')}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 font-medium transition-colors">
+              <X size={11} /> Fel
+            </button>
+          </div>
+        </div>
+      )}
+      {tingstadStatus === 'failed' && (
+        <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2 text-xs text-red-600">
+          <AlertTriangle size={13} className="shrink-0" />
+          <span className="font-medium flex-1">Ordern är inte lagd!</span>
+        </div>
+      )}
+    </div>
+  )
+
   const isMerged = !!(order as Order & { is_merged?: boolean }).is_merged && isPending
   const firstVendor = vendorEntries[0][0]
   const firstSelected = selectedVendors?.has(firstVendor) ?? false
 
-  const cardBorder = chefsOrderFailed
+  const cardBorder = chefsOrderFailed || tingstadOrderFailed
     ? 'border-red-400 ring-2 ring-red-100'
     : firstSelected && !isMultiVendor ? 'border-indigo-400 ring-2 ring-indigo-100'
     : firstSelected && isMultiVendor ? 'border-indigo-300'
@@ -468,6 +588,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
               {renderItems(vendorEntries[0][1])}
             </div>
             {firstVendor === chefsVendorName && renderChefsControls()}
+            {firstVendor === tingstadVendorName && renderTingstadControls()}
           </div>
 
           {order.note && (
@@ -550,6 +671,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
             <div className={`p-3 ${isVendorDone ? 'opacity-40' : ''}`}>
               {renderItems(items)}
               {vendor === chefsVendorName && renderChefsControls()}
+              {vendor === tingstadVendorName && renderTingstadControls()}
             </div>
           </div>
         )

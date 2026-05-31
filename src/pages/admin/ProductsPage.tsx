@@ -740,6 +740,8 @@ export default function ProductsPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [batchModalOpen, setBatchModalOpen] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [exportModalOpen, setExportModalOpen] = useState(false)
+  const [exportVendors, setExportVendors] = useState<Set<string>>(new Set())
   const importRef = useRef<HTMLInputElement>(null)
 
   // Filters
@@ -814,10 +816,23 @@ export default function ProductsPage() {
 
   const hasFilters = search || filterVendor || filterCategory || filterStatus !== 'all'
 
+  const allExportVendors = useMemo(() => {
+    const vs = new Set((serverProducts ?? []).map(p => p.vendor || 'No Vendor'))
+    return [...vs].sort()
+  }, [serverProducts])
+
+  const openExportModal = () => {
+    if (!serverProducts?.length) { toast.error('No products to export'); return }
+    setExportVendors(new Set(allExportVendors))
+    setExportModalOpen(true)
+  }
+
   const handleExport = () => {
     if (!serverProducts?.length) { toast.error('No products to export'); return }
     const locs = allLocations ?? []
     const excluded = new Set((allProductLocations ?? []).map(pl => `${pl.product_id}:${pl.location_id}`))
+    const filtered = serverProducts.filter(p => exportVendors.has(p.vendor || 'No Vendor'))
+    if (!filtered.length) { toast.error('No vendors selected'); return }
 
     const makeRow = (p: Product) => {
       const locCols: Record<string, string> = {}
@@ -827,6 +842,7 @@ export default function ProductsPage() {
       return {
         ID: p.id,
         'Display Name': p.name,
+        Vendor: p.vendor ?? '',
         'Vendor Name (notifications)': p.vendor_name ?? '',
         Category: p.category,
         Unit: p.unit,
@@ -842,19 +858,19 @@ export default function ProductsPage() {
       }
     }
 
-    const colWidths = [{ wch: 36 }, { wch: 28 }, { wch: 28 }, { wch: 18 }, { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 60 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, ...locs.map(() => ({ wch: 18 }))]
+    const colWidths = [{ wch: 36 }, { wch: 28 }, { wch: 22 }, { wch: 28 }, { wch: 18 }, { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 60 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, ...locs.map(() => ({ wch: 18 }))]
 
     const wb = XLSX.utils.book_new()
 
-    // One sheet per vendor + one "All" sheet
+    // One sheet per selected vendor + one "All" sheet
     const vendorGroups = new Map<string, Product[]>()
-    for (const p of serverProducts) {
+    for (const p of filtered) {
       const v = p.vendor || 'No Vendor'
       vendorGroups.set(v, [...(vendorGroups.get(v) ?? []), p])
     }
 
     // All products sheet
-    const allWs = XLSX.utils.json_to_sheet(serverProducts.map(makeRow))
+    const allWs = XLSX.utils.json_to_sheet(filtered.map(makeRow))
     allWs['!cols'] = colWidths
     XLSX.utils.book_append_sheet(wb, allWs, 'All')
 
@@ -862,11 +878,12 @@ export default function ProductsPage() {
     for (const [vendor, prods] of vendorGroups) {
       const ws = XLSX.utils.json_to_sheet(prods.map(makeRow))
       ws['!cols'] = colWidths
-      const sheetName = vendor.slice(0, 31) // Excel max 31 chars
+      const sheetName = vendor.slice(0, 31)
       XLSX.utils.book_append_sheet(wb, ws, sheetName)
     }
 
     XLSX.writeFile(wb, 'products.xlsx')
+    setExportModalOpen(false)
   }
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -945,7 +962,7 @@ export default function ProductsPage() {
           <p className="text-slate-400 text-sm mt-0.5">{products.length} products · drag to reorder</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={handleExport} title="Export to Excel"
+          <button onClick={openExportModal} title="Export to Excel"
             className="p-2.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 transition-colors">
             <Download size={17} />
           </button>
@@ -1062,6 +1079,45 @@ export default function ProductsPage() {
             </DndContext>
           )
       })()}
+
+      {/* Export vendor picker */}
+      {exportModalOpen && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setExportModalOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-xl p-5 w-80 max-h-[80vh] flex flex-col gap-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-slate-900">Export — välj leverantörer</h3>
+              <button onClick={() => setExportModalOpen(false)} className="p-1 rounded-lg hover:bg-slate-100">
+                <X size={16} className="text-slate-400" />
+              </button>
+            </div>
+            <div className="flex gap-2 text-xs">
+              <button onClick={() => setExportVendors(new Set(allExportVendors))}
+                className="text-indigo-600 hover:underline">Välj alla</button>
+              <span className="text-slate-300">·</span>
+              <button onClick={() => setExportVendors(new Set())}
+                className="text-slate-500 hover:underline">Rensa</button>
+            </div>
+            <div className="overflow-y-auto flex flex-col gap-1.5">
+              {allExportVendors.map(v => (
+                <label key={v} className="flex items-center gap-2.5 px-2 py-1.5 rounded-xl hover:bg-slate-50 cursor-pointer">
+                  <input type="checkbox" checked={exportVendors.has(v)}
+                    onChange={e => setExportVendors(prev => {
+                      const next = new Set(prev)
+                      e.target.checked ? next.add(v) : next.delete(v)
+                      return next
+                    })}
+                    className="rounded" />
+                  <span className="text-sm text-slate-700">{v}</span>
+                </label>
+              ))}
+            </div>
+            <button onClick={handleExport}
+              className="w-full py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
+              <Download size={15} /> Exportera ({exportVendors.size} leverantörer)
+            </button>
+          </div>
+        </div>
+      )}
 
       <BatchAddModal
         open={batchModalOpen}

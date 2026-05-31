@@ -220,8 +220,10 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
     hour: '2-digit', minute: '2-digit', hour12: false,
   })
 
+  const stableItems = [...order.items].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+
   const byVendor = new Map<string, typeof order.items>()
-  for (const item of order.items) {
+  for (const item of stableItems) {
     const v = effectiveVendor(item)
     byVendor.set(v, [...(byVendor.get(v) ?? []), item])
   }

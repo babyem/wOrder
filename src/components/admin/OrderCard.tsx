@@ -182,8 +182,6 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
         throw new Error(String((body as Record<string, unknown>).error ?? 'Webhook reported failure'))
       }
 
-      console.log('[ChefsCulinar raw]', JSON.stringify(body))
-      setChefsState('pending')
       // n8n may wrap response as [{json:{...}}], [{OrderNumber,...}], or {OrderNumber,...}
       const unwrap = (v: unknown): Record<string, unknown> | null => {
         if (!v || typeof v !== 'object') return null
@@ -195,10 +193,14 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
       const b = unwrap(body)
       const orderNum = b?.OrderNumber
       const orderTotal = b?.Total
-      const confirmMsg = orderNum
-        ? `✓ Order #${orderNum} bekräftad${orderTotal ? ` — ${orderTotal} SEK` : ''}`
-        : 'Skickat! Verifiera ordern på ChefsCulinar.'
-      toast.success(confirmMsg, { duration: 6000 })
+      if (orderNum) {
+        setChefsState(null)
+        if (chefsVendorName) markVendorDone(chefsVendorName, true, allVendorNames)
+        toast.success(`✓ Order #${orderNum} bekräftad${orderTotal ? ` — ${orderTotal} SEK` : ''}`, { duration: 6000 })
+      } else {
+        setChefsState('failed')
+        toast.error('Inget ordernummer — kontrollera ChefsCulinar')
+      }
     } catch (err) {
       clearTimeout(timeout)
       const msg = err instanceof Error

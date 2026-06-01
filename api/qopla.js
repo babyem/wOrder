@@ -17,9 +17,13 @@ async function fetchShopOverview({ companyId, token, shop, startDate, endDate })
   let totalSum = 0, totalOrders = 0;
   const byChannel = {};
   for (const [channel, ch] of Object.entries(report)) {
-    totalSum += ch.totalSum || 0;
+    // Subtract refundsTotalSum so the figure matches Qopla dashboard "Försäljning inkl returer"
+    const gross   = ch.totalSum || 0;
+    const refunds = ch.refundsTotalSum || 0; // negative value, e.g. -554
+    const net     = gross + refunds;
+    totalSum   += net;
     totalOrders += ch.quantityOfOrders || 0;
-    byChannel[channel] = { sales: ch.totalSum || 0, orders: ch.quantityOfOrders || 0 };
+    byChannel[channel] = { sales: net, orders: ch.quantityOfOrders || 0 };
   }
   return { totalSum, totalOrders, byChannel };
 }
@@ -198,16 +202,6 @@ export default async function handler(req, res) {
       const out = await handleReports({ token, shops, reportType, pageNumber, pageItems, shopId });
       res.setHeader("Cache-Control", reportType === "Z" ? "s-maxage=600" : "s-maxage=120");
       return res.status(200).json({ ...out, fetchedAt: new Date().toISOString() });
-    }
-
-    if (action === "rawdebug") {
-      // Temp: expose raw qreport aggregatedReport to inspect all available fields
-      const start = req.query.start;
-      const end = req.query.end;
-      const shopId = req.query.shopId;
-      if (!start || !end || !shopId) return res.status(400).json({ error: "start, end, shopId required" });
-      const raw = await fetchOverviewRaw({ companyId, token, shopId, startDate: start, endDate: end });
-      return res.status(200).json(raw);
     }
 
     if (action === "overview") {

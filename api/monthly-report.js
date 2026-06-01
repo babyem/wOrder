@@ -83,6 +83,45 @@ async function fortnoxNetForCompany(companyId, firstDay, lastDay) {
   return { net: Math.round(net), vouchers: postings.length };
 }
 
+// DEBUG: summera kredit/debet per konto för ett bolags verifikat i perioden.
+async function fortnoxAccountSums(companyId, firstDay, lastDay) {
+  const tokenRows = await sbSelect("fortnox_tokens", `company_id=eq.${companyId}&select=*`);
+  const tokenRow = tokenRows && tokenRows[0];
+  if (!tokenRow) return { error: "ingen fortnox_tokens-rad" };
+  const accessToken = await getCompanyAccessToken(tokenRow);
+  const postings = await sbSelect(
+    "fortnox_postings",
+    `company_id=eq.${companyId}&business_date=gte.${firstDay}&business_date=lte.${lastDay}` +
+      `&status=eq.ok&select=voucher_series,voucher_number`
+  );
+  const accounts = {};
+  let counted = 0;
+  const BATCH = 8;
+  for (let i = 0; i < (postings || []).length; i += BATCH) {
+    const batch = postings.slice(i, i + BATCH);
+    const results = await Promise.all(
+      batch.map((p) =>
+        getVoucher(accessToken, p.voucher_series, String(p.voucher_number).replace(/\D/g, ""), firstDay).catch(() => null)
+      )
+    );
+    for (const r of results) {
+      const rows = r && r.found && r.voucher && r.voucher.VoucherRows;
+      if (!Array.isArray(rows)) continue;
+      counted++;
+      for (const row of rows) {
+        const acc = String(row.Account);
+        if (!accounts[acc]) accounts[acc] = { credit: 0, debit: 0 };
+        accounts[acc].credit += Number(row.Credit) || 0;
+        accounts[acc].debit += Number(row.Debit) || 0;
+      }
+    }
+  }
+  const out = Object.entries(accounts)
+    .map(([acc, v]) => ({ account: acc, credit: Math.round(v.credit), debit: Math.round(v.debit), net: Math.round(v.credit - v.debit) }))
+    .sort((a, b) => Number(a.account) - Number(b.account));
+  return { vouchersCounted: counted, vouchersTotal: (postings || []).length, accounts: out };
+}
+
 // Qopla skapar en Z-rapport (dagsavslut) per dag automatiskt. Den räknar moms per
 // kvitto, vilket är exakt det köpcentrumen vill ha. Vi summerar månadens dagliga
 // Z-rapporter och faller tillbaka på overview-aggregatet om inga Z-rapporter hittas.
@@ -401,6 +440,14 @@ export default async function handler(req, res) {
   }
 
   try {
+    // DEBUG: kontosummor för ett Fortnox-bolag (för att hitta rätt intäktskonton).
+    if (req.query.debug === "accounts") {
+      const companyId = req.query.company || POS_NET_FORTNOX_COMPANY["dinkassa-chao"];
+      const { firstDay, lastDay } = monthBounds(year, month);
+      const sums = await fortnoxAccountSums(companyId, firstDay, lastDay);
+      return res.status(200).json({ month: `${year}-${String(month).padStart(2, "0")}`, companyId, ...sums });
+    }
+
     // posNet=1 → räkna även netto exkl moms för pos-butiker (Chao) via Fortnox (långsammare).
     const withPosNet = req.query.posNet === "1" || req.query.posNet === "true";
     const report = await computeReport(year, month, { withPosNet });

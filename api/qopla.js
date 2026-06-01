@@ -107,7 +107,7 @@ const ZSUM_QUERY = `query getReports($shopId: String, $reportType: ReportType, $
 
 // Sum Z-reports whose period falls within [startISO, endISO].
 // Returns gross (totalSalesGross), refunds (totalRefunds), and net (totalSales = gross - refunds).
-async function handleZSum({ token, shops, startISO, endISO, shopId }) {
+async function handleZSum({ token, shops, startISO, endISO, shopId, debug = false }) {
   const PAGE_SIZE = 50;
   const rangeStart = new Date(startISO);
   const rangeEnd   = new Date(endISO);
@@ -115,6 +115,7 @@ async function handleZSum({ token, shops, startISO, endISO, shopId }) {
 
   const zsum = await Promise.all(targetShops.map(async shop => {
     let gross = 0, refunds = 0, count = 0, page = 1;
+    const debugRows = [];
 
     outer: while (true) {
       const data = await gql(
@@ -128,13 +129,13 @@ async function handleZSum({ token, shops, startISO, endISO, shopId }) {
       for (const r of items) {
         const rEnd   = new Date(r.endDate);
         const rStart = new Date(r.startDate);
-        // Reports are newest-first; stop once we're past our range
         if (rEnd < rangeStart) break outer;
-        // Include report if its period overlaps our range
-        if (rStart < rangeEnd && rEnd > rangeStart) {
+        // Only include reports whose endDate falls within the range
+        if (rEnd >= rangeStart && rEnd <= rangeEnd) {
           gross   += r.totalSales || 0;
           refunds += r.refunds?.amount || 0;
           count++;
+          if (debug) debugRows.push({ startDate: r.startDate, endDate: r.endDate, totalSales: r.totalSales, refunds: r.refunds?.amount || 0 });
         }
       }
       if (items.length < PAGE_SIZE) break;
@@ -144,10 +145,11 @@ async function handleZSum({ token, shops, startISO, endISO, shopId }) {
     return {
       shopId:          shop.id,
       shopName:        shop.name,
-      totalSales:      gross - refunds, // net (matches Qopla dashboard "Försäljning inkl returer")
+      totalSales:      gross - refunds,
       totalSalesGross: gross,
       totalRefunds:    refunds,
       reportCount:     count,
+      ...(debug ? { reports: debugRows } : {}),
     };
   }));
 
@@ -270,7 +272,8 @@ export default async function handler(req, res) {
       const end    = req.query.end;
       const shopId = req.query.shopId || null;
       if (!start || !end) return res.status(400).json({ error: "start och end (ISO) krävs" });
-      const out = await handleZSum({ token, shops, startISO: start, endISO: end, shopId });
+      const debug = req.query.debug === "1";
+      const out = await handleZSum({ token, shops, startISO: start, endISO: end, shopId, debug });
       res.setHeader("Cache-Control", "s-maxage=600, stale-while-revalidate=3600");
       return res.status(200).json({ ...out, fetchedAt: new Date().toISOString() });
     }

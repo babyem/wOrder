@@ -13,8 +13,47 @@
 //
 // För action=send krävs RESEND_API_KEY i miljövariabler (samma nyckel som send-email).
 
-import { getSession, fetchOverviewRaw, dayRangeISO } from "./_lib/qopla.js";
+import { gql, getSession, fetchOverviewRaw, dayRangeISO } from "./_lib/qopla.js";
 import { sbSelect } from "./_lib/supabaseAdmin.js";
+
+// Qopla skapar en Z-rapport (dagsavslut) per dag automatiskt. Den räknar moms per
+// kvitto, vilket är exakt det köpcentrumen vill ha. Vi summerar månadens dagliga
+// Z-rapporter och faller tillbaka på overview-aggregatet om inga Z-rapporter hittas.
+const REPORTS_QUERY = `query getReports($shopId: String, $reportType: ReportType, $pageNumber: Int, $pageItems: Int) {
+  getReports(shopId: $shopId, reportType: $reportType, pageNumber: $pageNumber, pageItems: $pageItems) {
+    ... on ZXReport {
+      reportNumber
+      startDate
+      endDate
+      totalSales
+      totalNetSales
+      sumReceipts
+      vatRatesAndNetAmounts { vatRate amount refundedAmount }
+      refunds { amount }
+    }
+  }
+}`;
+
+// Summera målmånadens dagliga rapporter (spann < 2 dygn, slutdatum i månaden).
+// Netto/brutto redovisas efter återköp — samma som köpcentrumets siffra.
+function sumDailyReports(items, year, month) {
+  const target = `${year}-${String(month).padStart(2, "0")}`;
+  const daily = (items || []).filter((it) => {
+    if (!it || !it.startDate || !it.endDate) return false;
+    const spanDays = (new Date(it.endDate) - new Date(it.startDate)) / 86400000;
+    return String(it.endDate).slice(0, 7) === target && spanDays < 2;
+  });
+  if (daily.length === 0) return null;
+  let net = 0, gross = 0, orders = 0, refundNet = 0, refundGross = 0;
+  for (const it of daily) {
+    net += it.totalNetSales || 0;
+    gross += it.totalSales || 0;
+    orders += it.sumReceipts || 0;
+    refundNet += (it.vatRatesAndNetAmounts || []).reduce((a, v) => a + (v.refundedAmount || 0), 0);
+    refundGross += it.refunds?.amount || 0;
+  }
+  return { net: net + refundNet, gross: gross - refundGross, orders, days: daily.length };
+}
 
 const MONTHS_SV = [
   "januari", "februari", "mars", "april", "maj", "juni",
@@ -64,27 +103,52 @@ function previousMonth() {
 }
 
 // ---------- Datakällor ----------
-async function qoplaShopSales({ startISO, endISO }) {
+// Overview-aggregat (fallback): brutto = totalSum, netto = summa av timme-netto.
+async function qoplaOverviewShop({ companyId, token, shop, startISO, endISO }) {
+  const data = await fetchOverviewRaw({
+    companyId, token, shopId: shop.id, startDate: startISO, endDate: endISO,
+  });
+  const report = data.aggregatedReport || {};
+  let gross = 0, orders = 0, net = 0;
+  for (const ch of Object.values(report)) {
+    gross += ch.totalSum || 0;
+    orders += ch.quantityOfOrders || 0;
+    const stats = ch && ch.saleStatsPerHour;
+    if (stats && typeof stats === "object") {
+      for (const v of Object.values(stats)) net += v.totalNet || 0;
+    }
+  }
+  return { shopId: shop.id, shopName: shop.name, salesGross: gross, salesNet: net, orders, source: "qopla", basis: "overview" };
+}
+
+async function qoplaShopSales({ year, month, startISO, endISO }) {
   const { companyId, token, shops } = await getSession();
   return Promise.all(
     shops.map(async (shop) => {
+      // 1) Summera månadens dagliga Z-rapporter (exakt, moms per kvitto, efter återköp).
       try {
-        const data = await fetchOverviewRaw({
-          companyId, token, shopId: shop.id, startDate: startISO, endDate: endISO,
-        });
-        const report = data.aggregatedReport || {};
-        let gross = 0, orders = 0, net = 0;
-        for (const ch of Object.values(report)) {
-          gross += ch.totalSum || 0;
-          orders += ch.quantityOfOrders || 0;
-          const stats = ch && ch.saleStatsPerHour;
-          if (stats && typeof stats === "object") {
-            for (const v of Object.values(stats)) net += v.totalNet || 0;
-          }
+        const data = await gql(
+          REPORTS_QUERY,
+          { shopId: shop.id, reportType: "Z", pageNumber: 1, pageItems: 150 },
+          token
+        );
+        const z = sumDailyReports(data.getReports, year, month);
+        if (z) {
+          return {
+            shopId: shop.id, shopName: shop.name,
+            salesGross: z.gross, salesNet: z.net,
+            orders: z.orders,
+            source: "qopla", basis: "zreport", zDays: z.days,
+          };
         }
-        return { shopId: shop.id, shopName: shop.name, salesGross: gross, salesNet: net, orders, source: "qopla" };
       } catch {
-        return { shopId: shop.id, shopName: shop.name, salesGross: 0, salesNet: 0, orders: 0, source: "qopla" };
+        // faller igenom till overview
+      }
+      // 2) Fallback: overview-aggregat.
+      try {
+        return await qoplaOverviewShop({ companyId, token, shop, startISO, endISO });
+      } catch {
+        return { shopId: shop.id, shopName: shop.name, salesGross: 0, salesNet: 0, orders: 0, source: "qopla", basis: "error" };
       }
     })
   );
@@ -112,6 +176,7 @@ async function posShopSales({ firstDay, lastDay }) {
         salesNet: null, // netto lagras inte i pos_daily_sales
         orders: 0,
         source: r.source || "pos",
+        basis: "pos",
       };
       map.set(r.qopla_shop_id, e);
     }
@@ -127,7 +192,7 @@ async function computeReport(year, month) {
   const endISO = dayRangeISO(lastDay).endDate;
 
   const [qopla, pos] = await Promise.all([
-    qoplaShopSales({ startISO, endISO }),
+    qoplaShopSales({ year, month, startISO, endISO }),
     posShopSales({ firstDay, lastDay }),
   ]);
 
@@ -145,6 +210,8 @@ async function computeReport(year, month) {
       salesNet: s.salesNet == null ? null : Math.round(s.salesNet), // exkl moms (null för pos)
       orders: s.orders,
       source: s.source,
+      basis: s.basis, // "zreport" | "overview" | "pos"
+      ...(s.zDays != null ? { zDays: s.zDays } : {}),
     }));
 
   const total = shops.reduce(

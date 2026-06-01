@@ -200,6 +200,16 @@ export default async function handler(req, res) {
       return res.status(200).json({ ...out, fetchedAt: new Date().toISOString() });
     }
 
+    if (action === "rawdebug") {
+      // Temp: expose raw qreport aggregatedReport to inspect all available fields
+      const start = req.query.start;
+      const end = req.query.end;
+      const shopId = req.query.shopId;
+      if (!start || !end || !shopId) return res.status(400).json({ error: "start, end, shopId required" });
+      const raw = await fetchOverviewRaw({ companyId, token, shopId, startDate: start, endDate: end });
+      return res.status(200).json(raw);
+    }
+
     if (action === "overview") {
       const start = req.query.start;
       const end = req.query.end;

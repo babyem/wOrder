@@ -52,15 +52,32 @@ async function qoplaShopSales({ startISO, endISO }) {
           endDate: endISO,
         });
         const report = data.aggregatedReport || {};
-        let sales = 0;
+        let gross = 0; // totalSum = inkl moms
         let orders = 0;
+        let net = 0; // summa av timme-netto = exkl moms
+        let grossHours = 0; // kontroll: timme-brutto ska ≈ gross
         for (const ch of Object.values(report)) {
-          sales += ch.totalSum || 0;
+          gross += ch.totalSum || 0;
           orders += ch.quantityOfOrders || 0;
+          const stats = ch && ch.saleStatsPerHour;
+          if (stats && typeof stats === "object") {
+            for (const v of Object.values(stats)) {
+              net += v.totalNet || 0;
+              grossHours += v.total || 0;
+            }
+          }
         }
-        return { shopId: shop.id, shopName: shop.name, sales, orders, source: "qopla" };
+        return {
+          shopId: shop.id,
+          shopName: shop.name,
+          salesGross: gross,
+          salesNet: net,
+          orders,
+          source: "qopla",
+          _grossHours: grossHours,
+        };
       } catch {
-        return { shopId: shop.id, shopName: shop.name, sales: 0, orders: 0, source: "qopla" };
+        return { shopId: shop.id, shopName: shop.name, salesGross: 0, salesNet: 0, orders: 0, source: "qopla" };
       }
     })
   );
@@ -85,13 +102,14 @@ async function posShopSales({ firstDay, lastDay }) {
       e = {
         shopId: r.qopla_shop_id,
         shopName: r.shop_name || r.qopla_shop_id,
-        sales: 0,
+        salesGross: 0,
+        salesNet: null, // netto lagras inte i pos_daily_sales
         orders: 0,
         source: r.source || "pos",
       };
       map.set(r.qopla_shop_id, e);
     }
-    e.sales += Number(r.sales) || 0;
+    e.salesGross += Number(r.sales) || 0;
     e.orders += Number(r.orders) || 0;
   }
   return [...map.values()];
@@ -142,19 +160,26 @@ export default async function handler(req, res) {
     for (const s of pos) if (!byId.has(s.shopId)) byId.set(s.shopId, s);
 
     const shops = [...byId.values()]
-      .filter((s) => s.sales > 0 || s.orders > 0)
-      .sort((a, b) => b.sales - a.sales)
+      .filter((s) => (s.salesGross || 0) > 0 || (s.orders || 0) > 0)
+      .sort((a, b) => (b.salesGross || 0) - (a.salesGross || 0))
       .map((s) => ({
         shopId: s.shopId,
         shopName: s.shopName,
-        sales: Math.round(s.sales),
+        salesGross: Math.round(s.salesGross || 0), // inkl moms
+        salesNet: s.salesNet == null ? null : Math.round(s.salesNet), // exkl moms (null för pos)
         orders: s.orders,
         source: s.source,
+        // kontrollvärde: timme-brutto vs totalSum (ska vara nära lika för Qopla)
+        ...(s._grossHours != null ? { _grossHours: Math.round(s._grossHours) } : {}),
       }));
 
     const total = shops.reduce(
-      (acc, s) => ({ sales: acc.sales + s.sales, orders: acc.orders + s.orders }),
-      { sales: 0, orders: 0 }
+      (acc, s) => ({
+        salesGross: acc.salesGross + (s.salesGross || 0),
+        salesNet: acc.salesNet + (s.salesNet || 0),
+        orders: acc.orders + (s.orders || 0),
+      }),
+      { salesGross: 0, salesNet: 0, orders: 0 }
     );
 
     res.setHeader("Cache-Control", "s-maxage=600, stale-while-revalidate=1800");

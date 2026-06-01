@@ -1,19 +1,27 @@
-// api/fortnox-sync.js — nightly Qopla → Fortnox auto-booking (Vercel serverless).
+// api/fortnox-sync.js — morning Qopla → Fortnox auto-booking (Vercel serverless).
 //
-// Triggered by Vercel Cron (two UTC entries; see vercel.json) and gated to run only
-// at 23:00 Europe/Stockholm, so exactly one fires per day year-round despite DST.
-// Also callable manually from the admin UI ("Kör nu") with ?force=1 and the user JWT.
+// Triggered by Vercel Cron (two morning UTC entries; see vercel.json). There is NO
+// exact-hour gate: each run books a catch-up window (yesterday back through
+// CATCHUP_DAYS days) and the fortnox_postings idempotency guard skips days already
+// booked. So re-runs are safe and a night the cron misses is filled by the next run —
+// no longer a single point of failure on one precisely-timed nightly invocation.
+// Also callable manually from the admin UI ("Kör nu" / "Kör Qopla") with the user JWT.
 //
-// For every enabled fortnox_shop_map row it fetches today's SIE verifications from
+// For every enabled fortnox_shop_map row it fetches the window's SIE verifications from
 // Qopla, turns them into Fortnox vouchers (series "F") and posts them, recording the
 // result in fortnox_postings (which also guards against double-posting).
 //
 // Env: FORTNOX_CLIENT_ID, FORTNOX_CLIENT_SECRET, CRON_SECRET, SUPABASE_URL,
 //      SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY, QOPLA_EMAIL, QOPLA_PASSWORD.
 
-import { getSession, dayRangeISO, fetchSiePayload, stockholmHourNow } from "./_lib/qopla.js";
+import { getSession, dayRangeISO, fetchSiePayload } from "./_lib/qopla.js";
 import { sbSelect, sbInsert, sbUpdate, getUserFromJwt } from "./_lib/supabaseAdmin.js";
 import { buildVouchersFromSie, getCompanyAccessToken, createVoucher, getVoucher } from "./_lib/fortnox.js";
+
+// How many fully-closed days back the default (cron) run re-checks each time. The
+// idempotency guard skips days already booked, so this just lets a missed night be
+// caught up by a later run without manual backfill.
+const CATCHUP_DAYS = 4;
 
 // Split a stored voucher token like "F327" into { series: "F", number: "327" }.
 function parseVoucher(token) {
@@ -74,21 +82,24 @@ export default async function handler(req, res) {
     return await reconcile(res);
   }
 
-  const force = req.query.force === "1" || req.query.force === "true";
-
-  // Date selection: ?from=&to= (range, manual) takes precedence; else ?day=yesterday/today.
+  // Date selection (no time-of-day gate — runs are idempotent):
+  //   ?from=&to=     explicit range (manual backfill / "Kör Qopla"); may include today
+  //   ?day=today     book today only (partial day — explicit opt-in)
+  //   ?day=yesterday book yesterday only
+  //   (default)      catch-up window: yesterday back through CATCHUP_DAYS days ago,
+  //                  so a missed cron night is filled by the next morning's run.
   const ymd = /^\d{4}-\d{2}-\d{2}$/;
   const from = req.query.from && ymd.test(req.query.from) ? req.query.from : null;
   const to = req.query.to && ymd.test(req.query.to) ? req.query.to : from;
   let dates;
   if (from) {
     dates = to >= from ? dateList(from, to) : [from];
+  } else if (req.query.day === "today") {
+    dates = [stockholmDateStr(0)];
+  } else if (req.query.day === "yesterday") {
+    dates = [stockholmDateStr(1)];
   } else {
-    // No explicit dates: the nightly cron books today, gated to 23:00 Stockholm.
-    if (!force && stockholmHourNow() !== 23) {
-      return res.status(200).json({ skipped: true, reason: "not 23:00 Europe/Stockholm" });
-    }
-    dates = [stockholmDateStr(req.query.day === "yesterday" ? 1 : 0)];
+    dates = dateList(stockholmDateStr(CATCHUP_DAYS), stockholmDateStr(1));
   }
 
   try {
@@ -102,16 +113,21 @@ export default async function handler(req, res) {
 
     const companyName = new Map((companies || []).map(c => [c.id, c.name]));
     const tokenByCompany = new Map((tokens || []).map(t => [t.company_id, t]));
-    const okSet = new Set((postedRows || []).filter(p => p.status === "ok").map(p => `${p.qopla_shop_id}|${p.business_date}`));
+    // Days already handled — booked ("ok") OR intentionally removed in Fortnox ("deleted").
+    // Skip both so the wider catch-up window never double-books or resurrects a deleted voucher.
+    const bookedSet = new Set((postedRows || [])
+      .filter(p => p.status === "ok" || p.status === "deleted")
+      .map(p => `${p.qopla_shop_id}|${p.business_date}`));
 
     // Optional shop filter (?shops=id1,id2) — run only selected restaurants.
     const shopFilter = req.query.shops
       ? new Set(String(req.query.shops).split(",").map(s => s.trim()).filter(Boolean))
       : null;
 
-    // Qopla shops only — dinkassa rows are booked by the GitHub Action (login is browser-bound).
+    // Qopla shops only — dinkassa (browser-bound login) and ancon (Woso Emporia) are
+    // booked by the GitHub Action, so exclude both; their shopIds aren't valid in Qopla.
     const targets = (maps || []).filter(m =>
-      m.company_id && m.source !== "dinkassa" && (!shopFilter || shopFilter.has(m.qopla_shop_id)));
+      m.company_id && m.source !== "dinkassa" && m.source !== "ancon" && (!shopFilter || shopFilter.has(m.qopla_shop_id)));
     if (!targets.length) {
       return res.status(200).json({ ranAt: new Date().toISOString(), dates, results: [], note: "Inga matchande Qopla-mappningar" });
     }
@@ -141,7 +157,7 @@ export default async function handler(req, res) {
     for (const f of fetched) {
       if (f.error) { results.push({ shop: f.shopName, shopId: f.shopId, status: "error", message: f.error }); continue; }
       for (const s of f.dropped) {
-        if (okSet.has(`${f.shopId}|${s.date}`)) continue;
+        if (bookedSet.has(`${f.shopId}|${s.date}`)) continue;
         await record(f.shopId, s.date, f.companyId, null, "error", s.reason);
         results.push({ shop: f.shopName, shopId: f.shopId, date: s.date, status: "error", message: s.reason });
       }
@@ -156,7 +172,7 @@ export default async function handler(req, res) {
         continue;
       }
       for (const [date, vouchers] of byDate) {
-        if (okSet.has(`${f.shopId}|${date}`)) { results.push({ shop: f.shopName, shopId: f.shopId, date, status: "skipped", message: "redan bokfört" }); continue; }
+        if (bookedSet.has(`${f.shopId}|${date}`)) { results.push({ shop: f.shopName, shopId: f.shopId, date, status: "skipped", message: "redan bokfört" }); continue; }
         pending.push({ shopId: f.shopId, shopName: f.shopName, companyId: f.companyId, tokenRow: f.tokenRow, date, vouchers });
       }
     }

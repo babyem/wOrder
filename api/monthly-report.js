@@ -15,6 +15,71 @@
 
 import { gql, getSession, fetchOverviewRaw, dayRangeISO } from "./_lib/qopla.js";
 import { sbSelect } from "./_lib/supabaseAdmin.js";
+import { getCompanyAccessToken, getVoucher } from "./_lib/fortnox.js";
+
+// Pos-butiker (dinkassa/ancon) lagrar bara brutto. För netto exkl moms läser vi
+// bokföringen i Fortnox: summan av intäktskontona (3xxx) i månadens verifikat.
+// Mappning pos-shopId → Fortnox-bolag (company_id i fortnox_companies/fortnox_tokens).
+const POS_NET_FORTNOX_COMPANY = {
+  "dinkassa-chao": "b53960cf-af09-48cf-bb52-df4667d9facb", // Chao Centralen AB (Kassa 1 + 2)
+};
+
+// Netto exkl moms för ett Fortnox-bolag under perioden = Σ(kredit − debet) på konton 3000–3999.
+async function fortnoxNetForCompany(companyId, firstDay, lastDay) {
+  let tokenRows;
+  try {
+    tokenRows = await sbSelect("fortnox_tokens", `company_id=eq.${companyId}&select=*`);
+  } catch {
+    return null;
+  }
+  const tokenRow = tokenRows && tokenRows[0];
+  if (!tokenRow) return null;
+
+  let accessToken;
+  try {
+    accessToken = await getCompanyAccessToken(tokenRow);
+  } catch {
+    return null;
+  }
+
+  let postings;
+  try {
+    postings = await sbSelect(
+      "fortnox_postings",
+      `company_id=eq.${companyId}&business_date=gte.${firstDay}&business_date=lte.${lastDay}` +
+        `&status=eq.ok&select=voucher_series,voucher_number,business_date`
+    );
+  } catch {
+    return null;
+  }
+  if (!postings || postings.length === 0) return null;
+
+  let net = 0;
+  let counted = 0;
+  const fyDate = firstDay; // välj rätt räkenskapsår
+  const BATCH = 8;
+  for (let i = 0; i < postings.length; i += BATCH) {
+    const batch = postings.slice(i, i + BATCH);
+    const results = await Promise.all(
+      batch.map((p) =>
+        getVoucher(accessToken, p.voucher_series, p.voucher_number, fyDate).catch(() => null)
+      )
+    );
+    for (const r of results) {
+      const rows = r && r.found && r.voucher && r.voucher.VoucherRows;
+      if (!Array.isArray(rows)) continue;
+      counted++;
+      for (const row of rows) {
+        const acc = Number(row.Account);
+        if (acc >= 3000 && acc <= 3999) {
+          net += (Number(row.Credit) || 0) - (Number(row.Debit) || 0);
+        }
+      }
+    }
+  }
+  if (counted === 0) return null;
+  return { net: Math.round(net), vouchers: postings.length };
+}
 
 // Qopla skapar en Z-rapport (dagsavslut) per dag automatiskt. Den räknar moms per
 // kvitto, vilket är exakt det köpcentrumen vill ha. Vi summerar månadens dagliga
@@ -186,7 +251,7 @@ async function posShopSales({ firstDay, lastDay }) {
   return [...map.values()];
 }
 
-async function computeReport(year, month) {
+async function computeReport(year, month, { withPosNet = false } = {}) {
   const { firstDay, lastDay } = monthBounds(year, month);
   const startISO = dayRangeISO(firstDay).startDate;
   const endISO = dayRangeISO(lastDay).endDate;
@@ -195,6 +260,22 @@ async function computeReport(year, month) {
     qoplaShopSales({ year, month, startISO, endISO }),
     posShopSales({ firstDay, lastDay }),
   ]);
+
+  // Netto exkl moms för pos-butiker (Chao) från Fortnox-bokföringen — endast på begäran.
+  if (withPosNet) {
+    await Promise.all(
+      pos.map(async (s) => {
+        const companyId = POS_NET_FORTNOX_COMPANY[s.shopId];
+        if (!companyId) return;
+        const res = await fortnoxNetForCompany(companyId, firstDay, lastDay);
+        if (res) {
+          s.salesNet = res.net;
+          s.basis = "fortnox";
+          s.fortnoxVouchers = res.vouchers;
+        }
+      })
+    );
+  }
 
   const byId = new Map();
   for (const s of qopla) byId.set(s.shopId, s);
@@ -210,8 +291,9 @@ async function computeReport(year, month) {
       salesNet: s.salesNet == null ? null : Math.round(s.salesNet), // exkl moms (null för pos)
       orders: s.orders,
       source: s.source,
-      basis: s.basis, // "zreport" | "overview" | "pos"
+      basis: s.basis, // "zreport" | "overview" | "pos" | "fortnox"
       ...(s.zDays != null ? { zDays: s.zDays } : {}),
+      ...(s.fortnoxVouchers != null ? { fortnoxVouchers: s.fortnoxVouchers } : {}),
     }));
 
   const total = shops.reduce(
@@ -317,7 +399,9 @@ export default async function handler(req, res) {
   }
 
   try {
-    const report = await computeReport(year, month);
+    // posNet=1 → räkna även netto exkl moms för pos-butiker (Chao) via Fortnox (långsammare).
+    const withPosNet = req.query.posNet === "1" || req.query.posNet === "true";
+    const report = await computeReport(year, month, { withPosNet });
 
     // ----- action=send: skicka (eller dry-run) rapport-mejl -----
     if (req.query.action === "send") {

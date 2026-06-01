@@ -100,6 +100,7 @@ const ZSUM_QUERY = `query getReports($shopId: String, $reportType: ReportType, $
       startDate
       endDate
       totalSales
+      sumReceipts
       refunds { receiptType count amount }
     }
   }
@@ -114,7 +115,7 @@ async function handleZSum({ token, shops, startISO, endISO, shopId, debug = fals
   const targetShops = shopId ? shops.filter(s => s.id === shopId) : shops;
 
   const zsum = await Promise.all(targetShops.map(async shop => {
-    let gross = 0, refunds = 0, count = 0, page = 1;
+    let gross = 0, refunds = 0, orders = 0, count = 0, page = 1;
     const debugRows = [];
 
     outer: while (true) {
@@ -134,6 +135,7 @@ async function handleZSum({ token, shops, startISO, endISO, shopId, debug = fals
         if (rEnd >= rangeStart && rEnd <= rangeEnd) {
           gross   += r.totalSales || 0;
           refunds += r.refunds?.amount || 0;
+          orders  += r.sumReceipts || 0;
           count++;
           if (debug) debugRows.push({ startDate: r.startDate, endDate: r.endDate, totalSales: r.totalSales, refunds: r.refunds?.amount || 0 });
         }
@@ -145,7 +147,8 @@ async function handleZSum({ token, shops, startISO, endISO, shopId, debug = fals
     return {
       shopId:          shop.id,
       shopName:        shop.name,
-      totalSales:      gross - refunds,
+      totalSales:      gross - refunds, // net — matches Qopla dashboard "Försäljning inkl returer"
+      totalOrders:     orders,
       totalSalesGross: gross,
       totalRefunds:    refunds,
       reportCount:     count,

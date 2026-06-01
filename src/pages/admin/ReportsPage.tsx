@@ -3,6 +3,7 @@ import { Download, RefreshCw, ChevronDown } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import Spinner from '../../components/ui/Spinner'
 import { useQoplaOverview, type QoplaShopOverview } from '../../plugins/qopla/useQoplaOverview'
+import { useQoplaZSum } from '../../plugins/qopla/useQoplaZSum'
 import { useQoplaHourly } from '../../plugins/qopla/useQoplaHourly'
 import toast from 'react-hot-toast'
 import { usePosDailySales, useRunDinkassa, useRunAncon, useRunAnconLive, type PosDailySale } from '../../hooks/useFortnox'
@@ -92,6 +93,7 @@ export default function ReportsPage() {
       queryClient.refetchQueries({ queryKey: ['qopla-overview', p.start.toISOString(), p.end.toISOString()] })
     })
     queryClient.refetchQueries({ queryKey: ['pos-daily-sales'] })
+    queryClient.refetchQueries({ queryKey: ['qopla-zsum'] })
   }
 
   const toggleExpand = (periodKey: PeriodKey, shopId: string) => {
@@ -129,6 +131,7 @@ export default function ReportsPage() {
             expandedKeys={expanded}
             onToggleExpand={toggleExpand}
             posRows={posSales}
+            useZsum={p.key === 'lastMonth'}
           />
         ))}
       </div>
@@ -142,12 +145,15 @@ interface PeriodColumnProps {
   expandedKeys: Set<string>
   onToggleExpand: (periodKey: PeriodKey, shopId: string) => void
   posRows: PosDailySale[]
+  useZsum?: boolean
 }
 
-function PeriodColumn({ period, canonicalOrder, expandedKeys, onToggleExpand, posRows }: PeriodColumnProps) {
+function PeriodColumn({ period, canonicalOrder, expandedKeys, onToggleExpand, posRows, useZsum }: PeriodColumnProps) {
   const startISO = period.start.toISOString()
   const endISO = period.end.toISOString()
-  const { data, isLoading, isError, isFetching } = useQoplaOverview({ startISO, endISO })
+  const overviewQuery = useQoplaOverview({ startISO, endISO })
+  const zsumQuery     = useQoplaZSum({ startISO, endISO })
+  const { data, isLoading, isError, isFetching } = useZsum ? zsumQuery : overviewQuery
   const runDinkassa = useRunDinkassa()
   const runAncon = useRunAncon()
   const runAnconLive = useRunAnconLive()

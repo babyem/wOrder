@@ -148,6 +148,40 @@ export default async function handler(req, res) {
   const startISO = dayRangeISO(firstDay).startDate;
   const endISO = dayRangeISO(lastDay).endDate;
 
+  // ---- Debug: dumpa rå Qopla-overview för en butik (för att hitta exakt netto-fält) ----
+  if (req.query.debug === "raw" && req.query.shopId) {
+    try {
+      const { companyId, token } = await getSession();
+      const raw = await fetchOverviewRaw({
+        companyId,
+        token,
+        shopId: req.query.shopId,
+        startDate: startISO,
+        endDate: endISO,
+      });
+      // Ta bort de stora saleStatsPerHour-objekten men behåll fältnamn + alla andra fält per kanal
+      const report = raw.aggregatedReport || {};
+      const channelKeys = {};
+      for (const [name, ch] of Object.entries(report)) {
+        const { saleStatsPerHour, ...rest } = ch || {};
+        channelKeys[name] = {
+          allFields: Object.keys(ch || {}),
+          ...rest,
+          _saleStatsPerHourCount: saleStatsPerHour ? Object.keys(saleStatsPerHour).length : 0,
+        };
+      }
+      return res.status(200).json({
+        topLevelKeys: Object.keys(raw),
+        nonAggregatedReport: Object.fromEntries(
+          Object.entries(raw).filter(([k]) => k !== "aggregatedReport")
+        ),
+        channels: channelKeys,
+      });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   try {
     const [qopla, pos] = await Promise.all([
       qoplaShopSales({ startISO, endISO }),

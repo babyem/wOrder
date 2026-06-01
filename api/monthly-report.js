@@ -33,6 +33,10 @@ const EMAIL_DESTINATIONS = [
       "61cc937c0746cf344f514c64", // LETS GRAB
       "6862a617a667dd4ac3c5885d", // Woso Triangeln
     ],
+    // Visningsnamn i mejlet (override av Qopla:s namn)
+    names: {
+      "61cc937c0746cf344f514c64": "Lets Grab",
+    },
   },
 ];
 
@@ -184,7 +188,10 @@ function planEmails(report) {
   const byId = new Map(report.shops.map((s) => [s.shopId, s]));
   const planned = [];
   for (const dest of EMAIL_DESTINATIONS) {
-    const rows = dest.shops.map((id) => byId.get(id)).filter(Boolean);
+    const rows = dest.shops
+      .map((id) => byId.get(id))
+      .filter(Boolean)
+      .map((s) => ({ ...s, shopName: (dest.names && dest.names[s.shopId]) || s.shopName }));
     if (rows.length === 0) continue;
     if (dest.separate) {
       for (const row of rows) {

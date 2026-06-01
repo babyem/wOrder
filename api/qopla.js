@@ -93,6 +93,67 @@ async function handleOverview({ companyId, token, shops, startDate, endDate }) {
   return { overview };
 }
 
+// Minimal Z-report fields needed for summing — faster than full REPORTS_QUERY
+const ZSUM_QUERY = `query getReports($shopId: String, $reportType: ReportType, $pageNumber: Int, $pageItems: Int) {
+  getReports(shopId: $shopId, reportType: $reportType, pageNumber: $pageNumber, pageItems: $pageItems) {
+    ... on ZXReport {
+      startDate
+      endDate
+      totalSales
+      refunds { receiptType count amount }
+    }
+  }
+}`;
+
+// Sum Z-reports whose period falls within [startISO, endISO].
+// Returns gross (totalSalesGross), refunds (totalRefunds), and net (totalSales = gross - refunds).
+async function handleZSum({ token, shops, startISO, endISO, shopId }) {
+  const PAGE_SIZE = 50;
+  const rangeStart = new Date(startISO);
+  const rangeEnd   = new Date(endISO);
+  const targetShops = shopId ? shops.filter(s => s.id === shopId) : shops;
+
+  const zsum = await Promise.all(targetShops.map(async shop => {
+    let gross = 0, refunds = 0, count = 0, page = 1;
+
+    outer: while (true) {
+      const data = await gql(
+        ZSUM_QUERY,
+        { shopId: shop.id, reportType: "Z", pageNumber: page, pageItems: PAGE_SIZE },
+        token
+      );
+      const items = data.getReports ?? [];
+      if (!items.length) break;
+
+      for (const r of items) {
+        const rEnd   = new Date(r.endDate);
+        const rStart = new Date(r.startDate);
+        // Reports are newest-first; stop once we're past our range
+        if (rEnd < rangeStart) break outer;
+        // Include report if its period overlaps our range
+        if (rStart < rangeEnd && rEnd > rangeStart) {
+          gross   += r.totalSales || 0;
+          refunds += r.refunds?.amount || 0;
+          count++;
+        }
+      }
+      if (items.length < PAGE_SIZE) break;
+      page++;
+    }
+
+    return {
+      shopId:          shop.id,
+      shopName:        shop.name,
+      totalSales:      gross - refunds, // net (matches Qopla dashboard "Försäljning inkl returer")
+      totalSalesGross: gross,
+      totalRefunds:    refunds,
+      reportCount:     count,
+    };
+  }));
+
+  return { zsum };
+}
+
 const REPORTS_QUERY = `query getReports($shopId: String, $posId: String, $reportType: ReportType, $pageNumber: Int, $pageItems: Int) {
   numberOfReports(shopId: $shopId, posId: $posId, reportType: $reportType)
   getReports(shopId: $shopId, posId: $posId, reportType: $reportType, pageNumber: $pageNumber, pageItems: $pageItems) {
@@ -201,6 +262,16 @@ export default async function handler(req, res) {
       const shopId = req.query.shopId || null;
       const out = await handleReports({ token, shops, reportType, pageNumber, pageItems, shopId });
       res.setHeader("Cache-Control", reportType === "Z" ? "s-maxage=600" : "s-maxage=120");
+      return res.status(200).json({ ...out, fetchedAt: new Date().toISOString() });
+    }
+
+    if (action === "zsum") {
+      const start  = req.query.start;
+      const end    = req.query.end;
+      const shopId = req.query.shopId || null;
+      if (!start || !end) return res.status(400).json({ error: "start och end (ISO) krävs" });
+      const out = await handleZSum({ token, shops, startISO: start, endISO: end, shopId });
+      res.setHeader("Cache-Control", "s-maxage=600, stale-while-revalidate=3600");
       return res.status(200).json({ ...out, fetchedAt: new Date().toISOString() });
     }
 

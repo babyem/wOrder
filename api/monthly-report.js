@@ -61,9 +61,11 @@ async function fortnoxNetForCompany(companyId, firstDay, lastDay) {
   for (let i = 0; i < postings.length; i += BATCH) {
     const batch = postings.slice(i, i + BATCH);
     const results = await Promise.all(
-      batch.map((p) =>
-        getVoucher(accessToken, p.voucher_series, p.voucher_number, fyDate).catch(() => null)
-      )
+      batch.map((p) => {
+        // voucher_number lagras som "F291" (serie+nummer) — Fortnox vill ha bara siffrorna.
+        const num = String(p.voucher_number).replace(/\D/g, "");
+        return getVoucher(accessToken, p.voucher_series, num, fyDate).catch(() => null);
+      })
     );
     for (const r of results) {
       const rows = r && r.found && r.voucher && r.voucher.VoucherRows;

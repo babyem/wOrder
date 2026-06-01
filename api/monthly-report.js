@@ -56,31 +56,36 @@ async function fortnoxNetForCompany(companyId, firstDay, lastDay) {
 
   let net = 0;
   let counted = 0;
-  const fyDate = firstDay; // välj rätt räkenskapsår
-  const BATCH = 8;
-  for (let i = 0; i < postings.length; i += BATCH) {
-    const batch = postings.slice(i, i + BATCH);
-    const results = await Promise.all(
-      batch.map((p) => {
-        // voucher_number lagras som "F291" (serie+nummer) — Fortnox vill ha bara siffrorna.
-        const num = String(p.voucher_number).replace(/\D/g, "");
-        return getVoucher(accessToken, p.voucher_series, num, fyDate).catch(() => null);
-      })
-    );
-    for (const r of results) {
-      const rows = r && r.found && r.voucher && r.voucher.VoucherRows;
-      if (!Array.isArray(rows)) continue;
-      counted++;
-      for (const row of rows) {
-        const acc = Number(row.Account);
-        if (acc >= 3000 && acc <= 3999) {
-          net += (Number(row.Credit) || 0) - (Number(row.Debit) || 0);
-        }
+  for (const p of postings) {
+    const num = String(p.voucher_number).replace(/\D/g, ""); // "F291" → "291"
+    const r = await fetchVoucherRetry(accessToken, p.voucher_series, num, firstDay);
+    const rows = r && r.found && r.voucher && r.voucher.VoucherRows;
+    if (!Array.isArray(rows)) continue;
+    counted++;
+    for (const row of rows) {
+      const acc = Number(row.Account);
+      if (acc >= 3000 && acc <= 3999) {
+        net += (Number(row.Credit) || 0) - (Number(row.Debit) || 0);
       }
     }
   }
   if (counted === 0) return null;
-  return { net: Math.round(net), vouchers: postings.length };
+  return { net: Math.round(net), vouchers: postings.length, counted };
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Hämta ett verifikat med retry vid transienta fel (t.ex. Fortnox rate-limit 429).
+// getVoucher kastar vid transienta fel och returnerar {found:false} vid 404.
+async function fetchVoucherRetry(accessToken, series, number, fyDate, tries = 4) {
+  for (let i = 0; i < tries; i++) {
+    try {
+      return await getVoucher(accessToken, series, number, fyDate);
+    } catch {
+      await sleep(500 * (i + 1)); // 0.5s, 1s, 1.5s, 2s
+    }
+  }
+  return null;
 }
 
 // DEBUG: summera kredit/debet per konto för ett bolags verifikat i perioden.
@@ -96,24 +101,17 @@ async function fortnoxAccountSums(companyId, firstDay, lastDay) {
   );
   const accounts = {};
   let counted = 0;
-  const BATCH = 8;
-  for (let i = 0; i < (postings || []).length; i += BATCH) {
-    const batch = postings.slice(i, i + BATCH);
-    const results = await Promise.all(
-      batch.map((p) =>
-        getVoucher(accessToken, p.voucher_series, String(p.voucher_number).replace(/\D/g, ""), firstDay).catch(() => null)
-      )
-    );
-    for (const r of results) {
-      const rows = r && r.found && r.voucher && r.voucher.VoucherRows;
-      if (!Array.isArray(rows)) continue;
-      counted++;
-      for (const row of rows) {
-        const acc = String(row.Account);
-        if (!accounts[acc]) accounts[acc] = { credit: 0, debit: 0 };
-        accounts[acc].credit += Number(row.Credit) || 0;
-        accounts[acc].debit += Number(row.Debit) || 0;
-      }
+  for (const p of postings || []) {
+    const num = String(p.voucher_number).replace(/\D/g, "");
+    const r = await fetchVoucherRetry(accessToken, p.voucher_series, num, firstDay);
+    const rows = r && r.found && r.voucher && r.voucher.VoucherRows;
+    if (!Array.isArray(rows)) continue;
+    counted++;
+    for (const row of rows) {
+      const acc = String(row.Account);
+      if (!accounts[acc]) accounts[acc] = { credit: 0, debit: 0 };
+      accounts[acc].credit += Number(row.Credit) || 0;
+      accounts[acc].debit += Number(row.Debit) || 0;
     }
   }
   const out = Object.entries(accounts)

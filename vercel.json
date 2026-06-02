@@ -5,7 +5,7 @@
   "functions": { "api/**/*.js": { "maxDuration": 60 } },
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
   "crons": [
-    { "path": "/api/fortnox-sync", "schedule": "0 21 * * *" },
-    { "path": "/api/fortnox-sync", "schedule": "0 22 * * *" }
+    { "path": "/api/fortnox-sync", "schedule": "0 4 * * *" },
+    { "path": "/api/fortnox-sync", "schedule": "0 7 * * *" }
   ]
 }

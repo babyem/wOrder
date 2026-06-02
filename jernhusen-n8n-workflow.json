@@ -1,0 +1,55 @@
+{
+  "name": "Jernhusen omsättningsrapportering",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 1 * *"
+            }
+          ]
+        }
+      },
+      "id": "11111111-1111-1111-1111-111111111111",
+      "name": "1:a varje månad 08:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        380,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Jernhusen omsättningsrapportering — login + POST /turnover/Create per verksamhet.\n// ─────────────────────────────────────────────────────────────────────────────\n// FYLL I DINA INLOGGNINGSUPPGIFTER HÄR (de två raderna):\nconst USER = 'tony@woso.se';          // ← ditt användarnamn\nconst PASS = 'SKRIV_DITT_LOSENORD';   // ← ditt lösenord\n// ─────────────────────────────────────────────────────────────────────────────\n\nconst BASE = 'https://omsa.jernhusen.se';\nconst REPORT_URL = 'https://worder.woso.se/api/monthly-report?token=k742mDJ_HYrtZG-2qwRNAfev0a9u7qy4';\n\n// shopId i worder-rapporten  →  Jernhusen BusinessId\nconst BUSINESSES = [\n  { shopId: '67bc9ec96c7e0c3b0a59968f', businessId: 'c0f63bb3-eda4-44c0-8e3d-bd62d70edf4e', name: 'Woso Centralstationen' },\n  { shopId: 'dinkassa-chao',            businessId: '4b7719f3-53a5-4882-b024-105953e8d2f1', name: 'Chao Oriental Express' },\n];\n\nconst http = this.helpers.httpRequest;\nconst jar = {};\nfunction addCookies(setCookie) {\n  if (!setCookie) return;\n  const arr = Array.isArray(setCookie) ? setCookie : [setCookie];\n  for (const c of arr) { const p = c.split(';')[0]; const i = p.indexOf('='); if (i > 0) jar[p.slice(0,i).trim()] = p.slice(i+1); }\n}\nconst cookieHeader = () => Object.entries(jar).map(([k,v]) => k+'='+v).join('; ');\nfunction tokenFrom(html) { const m = /name=\"__RequestVerificationToken\"[^>]*value=\"([^\"]+)\"/.exec(html||''); return m ? m[1] : null; }\nconst form = (obj) => Object.entries(obj).map(([k,v]) => encodeURIComponent(k)+'='+encodeURIComponent(v)).join('&');\n\nif (!PASS || PASS === 'SKRIV_DITT_LOSENORD') throw new Error('Fyll i USER och PASS högst upp i Code-noden.');\n\n// 1) Hämta månadens siffror\nconst report = await http({ url: REPORT_URL, json: true });\nconst [Year, Month] = report.month.split('-').map(Number);\nconst byId = Object.fromEntries(report.shops.map(s => [s.shopId, s]));\n\n// 2) Login GET → token + cookie\nconst lg = await http({ url: BASE + '/Account/Login', returnFullResponse: true });\naddCookies(lg.headers['set-cookie']);\nconst loginToken = tokenFrom(lg.body);\n\n// 3) Login POST\nconst lp = await http({\n  method: 'POST', url: BASE + '/Account/Login', returnFullResponse: true,\n  headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': cookieHeader() },\n  body: form({ __RequestVerificationToken: loginToken, Username: USER, Password: PASS, RememberMe: 'false' }),\n});\naddCookies(lp.headers['set-cookie']);\n\n// 4) Per verksamhet: GET create (nytt token) → POST create\nconst results = [];\nfor (const b of BUSINESSES) {\n  const shop = byId[b.shopId];\n  if (!shop || shop.salesNet == null) { results.push({ name: b.name, status: 'skip', reason: 'saknar netto' }); continue; }\n  const gc = await http({ url: BASE + '/turnover/Create?BusinessId=' + b.businessId, returnFullResponse: true, headers: { 'Cookie': cookieHeader() } });\n  addCookies(gc.headers['set-cookie']);\n  if (/name=\"Username\"/.test(gc.body)) { results.push({ name: b.name, status: 'error', reason: 'inte inloggad (kontrollera USER/PASS)' }); continue; }\n  const formToken = tokenFrom(gc.body);\n  const pc = await http({\n    method: 'POST', url: BASE + '/turnover/Create', returnFullResponse: true, headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': cookieHeader() },\n    body: form({ __RequestVerificationToken: formToken, BusinessId: b.businessId, Year: Year, Month: Month, MonthlyTurnOverExVat: Math.round(shop.salesNet), NumberOfReceipts: shop.orders || 0, Comment: '' }),\n  });\n  const ok = pc.statusCode >= 200 && pc.statusCode < 400 && !/name=\"Username\"/.test(pc.body || '');\n  results.push({ name: b.name, status: ok ? 'ok' : 'error', code: pc.statusCode, exVat: Math.round(shop.salesNet), receipts: shop.orders || 0 });\n}\nreturn [{ json: { month: report.month, results } }];"
+      },
+      "id": "22222222-2222-2222-2222-222222222222",
+      "name": "Rapportera till Jernhusen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "1:a varje månad 08:00": {
+      "main": [
+        [
+          {
+            "node": "Rapportera till Jernhusen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

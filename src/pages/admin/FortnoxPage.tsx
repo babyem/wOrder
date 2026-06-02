@@ -107,7 +107,7 @@ export default function FortnoxPage() {
   }
 
   const handleRun = () => {
-    runSync.mutate({}, { onSuccess: showRun('Qopla — idag'), onError: (e) => toast.error((e as Error).message) })
+    runSync.mutate({}, { onSuccess: showRun('Qopla — igår + ikapp'), onError: (e) => toast.error((e as Error).message) })
   }
 
   const toggleQoplaShop = (id: string) => setQoplaExcluded(prev => {
@@ -175,7 +175,7 @@ export default function FortnoxPage() {
             Fortnox-bokföring
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Koppla Qopla-butiker till Fortnox-bolag. Körs automatiskt 23:00 — verifikat skapas i serie F.
+            Koppla Qopla-butiker till Fortnox-bolag. Körs automatiskt varje morgon (bokför gårdagen och tar igen missade dagar) — verifikat skapas i serie F.
           </p>
         </div>
         <div className="shrink-0 flex items-center gap-2">

@@ -23,6 +23,15 @@ const POS_NET_VAT_DIVISOR = {
   "dinkassa-chao": 1.06, // Chao Oriental Express — takeaway 6%
 };
 
+// Jernhusen: inloggning via webbformuläret + POST /turnover/Create per verksamhet.
+// Inga API-nycklar behövs. Login med JERNHUSEN_USER / JERNHUSEN_PASS (Vercel env).
+// Rapporterar EXKL moms (salesNet) + antal kvitton (orders).
+const JERNHUSEN_BASE = "https://omsa.jernhusen.se";
+const JERNHUSEN_BUSINESSES = [
+  { shopId: "67bc9ec96c7e0c3b0a59968f", businessId: "c0f63bb3-eda4-44c0-8e3d-bd62d70edf4e", name: "Woso Centralstationen" },
+  { shopId: "dinkassa-chao", businessId: "4b7719f3-53a5-4882-b024-105953e8d2f1", name: "Chao Oriental Express" },
+];
+
 // Qopla skapar en Z-rapport (dagsavslut) per dag automatiskt. Den räknar moms per
 // kvitto, vilket är exakt det köpcentrumen vill ha. Vi summerar månadens dagliga
 // Z-rapporter och faller tillbaka på overview-aggregatet om inga Z-rapporter hittas.
@@ -72,7 +81,7 @@ const MONTHS_SV = [
 const EMAIL_DESTINATIONS = [
   {
     center: "Triangeln",
-    to: "cv@woso.se",
+    to: "omsattning.malmo@vasakronan.se",
     from: "rapport@woso.se",
     separate: true,
     shops: [
@@ -297,6 +306,81 @@ function planEmails(report) {
   return { monthLabel, planned };
 }
 
+// Visa vad som SKULLE rapporteras till Jernhusen (dry-run).
+function planJernhusen(report) {
+  const [Year, Month] = report.month.split("-").map(Number);
+  const byId = new Map(report.shops.map((s) => [s.shopId, s]));
+  const planned = [];
+  for (const b of JERNHUSEN_BUSINESSES) {
+    const shop = byId.get(b.shopId);
+    if (!shop || shop.salesNet == null) continue;
+    planned.push({
+      name: b.name,
+      Year, Month,
+      MonthlyTurnOverExVat: Math.round(shop.salesNet), // exkl moms
+      NumberOfReceipts: shop.orders || 0,
+    });
+  }
+  return planned;
+}
+
+const jhToken = (html) => {
+  const m = /name="__RequestVerificationToken"[^>]*value="([^"]+)"/.exec(html || "");
+  return m ? m[1] : null;
+};
+const jhForm = (o) => Object.entries(o).map(([k, v]) => encodeURIComponent(k) + "=" + encodeURIComponent(v)).join("&");
+
+// Logga in på Jernhusen (webbformulär, ASP.NET anti-forgery) och POSTa omsättning per verksamhet.
+async function jernhusenWebReport(report) {
+  const USER = process.env.JERNHUSEN_USER;
+  const PASS = process.env.JERNHUSEN_PASS;
+  if (!USER || !PASS) return { error: "JERNHUSEN_USER / JERNHUSEN_PASS saknas i miljövariabler" };
+
+  const [Year, Month] = report.month.split("-").map(Number);
+  const byId = new Map(report.shops.map((s) => [s.shopId, s]));
+  const jar = {};
+  const addCookies = (res) => {
+    const sc = typeof res.headers.getSetCookie === "function" ? res.headers.getSetCookie() : [];
+    for (const c of sc) { const p = c.split(";")[0]; const i = p.indexOf("="); if (i > 0) jar[p.slice(0, i).trim()] = p.slice(i + 1); }
+  };
+  const cookie = () => Object.entries(jar).map(([k, v]) => k + "=" + v).join("; ");
+
+  // 1) Login GET → token + cookie
+  const lg = await fetch(`${JERNHUSEN_BASE}/Account/Login`, { redirect: "manual" });
+  addCookies(lg);
+  const loginToken = jhToken(await lg.text());
+  // 2) Login POST
+  const lp = await fetch(`${JERNHUSEN_BASE}/Account/Login`, {
+    method: "POST", redirect: "manual",
+    headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: cookie() },
+    body: jhForm({ __RequestVerificationToken: loginToken, Username: USER, Password: PASS, RememberMe: "false" }),
+  });
+  addCookies(lp);
+
+  // 3) Per verksamhet: GET create (nytt token) → POST create
+  const results = [];
+  for (const b of JERNHUSEN_BUSINESSES) {
+    const shop = byId.get(b.shopId);
+    if (!shop || shop.salesNet == null) { results.push({ name: b.name, status: "skip", reason: "saknar netto" }); continue; }
+    const gc = await fetch(`${JERNHUSEN_BASE}/turnover/Create?BusinessId=${b.businessId}`, { headers: { Cookie: cookie() }, redirect: "manual" });
+    addCookies(gc);
+    const gcBody = await gc.text();
+    if (/name="Username"/.test(gcBody)) { results.push({ name: b.name, status: "error", reason: "inte inloggad (kontrollera JERNHUSEN_USER/PASS)" }); continue; }
+    const formToken = jhToken(gcBody);
+    const pc = await fetch(`${JERNHUSEN_BASE}/turnover/Create`, {
+      method: "POST", redirect: "manual",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: cookie() },
+      body: jhForm({
+        __RequestVerificationToken: formToken, BusinessId: b.businessId,
+        Year, Month, MonthlyTurnOverExVat: Math.round(shop.salesNet), NumberOfReceipts: shop.orders || 0, Comment: "",
+      }),
+    });
+    const ok = pc.status >= 300 && pc.status < 400; // success = redirect till verksamhetssidan
+    results.push({ name: b.name, status: ok ? "sent" : "error", code: pc.status, exVat: Math.round(shop.salesNet), receipts: shop.orders || 0 });
+  }
+  return { results };
+}
+
 async function sendViaResend({ apiKey, from, to, subject, text }) {
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -361,6 +445,28 @@ export default async function handler(req, res) {
         sent: results.filter((r) => r.status === "sent").length,
         failed: results.filter((r) => r.status === "error").length,
         results,
+      });
+    }
+
+    // ----- action=jernhusen: logga in och rapportera till Jernhusen (eller dry-run) -----
+    if (req.query.action === "jernhusen") {
+      const dry = req.query.dry === "1" || req.query.dry === "true";
+      if (dry) {
+        return res.status(200).json({
+          dryRun: true,
+          month: report.month,
+          credsSet: !!(process.env.JERNHUSEN_USER && process.env.JERNHUSEN_PASS),
+          reports: planJernhusen(report),
+        });
+      }
+      const out = await jernhusenWebReport(report);
+      if (out.error) return res.status(500).json({ error: out.error });
+      const allOk = out.results.length > 0 && out.results.every((r) => r.status === "sent");
+      return res.status(allOk ? 200 : 207).json({
+        month: report.month,
+        sent: out.results.filter((r) => r.status === "sent").length,
+        failed: out.results.filter((r) => r.status !== "sent").length,
+        results: out.results,
       });
     }
 

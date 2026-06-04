@@ -258,11 +258,11 @@ function SortableVendorRow({ id, name, email, phone, hide_unit, use_chefsculinar
           </button>
           {/* ChefsCulinar toggle */}
           <button
-            onClick={() => updateVendor.mutate({ id, use_chefsculinar: !use_chefsculinar })}
-            title={use_chefsculinar ? 'Skickas via ChefsCulinar-webhook — klicka för att inaktivera' : 'Klicka för att aktivera ChefsCulinar-webhook för denna leverantör'}
-            className={`flex items-center gap-1 text-xs transition-colors rounded px-1 ${use_chefsculinar ? 'text-orange-600 font-medium' : 'text-slate-300 hover:text-slate-500'}`}
+            onClick={() => updateVendor.mutate({ id, use_chefsculinar: use_chefsculinar === false ? true : false })}
+            title={use_chefsculinar === false ? 'Blockerad från ChefsCulinar-webhook — klicka för att återställa' : 'Klicka för att blockera denna leverantör från ChefsCulinar-webhook'}
+            className={`flex items-center gap-1 text-xs transition-colors rounded px-1 ${use_chefsculinar === false ? 'text-red-500 font-medium' : 'text-slate-300 hover:text-slate-500'}`}
           >
-            🍴 {use_chefsculinar ? 'ChefsCulinar' : 'ChefsCulinar'}
+            🍴 {use_chefsculinar === false ? 'Blockerad' : 'ChefsCulinar'}
           </button>
         </div>
       </div>

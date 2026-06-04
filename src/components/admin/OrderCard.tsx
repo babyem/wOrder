@@ -157,6 +157,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
       const v = effectiveVendor(item)
       if (vendorMap[v]?.use_chefsculinar) return v
     }
+    console.log('[chefs debug] vendorMap keys:', Object.keys(vendorMap), 'item vendors:', stableItems.map(i => effectiveVendor(i)))
     return null
   })()
 

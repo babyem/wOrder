@@ -147,8 +147,16 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
   const chefsItems = order.items.filter(i =>
     i.product?.chefsculinar_id && vendorMap[effectiveVendor(i)]?.use_chefsculinar
   )
-  // Which vendor the ChefsCulinar items belong to
-  const chefsVendorName = chefsItems.length > 0 ? effectiveVendor(chefsItems[0]) : null
+  // Which vendor card gets the ChefsCulinar button — prefer items with chefsculinar_id,
+  // fall back to any vendor with use_chefsculinar flag (handles vendor_override cases)
+  const chefsVendorName = (() => {
+    if (chefsItems.length > 0) return effectiveVendor(chefsItems[0])
+    for (const item of stableItems) {
+      const v = effectiveVendor(item)
+      if (vendorMap[v]?.use_chefsculinar) return v
+    }
+    return null
+  })()
 
   const handleSendToChefs = async () => {
     const webhookUrl = import.meta.env.VITE_N8N_CHEFSCULINAR_WEBHOOK

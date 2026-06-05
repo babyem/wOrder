@@ -147,7 +147,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
   const stableItems = [...order.items].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
 
   const chefsItems = stableItems.filter(i =>
-    i.product?.chefsculinar_id && vendorMap[effectiveVendor(i)]?.use_chefsculinar !== false
+    i.product?.chefsculinar_id && !i.product?.tingstad_id && !i.product?.tingstad_alt_id
   )
   // Which vendor card gets the ChefsCulinar button — prefer items with chefsculinar_id,
   // fall back to any vendor with use_chefsculinar flag (handles vendor_override cases)

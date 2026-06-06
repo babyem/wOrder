@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CheckCircle, RotateCcw, Trash2, Clock, MapPin, User, FileText, Mail, Phone, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag, AlertTriangle, StickyNote } from 'lucide-react'
+import { CheckCircle, RotateCcw, Trash2, Clock, MapPin, User, FileText, Mail, Phone, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag, AlertTriangle, AlertCircle } from 'lucide-react'
 import type { Order, OrderWithDetails } from '../../types'
 import { useUpdateOrderStatus, useDeleteOrder, useUpdateOrderItem, useMarkVendorDone, useUpdateAdminNote } from '../../hooks/useOrders'
 import { useVendors, useUnits } from '../../hooks/useMetadata'
@@ -484,7 +484,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
             <div className="flex items-center gap-1 shrink-0">
               <button onClick={() => { setEditingNote(v => !v); setNoteVal(order.admin_note ?? '') }} title="Admin-anteckning"
                 className={`p-1.5 rounded-lg text-xs transition-colors ${order.admin_note ? 'bg-red-100 text-red-600' : editingNote ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500'}`}>
-                <StickyNote size={14} />
+                <AlertCircle size={14} />
               </button>
               {!isMultiVendor && orderVendors.length > 0 && (
                 <button onClick={() => toggleNotify(firstVendor)} title="Notify vendor"
@@ -620,11 +620,11 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
           exit={{ opacity: 0, height: 0 }}
-          className="overflow-hidden mt-1.5"
+          className="overflow-hidden mt-1.5 relative z-10"
         >
           {editingNote ? (
             <div className="bg-red-50 border border-red-200 rounded-xl p-2.5 flex gap-2">
-              <StickyNote size={13} className="text-red-400 mt-0.5 shrink-0" />
+              <AlertCircle size={13} className="text-red-400 mt-0.5 shrink-0" />
               <textarea
                 autoFocus
                 value={noteVal}
@@ -639,7 +639,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
           ) : order.admin_note ? (
             <button onClick={() => { setEditingNote(true); setNoteVal(order.admin_note ?? '') }}
               className="w-full text-left bg-red-50 border border-red-200 rounded-xl p-2.5 flex items-start gap-2 hover:bg-red-100 transition-colors">
-              <StickyNote size={13} className="text-red-400 mt-0.5 shrink-0" />
+              <AlertCircle size={13} className="text-red-400 mt-0.5 shrink-0" />
               <span className="text-xs text-red-800">{order.admin_note}</span>
             </button>
           ) : null}

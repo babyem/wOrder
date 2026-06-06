@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { Clock, CheckCircle } from 'lucide-react'
+import { Clock, CheckCircle, AlertCircle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import type { OrderWithDetails } from '../../types'
 
@@ -84,6 +84,12 @@ function OrderCard({ order }: { order: OrderWithDetails }) {
           <p className="text-[10px] text-slate-400 italic border-t border-slate-50 pt-1">📝 {order.note}</p>
         )}
       </div>
+      {order.admin_note && (
+        <div className="flex items-start gap-1.5 bg-red-50 border-t border-red-100 px-3 py-2">
+          <AlertCircle size={11} className="text-red-500 mt-0.5 shrink-0" />
+          <span className="text-[11px] text-red-700 font-medium">{order.admin_note}</span>
+        </div>
+      )}
     </motion.div>
   )
 }

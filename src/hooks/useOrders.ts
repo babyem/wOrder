@@ -121,6 +121,17 @@ export function useMarkVendorDone() {
   })
 }
 
+export function useUpdateAdminNote() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, admin_note }: { id: string; admin_note: string | null }) => {
+      const { error } = await supabase.from('orders').update({ admin_note }).eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['orders'] }),
+  })
+}
+
 export function useDeleteOrder() {
   const qc = useQueryClient()
   return useMutation({

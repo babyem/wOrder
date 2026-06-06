@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CheckCircle, RotateCcw, Trash2, Clock, MapPin, User, FileText, Mail, Phone, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag, AlertTriangle } from 'lucide-react'
+import { CheckCircle, RotateCcw, Trash2, Clock, MapPin, User, FileText, Mail, Phone, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag, AlertTriangle, StickyNote } from 'lucide-react'
 import type { Order, OrderWithDetails } from '../../types'
-import { useUpdateOrderStatus, useDeleteOrder, useUpdateOrderItem, useMarkVendorDone } from '../../hooks/useOrders'
+import { useUpdateOrderStatus, useDeleteOrder, useUpdateOrderItem, useMarkVendorDone, useUpdateAdminNote } from '../../hooks/useOrders'
 import { useVendors, useUnits } from '../../hooks/useMetadata'
 import { sendEmail } from '../../lib/sendEmail'
 import toast from 'react-hot-toast'
@@ -17,10 +17,22 @@ interface Props {
 export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
   const updateStatus = useUpdateOrderStatus()
   const deleteOrder = useDeleteOrder()
+  const updateAdminNote = useUpdateAdminNote()
   const { data: vendorList } = useVendors()
   const updateOrderItem = useUpdateOrderItem()
   const markVendorDoneMutation = useMarkVendorDone()
   const [showNotify, setShowNotify] = useState(false)
+  const [editingNote, setEditingNote] = useState(false)
+  const [noteVal, setNoteVal] = useState(order.admin_note ?? '')
+
+  const saveNote = () => {
+    const trimmed = noteVal.trim()
+    const newVal = trimmed || null
+    if (newVal !== order.admin_note) {
+      updateAdminNote.mutate({ id: order.id, admin_note: newVal })
+    }
+    setEditingNote(false)
+  }
 
   // Derived from server state — persists globally and syncs across users via Realtime
   const doneVendors = new Set(order.done_vendors ?? [])
@@ -431,6 +443,10 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
+              <button onClick={() => { setEditingNote(v => !v); setNoteVal(order.admin_note ?? '') }} title="Admin-anteckning"
+                className={`p-1.5 rounded-lg text-xs transition-colors ${order.admin_note ? 'bg-red-100 text-red-600' : editingNote ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500'}`}>
+                <StickyNote size={14} />
+              </button>
               {orderVendors.length > 0 && (
                 <button onClick={() => setShowNotify(v => !v)} title="Notify vendors"
                   className={`p-1.5 rounded-lg text-xs transition-colors ${showNotify ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600'}`}>
@@ -566,6 +582,40 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
         )
       })}
     </div>
+
+    {/* Admin note — edit or display */}
+    <AnimatePresence>
+      {(editingNote || order.admin_note) && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          className="overflow-hidden mt-1.5"
+        >
+          {editingNote ? (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-2.5 flex gap-2">
+              <StickyNote size={13} className="text-red-400 mt-0.5 shrink-0" />
+              <textarea
+                autoFocus
+                value={noteVal}
+                onChange={e => setNoteVal(e.target.value)}
+                onBlur={saveNote}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveNote() } if (e.key === 'Escape') { setEditingNote(false); setNoteVal(order.admin_note ?? '') } }}
+                placeholder="Anteckning… (Enter för att spara, Esc för att avbryta)"
+                rows={2}
+                className="flex-1 text-xs text-red-800 bg-transparent resize-none focus:outline-none placeholder:text-red-300"
+              />
+            </div>
+          ) : order.admin_note ? (
+            <button onClick={() => { setEditingNote(true); setNoteVal(order.admin_note ?? '') }}
+              className="w-full text-left bg-red-50 border border-red-200 rounded-xl p-2.5 flex items-start gap-2 hover:bg-red-100 transition-colors">
+              <StickyNote size={13} className="text-red-400 mt-0.5 shrink-0" />
+              <span className="text-xs text-red-800">{order.admin_note}</span>
+            </button>
+          ) : null}
+        </motion.div>
+      )}
+    </AnimatePresence>
     </motion.div>
   )
 }

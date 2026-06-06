@@ -75,6 +75,7 @@ export interface Order {
   employee_id: string
   status: 'pending' | 'done'
   note: string | null
+  admin_note: string | null
   created_at: string
   completed_at: string | null
   done_vendors?: string[] | null

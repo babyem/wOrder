@@ -35,7 +35,7 @@ function SortableColumn({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
-      className="w-56 flex-none flex flex-col gap-2"
+      className="w-64 flex-none flex flex-col gap-2"
     >
       <div className="flex items-center justify-between px-1 mb-1">
         <div className="flex items-center gap-1.5">

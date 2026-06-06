@@ -1,6 +1,6 @@
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ChefHat, MapPin, ChevronRight } from 'lucide-react'
+import { ChefHat, MapPin, ChevronRight, LayoutDashboard } from 'lucide-react'
 import { useAdminLocations } from '../hooks/useAdminData'
 import { toSlug } from '../lib/slug'
 import Spinner from '../components/ui/Spinner'
@@ -16,10 +16,17 @@ export default function LocationListPage() {
           <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shrink-0">
             <ChefHat size={22} className="text-white" />
           </div>
-          <div>
+          <div className="flex-1">
             <h1 className="font-bold text-slate-900 text-lg leading-tight">Staff Orders</h1>
             <p className="text-xs text-slate-400">Select your location to get started</p>
           </div>
+          <Link
+            to="/admin"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-500 hover:text-indigo-700 hover:bg-indigo-50 transition-colors"
+          >
+            <LayoutDashboard size={14} />
+            <span>Backoffice</span>
+          </Link>
         </div>
       </header>
 

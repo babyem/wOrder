@@ -35,12 +35,13 @@
 
   W('wOrder → Tingstad', '<div style="padding:14px;color:#64748b">Laddar ordrar…</div>');
 
-  const SEL = 'id,created_at,location:locations(name),items:order_items(quantity,product:products(name,tingstad_id,tingstad_alt_id))';
+  const SEL = 'id,created_at,done_vendors,location:locations(name),items:order_items(quantity,vendor_override,product:products(name,vendor,tingstad_id,tingstad_alt_id))';
+  const EV = (i) => i.vendor_override || (i.product && i.product.vendor) || null;
   let O;
   try {
     const r = await fetch(SB + '/rest/v1/orders?status=eq.pending&select=' + encodeURIComponent(SEL) + '&order=created_at.desc&limit=50', { headers: H });
     O = (await r.json())
-      .map((o) => ({ w: o.created_at, loc: (o.location || {}).name || '—', items: (o.items || []).filter((i) => i.product && i.product.tingstad_id) }))
+      .map((o) => { const all = o.items || []; const t = all.filter((i) => i.product && i.product.tingstad_id); return { id: o.id, w: o.created_at, loc: (o.location || {}).name || '—', dv: o.done_vendors || [], items: t, va: [...new Set(all.map(EV).filter((v) => v && v !== '—'))], vt: [...new Set(t.map(EV).filter(Boolean))] }; })
       .filter((o) => o.items.length);
   } catch (e) { W('Fel', '<div style="padding:14px">' + E(e.message) + '</div>'); return; }
 
@@ -76,9 +77,22 @@
       if (!ok) fa.push(it.product);
       n++;
     }
-    W('Klart', '<div style="padding:14px"><b>' + (o.items.length - fa.length) + ' varor</b> i varukorgen.' +
+    const okc = o.items.length - fa.length;
+    let dm = '';
+    if (okc > 0) {
+      try {
+        const nd = [...new Set([...o.dv, ...o.vt])];
+        const body = { done_vendors: nd };
+        const full = o.va.length > 0 && o.va.every((v) => nd.includes(v));
+        if (full) { body.status = 'done'; body.completed_at = new Date().toISOString(); }
+        const pr = await fetch(SB + '/rest/v1/orders?id=eq.' + encodeURIComponent(o.id), { method: 'PATCH', headers: Object.assign({}, H, { 'Content-Type': 'application/json', Prefer: 'return=minimal' }), body: JSON.stringify(body) });
+        dm = pr.ok ? (full ? '<br><br>✓ <b>Order markerad klar</b> i wOrder.' : '<br><br>✓ <b>Tingstad klar</b> i wOrder.') : '<br><br>⚠️ Kunde ej markera klar i wOrder.';
+      } catch (e) { dm = '<br><br>⚠️ Kunde ej markera klar i wOrder.'; }
+    }
+    W('Klart', '<div style="padding:14px"><b>' + okc + ' varor</b> i varukorgen.' +
       (alt.length ? '<br><br>↪ Alternativ användes för:<br>' + alt.map((f) => '• ' + E(f.name) + ' → ' + E(f.tingstad_alt_id)).join('<br>') : '') +
       (fa.length ? '<br><br>⚠️ Ej tillagda (slut i lager / fel artnr):<br>' + fa.map((f) => '• ' + E(f.name) + ' <a href="https://www.tingstad.com/se-sv/sokresultat?q=' + encodeURIComponent(f.tingstad_id) + '" target="_blank" style="color:#0f766e">sök ›</a>').join('<br>') : '') +
+      dm +
       '<br><br>Öppna varukorgen och granska.</div>');
   });
 })();

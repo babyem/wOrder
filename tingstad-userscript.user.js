@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         wOrder → Tingstad varukorg
 // @namespace    worder.tingstad
-// @version      1.2
+// @version      1.3
 // @description  Fyll Tingstad-varukorgen från en väntande wOrder-order. Körs i din inloggade session — varorna hamnar i DIN varukorg. Lägger ingen order.
 // @match        https://www.tingstad.com/*
 // @run-at       document-idle
@@ -33,6 +33,20 @@
     });
   }
 
+  // ── Supabase PATCH via GM_xmlhttpRequest (write back to wOrder) ──────────────
+  function sbPatch(pathAndQuery, body) {
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method: 'PATCH',
+        url: SUPABASE_URL + '/rest/v1/' + pathAndQuery,
+        headers: { apikey: SUPABASE_ANON, Authorization: 'Bearer ' + SUPABASE_ANON, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        data: JSON.stringify(body),
+        onload: (r) => { (r.status >= 200 && r.status < 300) ? resolve(true) : reject(new Error('Supabase PATCH ' + r.status)); },
+        onerror: () => reject(new Error('Network error to Supabase')),
+      });
+    });
+  }
+
   // ── Add one product to the Tingstad cart (same-origin, your session) ─────────
   async function addToCart(productNumber, amount) {
     const body = 'productNumber=' + encodeURIComponent(productNumber) +
@@ -49,16 +63,35 @@
 
   // ── Load pending wOrder orders that have Tingstad-mapped items ───────────────
   async function loadOrders() {
-    const sel = 'id,created_at,note,location:locations(name),items:order_items(quantity,product:products(name,tingstad_id,tingstad_alt_id))';
+    const sel = 'id,created_at,done_vendors,location:locations(name),items:order_items(quantity,vendor_override,product:products(name,vendor,tingstad_id,tingstad_alt_id))';
     const rows = await sbGet('orders?status=eq.pending&select=' + encodeURIComponent(sel) + '&order=created_at.desc&limit=50');
+    const evendor = (i) => i.vendor_override || (i.product && i.product.vendor) || null;
     return rows
-      .map((o) => ({
-        id: o.id,
-        when: o.created_at,
-        location: (o.location && o.location.name) || '—',
-        items: (o.items || []).filter((i) => i.product && i.product.tingstad_id),
-      }))
+      .map((o) => {
+        const all = o.items || [];
+        const tItems = all.filter((i) => i.product && i.product.tingstad_id);
+        return {
+          id: o.id,
+          when: o.created_at,
+          location: (o.location && o.location.name) || '—',
+          doneVendors: o.done_vendors || [],
+          items: tItems,
+          vendorsAll: [...new Set(all.map(evendor).filter((v) => v && v !== '—'))],
+          vendorsTingstad: [...new Set(tItems.map(evendor).filter(Boolean))],
+        };
+      })
       .filter((o) => o.items.length > 0);
+  }
+
+  // ── Mark the order's Tingstad vendor done in wOrder (auto-completes the order
+  //    if Tingstad is the only/last vendor). Mirrors OrderCard.markVendorDone. ──
+  async function markOrderDone(order) {
+    const newDone = [...new Set([...(order.doneVendors || []), ...order.vendorsTingstad])];
+    const patch = { done_vendors: newDone };
+    const allCovered = order.vendorsAll.length > 0 && order.vendorsAll.every((v) => newDone.includes(v));
+    if (allCovered) { patch.status = 'done'; patch.completed_at = new Date().toISOString(); }
+    await sbPatch('orders?id=eq.' + encodeURIComponent(order.id), patch);
+    return allCovered;
   }
 
   // ── UI ───────────────────────────────────────────────────────────────────────
@@ -143,6 +176,15 @@
     }
     const okCount = order.items.length - failed.length;
     const searchUrl = (art) => 'https://www.tingstad.com/se-sv/sokresultat?q=' + encodeURIComponent(art);
+    let doneMsg = '';
+    if (okCount > 0) {
+      try {
+        const full = await markOrderDone(order);
+        doneMsg = full
+          ? '<br><br>✓ <b>Order markerad klar</b> i wOrder.'
+          : '<br><br>✓ <b>Tingstad klar</b> i wOrder (andra leverantörer kvar).';
+      } catch (e) { doneMsg = '<br><br>⚠️ Kunde ej markera klar i wOrder: ' + esc(e.message); }
+    }
     panel.innerHTML = header('Klart') +
       `<div class="wo-msg"><b>${okCount} varor</b> lagda i varukorgen.` +
       (altUsed.length
@@ -155,6 +197,7 @@
             `<a href="${searchUrl(f.art)}" target="_blank" style="color:#0f766e;font-weight:600">sök på Tingstad ›</a>`).join('<br>') +
           `<br><br>Lägg dessa manuellt (eller välj ersättning) via sök-länken.`
         : '') +
+      doneMsg +
       `<br><br>Öppna varukorgen, granska och lägg ordern.</div>`;
     panel.querySelector('.wo-x').onclick = close;
   }

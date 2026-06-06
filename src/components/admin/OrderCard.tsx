@@ -21,7 +21,8 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
   const { data: vendorList } = useVendors()
   const updateOrderItem = useUpdateOrderItem()
   const markVendorDoneMutation = useMarkVendorDone()
-  const [showNotify, setShowNotify] = useState(false)
+  const [showNotifyVendor, setShowNotifyVendor] = useState<string | null>(null)
+  const toggleNotify = (vendor: string) => setShowNotifyVendor(prev => prev === vendor ? null : vendor)
   const [editingNote, setEditingNote] = useState(false)
   const [noteVal, setNoteVal] = useState(order.admin_note ?? '')
 
@@ -128,7 +129,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
     try {
       await updateStatus.mutateAsync({ id: order.id, status: 'done' })
       toast.success('Order marked as done')
-      if (orderVendors.length > 0) setShowNotify(true)
+      if (orderVendors.length > 0) setShowNotifyVendor(orderVendors[0].name)
     } catch {
       toast.error('Failed to update order')
     }
@@ -394,6 +395,44 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
     </div>
   )
 
+  const renderNotifyPanel = (vendorName: string) => {
+    const v = orderVendors.find(ov => ov.name === vendorName)
+    if (!v) return null
+    return (
+      <div className="px-3 pb-3 pt-2 space-y-1.5">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Notifiera {v.name}</span>
+          <button onClick={() => setShowNotifyVendor(null)} className="text-slate-300 hover:text-slate-500"><X size={12} /></button>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {v.email && (
+            <button disabled={sending === v.name} onClick={async () => {
+              setSending(v.name)
+              try {
+                await sendEmail(v.email!, `Order – ${order.location?.name ?? ''}`, buildBody(v.name))
+                toast.success(`Email skickat till ${v.name}`)
+                markVendorDone(v.name, true, allVendorNames)
+                setShowNotifyVendor(null)
+              } catch (err) {
+                toast.error(`${v.name}: ${err instanceof Error ? err.message : 'Misslyckades'}`)
+              } finally { setSending(null) }
+            }} className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-medium hover:bg-indigo-100 disabled:opacity-50 transition-colors">
+              {sending === v.name ? <Loader2 size={11} className="animate-spin" /> : <Mail size={11} />} Email
+            </button>
+          )}
+          {v.phone && (
+            <a href={`sms:${v.phone}?body=${encodeURIComponent(buildBody(v.name))}`}
+              onClick={() => { markVendorDone(v.name, true, allVendorNames); setShowNotifyVendor(null) }}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 transition-colors">
+              <Phone size={11} /> SMS
+            </a>
+          )}
+          {!v.email && !v.phone && <span className="text-[10px] text-slate-300 italic">Ingen kontaktinfo</span>}
+        </div>
+      </div>
+    )
+  }
+
   const isMerged = !!(order as Order & { is_merged?: boolean }).is_merged && isPending
   const firstVendor = vendorEntries[0][0]
   const firstSelected = selectedVendors?.has(firstVendor) ?? false
@@ -447,9 +486,9 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
                 className={`p-1.5 rounded-lg text-xs transition-colors ${order.admin_note ? 'bg-red-100 text-red-600' : editingNote ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500'}`}>
                 <StickyNote size={14} />
               </button>
-              {orderVendors.length > 0 && (
-                <button onClick={() => setShowNotify(v => !v)} title="Notify vendors"
-                  className={`p-1.5 rounded-lg text-xs transition-colors ${showNotify ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600'}`}>
+              {!isMultiVendor && orderVendors.length > 0 && (
+                <button onClick={() => toggleNotify(firstVendor)} title="Notify vendor"
+                  className={`p-1.5 rounded-lg text-xs transition-colors ${showNotifyVendor === firstVendor ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600'}`}>
                   <Bell size={14} />
                 </button>
               )}
@@ -482,12 +521,20 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
                   )}
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{vendorEntries[0][0]}</p>
                 </div>
-                <button
-                  onClick={() => markVendorDone(vendorEntries[0][0], !doneVendors.has(vendorEntries[0][0]), allVendorNames)}
-                  className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium transition-colors ${doneVendors.has(vendorEntries[0][0]) ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600'}`}
-                >
-                  <CheckCircle size={10} /> {doneVendors.has(vendorEntries[0][0]) ? 'Done' : 'Mark done'}
-                </button>
+                <div className="flex items-center gap-1">
+                  {orderVendors.find(v => v.name === firstVendor && (v.email || v.phone)) && (
+                    <button onClick={() => toggleNotify(firstVendor)} title="Notify vendor"
+                      className={`p-1 rounded-lg transition-colors ${showNotifyVendor === firstVendor ? 'bg-indigo-100 text-indigo-700' : 'text-slate-300 hover:text-indigo-500 hover:bg-indigo-50'}`}>
+                      <Bell size={11} />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => markVendorDone(vendorEntries[0][0], !doneVendors.has(vendorEntries[0][0]), allVendorNames)}
+                    className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium transition-colors ${doneVendors.has(vendorEntries[0][0]) ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600'}`}
+                  >
+                    <CheckCircle size={10} /> {doneVendors.has(vendorEntries[0][0]) ? 'Done' : 'Mark done'}
+                  </button>
+                </div>
               </div>
             )}
             {!isMultiVendor && <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">{vendorEntries[0][0]}</p>}
@@ -505,41 +552,9 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
           )}
 
           <AnimatePresence>
-            {showNotify && (
+            {showNotifyVendor === firstVendor && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-                <div className="border-t border-slate-100 pt-3 space-y-1.5">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Notify vendors</span>
-                    <button onClick={() => setShowNotify(false)} className="text-slate-300 hover:text-slate-500 transition-colors"><X size={13} /></button>
-                  </div>
-                  {orderVendors.map(v => (
-                    <div key={v.name} className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs text-slate-600 font-medium flex-1 truncate">{v.name}</span>
-                      {v.email && (
-                        <button disabled={sending === v.name} onClick={async () => {
-                          setSending(v.name)
-                          try {
-                            await sendEmail(v.email!, `Order – ${order.location?.name ?? ''}`, buildBody(v.name))
-                            toast.success(`Email sent to ${v.name}`)
-                            markVendorDone(v.name, true, allVendorNames)
-                          } catch (err) {
-                            toast.error(`${v.name}: ${err instanceof Error ? err.message : 'Failed to send'}`)
-                          } finally { setSending(null) }
-                        }} className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-medium hover:bg-indigo-100 disabled:opacity-50 transition-colors">
-                          {sending === v.name ? <Loader2 size={11} className="animate-spin" /> : <Mail size={11} />} Email
-                        </button>
-                      )}
-                      {v.phone && (
-                        <a href={`sms:${v.phone}?body=${encodeURIComponent(buildBody(v.name))}`}
-                          onClick={() => markVendorDone(v.name, true, allVendorNames)}
-                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 transition-colors">
-                          <Phone size={11} /> SMS
-                        </a>
-                      )}
-                      {!v.email && !v.phone && <span className="text-[10px] text-slate-300 italic">No contact info</span>}
-                    </div>
-                  ))}
-                </div>
+                {renderNotifyPanel(firstVendor)}
               </motion.div>
             )}
           </AnimatePresence>
@@ -567,17 +582,32 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
                 )}
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{vendor}</p>
               </div>
-              <button
-                onClick={() => markVendorDone(vendor, !doneVendors.has(vendor), allVendorNames)}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium transition-colors ${isVendorDone ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600'}`}
-              >
-                <CheckCircle size={10} /> {isVendorDone ? 'Done' : 'Mark done'}
-              </button>
+              <div className="flex items-center gap-1">
+                {orderVendors.find(v => v.name === vendor && (v.email || v.phone)) && (
+                  <button onClick={() => toggleNotify(vendor)} title="Notify vendor"
+                    className={`p-1 rounded-lg transition-colors ${showNotifyVendor === vendor ? 'bg-indigo-100 text-indigo-700' : 'text-slate-300 hover:text-indigo-500 hover:bg-indigo-50'}`}>
+                    <Bell size={11} />
+                  </button>
+                )}
+                <button
+                  onClick={() => markVendorDone(vendor, !doneVendors.has(vendor), allVendorNames)}
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium transition-colors ${isVendorDone ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600'}`}
+                >
+                  <CheckCircle size={10} /> {isVendorDone ? 'Done' : 'Mark done'}
+                </button>
+              </div>
             </div>
             <div className={`p-3 ${isVendorDone ? 'opacity-40' : ''}`}>
               {renderItems(items)}
               {vendor === chefsVendorName && renderChefsControls()}
             </div>
+            <AnimatePresence>
+              {showNotifyVendor === vendor && (
+                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden border-t border-slate-50">
+                  {renderNotifyPanel(vendor)}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         )
       })}

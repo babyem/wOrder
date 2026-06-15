@@ -511,13 +511,16 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
             </div>
           </div>
 
-          <AnimatePresence>
-            {showNotifyVendor === firstVendor && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-                {renderNotifyPanel(firstVendor)}
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {/* Single-vendor notify — expands under bell in header */}
+          {!isMultiVendor && (
+            <AnimatePresence>
+              {showNotifyVendor === firstVendor && (
+                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+                  {renderNotifyPanel(firstVendor)}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          )}
 
           <div className="border-t border-slate-50 pt-2">
             {isMultiVendor && (
@@ -533,8 +536,8 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
                 <div className="flex items-center gap-1">
                   {orderVendors.find(v => v.name === firstVendor && (v.email || v.phone)) && (
                     <button onClick={() => toggleNotify(firstVendor)} title="Notify vendor"
-                      className={`p-1 rounded-lg transition-colors ${showNotifyVendor === firstVendor ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-500 hover:bg-indigo-100'}`}>
-                      <Bell size={11} />
+                      className={`p-1.5 rounded-lg transition-colors ${showNotifyVendor === firstVendor ? 'bg-indigo-600 text-white' : 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200'}`}>
+                      <Bell size={13} />
                     </button>
                   )}
                   <button
@@ -547,6 +550,16 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
               </div>
             )}
             {!isMultiVendor && <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">{vendorEntries[0][0]}</p>}
+            {/* Multi-vendor first-vendor notify — expands under vendor header bell */}
+            {isMultiVendor && (
+              <AnimatePresence>
+                {showNotifyVendor === firstVendor && (
+                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden -mx-3 mb-2 border-b border-slate-50">
+                    {renderNotifyPanel(firstVendor)}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            )}
             <div className={doneVendors.has(vendorEntries[0][0]) ? 'opacity-40' : ''}>
               {renderItems(vendorEntries[0][1])}
             </div>
@@ -587,8 +600,8 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
               <div className="flex items-center gap-1">
                 {orderVendors.find(v => v.name === vendor && (v.email || v.phone)) && (
                   <button onClick={() => toggleNotify(vendor)} title="Notify vendor"
-                    className={`p-1 rounded-lg transition-colors ${showNotifyVendor === vendor ? 'bg-indigo-100 text-indigo-700' : 'text-slate-300 hover:text-indigo-500 hover:bg-indigo-50'}`}>
-                    <Bell size={11} />
+                    className={`p-1.5 rounded-lg transition-colors ${showNotifyVendor === vendor ? 'bg-indigo-600 text-white' : 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200'}`}>
+                    <Bell size={13} />
                   </button>
                 )}
                 <button

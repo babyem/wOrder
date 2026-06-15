@@ -160,7 +160,8 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
   const stableItems = [...order.items].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
 
   const chefsItems = stableItems.filter(i =>
-    i.product?.chefsculinar_id && !i.product?.tingstad_id && !i.product?.tingstad_alt_id
+    i.product?.chefsculinar_id &&
+    effectiveVendor(i).toLowerCase().replace(/[\s-]/g, '').includes('chefsculinar')
   )
   // Which vendor card gets the ChefsCulinar button — prefer items with chefsculinar_id,
   // fall back to any vendor with use_chefsculinar flag (handles vendor_override cases)
@@ -488,8 +489,8 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
               </button>
               {!isMultiVendor && orderVendors.length > 0 && (
                 <button onClick={() => toggleNotify(firstVendor)} title="Notify vendor"
-                  className={`p-1.5 rounded-lg text-xs transition-colors ${showNotifyVendor === firstVendor ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600'}`}>
-                  <Bell size={14} />
+                  className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors ${showNotifyVendor === firstVendor ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}>
+                  <Bell size={13} />
                 </button>
               )}
               {isPending ? (
@@ -510,6 +511,14 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
             </div>
           </div>
 
+          <AnimatePresence>
+            {showNotifyVendor === firstVendor && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+                {renderNotifyPanel(firstVendor)}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <div className="border-t border-slate-50 pt-2">
             {isMultiVendor && (
               <div className="flex items-center justify-between mb-1">
@@ -524,7 +533,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
                 <div className="flex items-center gap-1">
                   {orderVendors.find(v => v.name === firstVendor && (v.email || v.phone)) && (
                     <button onClick={() => toggleNotify(firstVendor)} title="Notify vendor"
-                      className={`p-1 rounded-lg transition-colors ${showNotifyVendor === firstVendor ? 'bg-indigo-100 text-indigo-700' : 'text-slate-300 hover:text-indigo-500 hover:bg-indigo-50'}`}>
+                      className={`p-1 rounded-lg transition-colors ${showNotifyVendor === firstVendor ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-500 hover:bg-indigo-100'}`}>
                       <Bell size={11} />
                     </button>
                   )}
@@ -551,13 +560,6 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
             </div>
           )}
 
-          <AnimatePresence>
-            {showNotifyVendor === firstVendor && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-                {renderNotifyPanel(firstVendor)}
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
       </div>
 
@@ -597,17 +599,17 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
                 </button>
               </div>
             </div>
-            <div className={`p-3 ${isVendorDone ? 'opacity-40' : ''}`}>
-              {renderItems(items)}
-              {vendor === chefsVendorName && renderChefsControls()}
-            </div>
             <AnimatePresence>
               {showNotifyVendor === vendor && (
-                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden border-t border-slate-50">
+                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden border-b border-slate-50">
                   {renderNotifyPanel(vendor)}
                 </motion.div>
               )}
             </AnimatePresence>
+            <div className={`p-3 ${isVendorDone ? 'opacity-40' : ''}`}>
+              {renderItems(items)}
+              {vendor === chefsVendorName && renderChefsControls()}
+            </div>
           </div>
         )
       })}

@@ -159,21 +159,14 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
 
   const stableItems = [...order.items].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
 
+  const isChefsVendor = (v: string) =>
+    v.toLowerCase().replace(/[\s-]/g, '').includes('chefsculinar')
+
+  // Only items whose EFFECTIVE vendor name contains "chefsculinar" — ignores overridden items
   const chefsItems = stableItems.filter(i =>
-    i.product?.chefsculinar_id &&
-    effectiveVendor(i).toLowerCase().replace(/[\s-]/g, '').includes('chefsculinar')
+    i.product?.chefsculinar_id && isChefsVendor(effectiveVendor(i))
   )
-  // Which vendor card gets the ChefsCulinar button — prefer items with chefsculinar_id,
-  // fall back to any vendor with use_chefsculinar flag (handles vendor_override cases)
-  const chefsVendorName = (() => {
-    if (chefsItems.length > 0) return effectiveVendor(chefsItems[0])
-    for (const item of stableItems) {
-      const v = effectiveVendor(item)
-      if (vendorMap[v]?.use_chefsculinar) return v
-    }
-    console.log('[chefs debug] vendorMap keys:', Object.keys(vendorMap), 'item vendors:', stableItems.map(i => effectiveVendor(i)))
-    return null
-  })()
+  const chefsVendorName = chefsItems.length > 0 ? effectiveVendor(chefsItems[0]) : null
 
   const handleSendToChefs = async () => {
     const webhookUrl = import.meta.env.VITE_N8N_CHEFSCULINAR_WEBHOOK

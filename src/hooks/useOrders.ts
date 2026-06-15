@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import toast from 'react-hot-toast'
 import type { OrderWithDetails, CartItem } from '../types'
 
-export function useOrders(filters?: { locationId?: string; status?: string; search?: string }) {
+export function useOrders(filters?: { locationId?: string; status?: string; search?: string; fromDate?: string }) {
   return useQuery({
     queryKey: ['orders', filters],
     queryFn: async (): Promise<OrderWithDetails[]> => {
@@ -22,6 +22,9 @@ export function useOrders(filters?: { locationId?: string; status?: string; sear
       }
       if (filters?.status && filters.status !== 'all') {
         query = query.eq('status', filters.status)
+      }
+      if (filters?.fromDate) {
+        query = query.gte('created_at', filters.fromDate)
       }
 
       const { data, error } = await query

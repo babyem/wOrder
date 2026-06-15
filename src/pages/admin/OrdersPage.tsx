@@ -58,6 +58,7 @@ function SortableColumn({
 export default function OrdersPage() {
   const [status, setStatus] = useState('all')
   const [search, setSearch] = useState('')
+  const [daysBack, setDaysBack] = useState(8)
   // Selection key: "orderId::vendor"
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [showBatchNotify, setShowBatchNotify] = useState(false)
@@ -80,7 +81,8 @@ export default function OrdersPage() {
     localStorage.setItem('orders-zoom', String(clamped))
   }
 
-  const { data: orders, isLoading, refetch } = useOrders({ status, search })
+  const fromDate = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString()
+  const { data: orders, isLoading, refetch } = useOrders({ status, search, fromDate })
   const { data: locations } = useLocations()
   const { data: vendorList } = useVendors()
   const mergeOrders = useMergeOrders()
@@ -339,6 +341,16 @@ export default function OrdersPage() {
           </DndContext>
         </div>
       )}
+
+      {/* Load more */}
+      <div className="flex justify-center pt-2 pb-4">
+        <button
+          onClick={() => setDaysBack(d => d + 8)}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-slate-500 bg-white border border-slate-200 hover:bg-slate-50 hover:text-slate-700 transition-colors shadow-sm"
+        >
+          Visa fler — visar {daysBack} dagar tillbaka
+        </button>
+      </div>
 
       {/* Floating action bar */}
       <AnimatePresence>

@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import toast from 'react-hot-toast'
 import type { OrderWithDetails, CartItem } from '../types'
@@ -43,6 +43,7 @@ export function useOrders(filters?: { locationId?: string; status?: string; sear
 
       return result
     },
+    placeholderData: keepPreviousData,
   })
 }
 

@@ -81,7 +81,12 @@ export default function OrdersPage() {
     localStorage.setItem('orders-zoom', String(clamped))
   }
 
-  const fromDate = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString()
+  const fromDate = useMemo(() => {
+    const d = new Date()
+    d.setDate(d.getDate() - daysBack)
+    d.setHours(0, 0, 0, 0)
+    return d.toISOString()
+  }, [daysBack])
   const { data: orders, isLoading, refetch } = useOrders({ status, search, fromDate })
   const { data: locations } = useLocations()
   const { data: vendorList } = useVendors()

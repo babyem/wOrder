@@ -95,21 +95,16 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
     return { name: vName, email: meta?.email ?? null, phone: meta?.phone ?? null }
   })
 
-  const copyOrder = () => {
-    const groups = new Map<string, string[]>()
-    for (const i of order.items) {
-      if (isExcluded(i.id)) continue
-      const v = effectiveVendor(i)
-      const unit = effectiveUnit(i)
-      const line = `${i.product?.name ?? '?'}: ${i.quantity}${unit ? ` ${unit}` : ''}`
-      groups.set(v, [...(groups.get(v) ?? []), line])
-    }
-    const body = [...groups.entries()]
-      .map(([v, lines]) => `${v}\n${lines.join('\n')}`)
-      .join('\n\n')
-    const text = `${order.location?.name ?? ''}\n\n${body}`
+  const copyVendor = (vendorName: string) => {
+    const lines = order.items
+      .filter(i => effectiveVendor(i) === vendorName && !isExcluded(i.id))
+      .map(i => {
+        const unit = effectiveUnit(i)
+        return `${i.product?.name ?? '?'}: ${i.quantity}${unit ? ` ${unit}` : ''}`
+      })
+    const text = `${order.location?.name ?? ''}\n\n${lines.join('\n')}`
     navigator.clipboard.writeText(text)
-      .then(() => toast.success('Order kopierad'))
+      .then(() => toast.success(`${vendorName} kopierad`))
       .catch(() => toast.error('Kunde inte kopiera'))
   }
 
@@ -466,7 +461,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
 
       {/* Green connecting line — centered, visible in the gaps between vendor cards */}
       {isMultiVendor && (
-        <div className="absolute left-1/2 -translate-x-px top-3 bottom-3 w-0.5 bg-emerald-400 rounded-full z-0" />
+        <div className="absolute left-1/2 -translate-x-1/2 top-3 bottom-3 w-2.5 bg-emerald-400 rounded-full z-0" />
       )}
 
       {/* Main card — order header + first vendor */}
@@ -574,14 +569,12 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
               {renderItems(vendorEntries[0][1])}
             </div>
             {firstVendor === chefsVendorName && renderChefsControls()}
-            {!isMultiVendor && (
-              <div className="flex justify-end -mb-1.5 -mr-1.5">
-                <button onClick={copyOrder} title="Kopiera beställningen"
-                  className="p-1.5 rounded-lg text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
-                  <Copy size={13} />
-                </button>
-              </div>
-            )}
+            <div className="flex justify-end -mb-1.5 -mr-1.5">
+              <button onClick={() => copyVendor(firstVendor)} title="Kopiera beställningen"
+                className="p-1.5 rounded-lg text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
+                <Copy size={13} />
+              </button>
+            </div>
           </div>
 
           {order.note && (
@@ -595,8 +588,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
       </div>
 
       {/* Additional vendor cards — one per extra vendor, connected by the green line */}
-      {isMultiVendor && vendorEntries.slice(1).map(([vendor, items], subIdx) => {
-        const isLastCard = subIdx === vendorEntries.length - 2
+      {isMultiVendor && vendorEntries.slice(1).map(([vendor, items]) => {
         const isVendorDone = doneVendors.has(vendor)
         const isVendorSelected = selectedVendors?.has(vendor) ?? false
         const subBorder = isVendorSelected
@@ -642,14 +634,12 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
               {renderItems(items)}
               {vendor === chefsVendorName && renderChefsControls()}
             </div>
-            {isLastCard && (
-              <div className="flex justify-end px-1.5 pb-1.5 -mt-2">
-                <button onClick={copyOrder} title="Kopiera beställningen"
-                  className="p-1.5 rounded-lg text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
-                  <Copy size={13} />
-                </button>
-              </div>
-            )}
+            <div className="flex justify-end px-1.5 pb-1.5 -mt-2">
+              <button onClick={() => copyVendor(vendor)} title="Kopiera beställningen"
+                className="p-1.5 rounded-lg text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
+                <Copy size={13} />
+              </button>
+            </div>
           </div>
         )
       })}

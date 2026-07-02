@@ -574,6 +574,14 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
               {renderItems(vendorEntries[0][1])}
             </div>
             {firstVendor === chefsVendorName && renderChefsControls()}
+            {!isMultiVendor && (
+              <div className="flex justify-end -mb-1.5 -mr-1.5">
+                <button onClick={copyOrder} title="Kopiera beställningen"
+                  className="p-1.5 rounded-lg text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
+                  <Copy size={13} />
+                </button>
+              </div>
+            )}
           </div>
 
           {order.note && (
@@ -587,7 +595,8 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
       </div>
 
       {/* Additional vendor cards — one per extra vendor, connected by the green line */}
-      {isMultiVendor && vendorEntries.slice(1).map(([vendor, items]) => {
+      {isMultiVendor && vendorEntries.slice(1).map(([vendor, items], subIdx) => {
+        const isLastCard = subIdx === vendorEntries.length - 2
         const isVendorDone = doneVendors.has(vendor)
         const isVendorSelected = selectedVendors?.has(vendor) ?? false
         const subBorder = isVendorSelected
@@ -633,17 +642,17 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
               {renderItems(items)}
               {vendor === chefsVendorName && renderChefsControls()}
             </div>
+            {isLastCard && (
+              <div className="flex justify-end px-1.5 pb-1.5 -mt-2">
+                <button onClick={copyOrder} title="Kopiera beställningen"
+                  className="p-1.5 rounded-lg text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
+                  <Copy size={13} />
+                </button>
+              </div>
+            )}
           </div>
         )
       })}
-    </div>
-
-    {/* Copy order */}
-    <div className="flex justify-end mt-1">
-      <button onClick={copyOrder} title="Kopiera beställningen"
-        className="p-1.5 rounded-lg text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
-        <Copy size={13} />
-      </button>
     </div>
 
     {/* Admin note — edit or display */}

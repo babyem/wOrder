@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CheckCircle, RotateCcw, Trash2, Clock, MapPin, User, FileText, Mail, Phone, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag, AlertTriangle, AlertCircle } from 'lucide-react'
+import { CheckCircle, RotateCcw, Trash2, Clock, MapPin, User, FileText, Mail, Phone, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag, AlertTriangle, AlertCircle, Copy } from 'lucide-react'
 import type { Order, OrderWithDetails } from '../../types'
 import { useUpdateOrderStatus, useDeleteOrder, useUpdateOrderItem, useMarkVendorDone, useUpdateAdminNote } from '../../hooks/useOrders'
 import { useVendors, useUnits } from '../../hooks/useMetadata'
@@ -94,6 +94,24 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
     const meta = vendorMap[vName]
     return { name: vName, email: meta?.email ?? null, phone: meta?.phone ?? null }
   })
+
+  const copyOrder = () => {
+    const groups = new Map<string, string[]>()
+    for (const i of order.items) {
+      if (isExcluded(i.id)) continue
+      const v = effectiveVendor(i)
+      const unit = effectiveUnit(i)
+      const line = `${i.product?.name ?? '?'}: ${i.quantity}${unit ? ` ${unit}` : ''}`
+      groups.set(v, [...(groups.get(v) ?? []), line])
+    }
+    const body = [...groups.entries()]
+      .map(([v, lines]) => `${v}\n${lines.join('\n')}`)
+      .join('\n\n')
+    const text = `${order.location?.name ?? ''}\n\n${body}`
+    navigator.clipboard.writeText(text)
+      .then(() => toast.success('Order kopierad'))
+      .catch(() => toast.error('Kunde inte kopiera'))
+  }
 
   const buildBody = (vendorName: string) => {
     const items = order.items.filter(i =>
@@ -459,8 +477,6 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
               {firstSelected ? <CheckSquare size={13} className="text-indigo-600" /> : <Square size={13} className="text-slate-400" />}
             </button>
           )}
-          {isPending ? <Clock size={12} /> : <CheckCircle size={12} />}
-          {isPending ? 'Pending' : 'Completed'}
           <span className="ml-auto font-normal opacity-60 tabular-nums">{time}</span>
         </div>
 
@@ -620,6 +636,14 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
           </div>
         )
       })}
+
+      {/* Copy order */}
+      <div className="relative z-10 flex justify-end mt-1">
+        <button onClick={copyOrder} title="Kopiera beställningen"
+          className="p-1.5 rounded-lg text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
+          <Copy size={13} />
+        </button>
+      </div>
     </div>
 
     {/* Admin note — edit or display */}

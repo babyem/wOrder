@@ -439,15 +439,15 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
     : isMultiVendor && isPending && doneVendors.has(firstVendor) ? 'border-emerald-400'
     : isPending ? 'border-amber-200'
     : 'border-emerald-200'
-  const statusBarClass = isPending ? 'bg-amber-50 text-amber-700' : 'bg-emerald-100/70 text-emerald-700'
-  const cardBg = isPending ? 'bg-white' : 'bg-emerald-50/60'
+  const statusBarClass = isPending ? 'bg-amber-50 text-amber-700' : 'text-emerald-700'
+  const cardBg = isPending ? 'bg-white' : 'bg-emerald-100/70'
 
   return (
     <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="relative">
     <div className={`transition-opacity duration-200 ${!isPending ? 'opacity-60 hover:opacity-100' : ''}`}>
 
       {/* Green connecting line — centered, visible in the gaps between vendor cards */}
-      {isMultiVendor && (
+      {isMultiVendor && isPending && (
         <div className="absolute left-1/2 -translate-x-px top-3 bottom-3 w-0.5 bg-emerald-400 rounded-full z-0" />
       )}
 
@@ -581,7 +581,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
           : isPending ? 'border-amber-200'
           : 'border-emerald-200'
         return (
-          <div key={vendor} className={`relative z-10 mt-2 rounded-2xl border shadow-sm ${isPending ? 'bg-white' : 'bg-emerald-50/60'} ${subBorder}`}>
+          <div key={vendor} className={`relative z-10 mt-2 rounded-2xl border shadow-sm ${isPending ? 'bg-white' : 'bg-emerald-100/70'} ${subBorder}`}>
             <div className="px-3 py-2 border-b border-slate-50 flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 {onToggle && (

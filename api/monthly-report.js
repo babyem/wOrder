@@ -50,25 +50,42 @@ const REPORTS_QUERY = `query getReports($shopId: String, $reportType: ReportType
   }
 }`;
 
-// Summera målmånadens dagliga rapporter (spann < 2 dygn, slutdatum i månaden).
+// Summera målmånadens dagliga Z-rapporter (slutdatum i månaden).
 // Netto/brutto redovisas efter återköp — samma som köpcentrumets siffra.
+//
+// OBS: Qopla skapar normalt en Z-rapport per dag, men om en dag inte slås ut
+// separat (t.ex. midsommardagen då butiken var stängd) bakas den ihop med nästa
+// dag till EN Z-rapport som spänner över flera dygn. En sådan sammanslagen
+// dagsrapport ska räknas med. Tidigare uteslöts allt med spann ≥ 2 dygn, vilket
+// felaktigt tappade dessa merges (och därmed en dags omsättning). Istället för
+// en spann-gräns skyddar vi mot dubbelräkning av period-/månadssammanställningar
+// genom att hoppa över rapporter som ÖVERLAPPAR redan täckt tid.
 function sumDailyReports(items, year, month) {
   const target = `${year}-${String(month).padStart(2, "0")}`;
-  const daily = (items || []).filter((it) => {
-    if (!it || !it.startDate || !it.endDate) return false;
-    const spanDays = (new Date(it.endDate) - new Date(it.startDate)) / 86400000;
-    return String(it.endDate).slice(0, 7) === target && spanDays < 2;
-  });
-  if (daily.length === 0) return null;
-  let net = 0, gross = 0, orders = 0, refundNet = 0, refundGross = 0;
-  for (const it of daily) {
+  const inMonth = (items || [])
+    .filter((it) => it && it.startDate && it.endDate && String(it.endDate).slice(0, 7) === target)
+    .sort((a, b) => new Date(a.startDate) - new Date(b.startDate) || new Date(a.endDate) - new Date(b.endDate));
+  if (inMonth.length === 0) return null;
+  let net = 0, gross = 0, orders = 0, refundNet = 0, refundGross = 0, days = 0;
+  let coveredUntil = 0; // ms — senast täckta tidpunkt
+  for (const it of inMonth) {
+    const start = new Date(it.startDate).getTime();
+    const end = new Date(it.endDate).getTime();
+    // Hoppa över rapporter som överlappar redan täckt tid (t.ex. en period-
+    // eller månadssammanställning ovanpå dagsrapporterna) → undvik dubbelräkning.
+    if (start < coveredUntil) continue;
+    const spanDays = (end - start) / 86400000;
     net += it.totalNetSales || 0;
     gross += it.totalSales || 0;
     orders += it.sumReceipts || 0;
     refundNet += (it.vatRatesAndNetAmounts || []).reduce((a, v) => a + (v.refundedAmount || 0), 0);
     refundGross += it.refunds?.amount || 0;
+    // En sammanslagen dagsrapport täcker flera kalenderdagar — räkna dem så att
+    // zDays motsvarar antal dagar med försäljning (en vanlig dagsrapport = 1).
+    days += Math.max(1, Math.round(spanDays));
+    coveredUntil = end;
   }
-  return { net: net + refundNet, gross: gross - refundGross, orders, days: daily.length };
+  return { net: net + refundNet, gross: gross - refundGross, orders, days };
 }
 
 const MONTHS_SV = [

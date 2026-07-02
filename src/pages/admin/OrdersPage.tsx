@@ -37,7 +37,7 @@ function SortableColumn({
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
       className="w-64 flex-none flex flex-col gap-2"
     >
-      <div className="flex items-center justify-between px-1 mb-1">
+      <div className="sticky top-0 z-30 bg-slate-50 flex items-center justify-between px-1 py-1 -my-1 mb-0">
         <div className="flex items-center gap-1.5">
           <button
             {...attributes}
@@ -309,7 +309,7 @@ export default function OrdersPage() {
       {isLoading ? (
         <div className="flex justify-center py-16"><Spinner size={32} /></div>
       ) : (
-        <div className="overflow-x-auto -mx-4 md:-mx-6 px-4 md:px-6" style={{ zoom }}>
+        <div className="overflow-x-auto overflow-y-auto -mx-4 md:-mx-6 px-4 md:px-6" style={{ zoom, maxHeight: 'calc(100vh - 150px)' }}>
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleColumnDragEnd}>
             <SortableContext items={sortedLocations.map(l => l.id)} strategy={horizontalListSortingStrategy}>
               <div className="flex gap-4 pb-4" style={{ minWidth: 'max-content' }}>

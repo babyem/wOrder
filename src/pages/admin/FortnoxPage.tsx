@@ -11,7 +11,7 @@ import {
   useFortnoxCompanies, useCreateFortnoxCompany, useRenameFortnoxCompany, useDeleteFortnoxCompany,
   useFortnoxShopMap, useUpsertShopMap, useFortnoxPostings, useRunFortnoxSync, useReconcileFortnox,
   useFortnoxConnections, startFortnoxConnect, useDinkassaMachines, useImportSie, useRunDinkassa, useRunAncon,
-  type FortnoxCompany, type FortnoxShopMap,
+  type FortnoxCompany, type FortnoxShopMap, type FortnoxPosting,
 } from '../../hooks/useFortnox'
 
 interface MappableShop { id: string; name: string; source: 'qopla' | 'dinkassa' | 'ancon' }
@@ -58,6 +58,8 @@ export default function FortnoxPage() {
   const [anconTo, setAnconTo] = useState('')
   const [qoplaExcluded, setQoplaExcluded] = useState<Set<string>>(new Set()) // deselected shops
   const [runModal, setRunModal] = useState<{ title: string; results: RunRow[] } | null>(null)
+  const [postingCompany, setPostingCompany] = useState<string>('') // '' = alla bolag
+  const [postingVisible, setPostingVisible] = useState(25)
 
   // Toast the result of an OAuth connect redirect, then clean the URL.
   useEffect(() => {
@@ -71,6 +73,13 @@ export default function FortnoxPage() {
 
   const mapByShop = new Map(maps.map(m => [m.qopla_shop_id, m]))
   const nameByShop = new Map(allShops.map(s => [s.id, s.name]))
+  const companyNameById = new Map(companies.map(c => [c.id, c.name]))
+  // A posting's bolag: prefer the value recorded at booking, else the shop's current mapping.
+  const companyOfPosting = (p: FortnoxPosting) => p.company_id ?? mapByShop.get(p.qopla_shop_id)?.company_id ?? null
+  const filteredPostings = postingCompany
+    ? postings.filter(p => companyOfPosting(p) === postingCompany)
+    : postings
+  const visiblePostings = filteredPostings.slice(0, postingVisible)
 
   const handleAddCompany = async () => {
     const name = newCompany.trim()
@@ -496,33 +505,64 @@ export default function FortnoxPage() {
 
       {/* Senaste körning */}
       <section className="bg-white rounded-2xl border border-slate-100 shadow-sm">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
-          <ReceiptText size={16} className="text-slate-400" />
-          <h2 className="font-semibold text-slate-900 text-sm">Senaste körningar</h2>
+        <div className="flex items-center justify-between gap-2 px-5 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <ReceiptText size={16} className="text-slate-400" />
+            <h2 className="font-semibold text-slate-900 text-sm">Senaste körningar</h2>
+          </div>
+          {companies.length > 0 && (
+            <select
+              value={postingCompany}
+              onChange={e => { setPostingCompany(e.target.value); setPostingVisible(25) }}
+              className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
+            >
+              <option value="">Alla bolag</option>
+              {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          )}
         </div>
         <div className="p-5">
-          {postings.length === 0 ? (
-            <p className="text-sm text-slate-400 py-2">Inga körningar ännu.</p>
+          {filteredPostings.length === 0 ? (
+            <p className="text-sm text-slate-400 py-2">
+              {postings.length === 0 ? 'Inga körningar ännu.' : 'Inga körningar för valt bolag.'}
+            </p>
           ) : (
-            <div className="divide-y divide-slate-50">
-              {postings.map(p => (
-                <div key={p.id} className="flex items-center gap-3 py-2 text-sm">
-                  <StatusBadge status={p.status} />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-slate-700 truncate">
-                      {nameByShop.get(p.qopla_shop_id) ?? p.qopla_shop_id}
-                      <span className="text-slate-400 font-normal"> · {p.business_date}</span>
+            <>
+              <div className="divide-y divide-slate-50">
+                {visiblePostings.map(p => {
+                  const bolag = companyNameById.get(companyOfPosting(p) ?? '')
+                  const detail = [bolag, p.message].filter(Boolean).join(' · ')
+                  return (
+                    <div key={p.id} className="flex items-center gap-3 py-2 text-sm">
+                      <StatusBadge status={p.status} />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-slate-700 truncate">
+                          {nameByShop.get(p.qopla_shop_id) ?? p.qopla_shop_id}
+                          <span className="text-slate-400 font-normal"> · {p.business_date}</span>
+                        </div>
+                        {detail && <div className="text-xs text-slate-400 truncate">{detail}</div>}
+                      </div>
+                      {p.voucher_number && (
+                        <span className={`shrink-0 text-xs font-mono ${p.status === 'deleted' ? 'text-red-400 line-through' : 'text-slate-500'}`}>
+                          {p.voucher_number}
+                        </span>
+                      )}
                     </div>
-                    {p.message && <div className="text-xs text-slate-400 truncate">{p.message}</div>}
-                  </div>
-                  {p.voucher_number && (
-                    <span className={`shrink-0 text-xs font-mono ${p.status === 'deleted' ? 'text-red-400 line-through' : 'text-slate-500'}`}>
-                      {p.voucher_number}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
+                  )
+                })}
+              </div>
+              <div className="flex items-center justify-between pt-3 mt-1 border-t border-slate-50 text-xs text-slate-400">
+                <span>Visar {visiblePostings.length} av {filteredPostings.length}</span>
+                {filteredPostings.length > postingVisible && (
+                  <button
+                    onClick={() => setPostingVisible(v => v + 25)}
+                    className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 font-medium hover:bg-slate-200 transition-colors"
+                  >
+                    Visa fler
+                  </button>
+                )}
+              </div>
+            </>
           )}
         </div>
       </section>

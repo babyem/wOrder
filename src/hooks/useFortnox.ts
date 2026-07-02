@@ -116,7 +116,7 @@ export function useUpsertShopMap() {
 }
 
 // ---- Posting log ----
-export function useFortnoxPostings(limit = 50) {
+export function useFortnoxPostings(limit = 300) {
   return useQuery({
     queryKey: ['fortnox-postings'],
     queryFn: async (): Promise<FortnoxPosting[]> => {

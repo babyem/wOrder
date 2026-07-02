@@ -458,14 +458,14 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
     : isPending ? 'border-amber-200'
     : 'border-emerald-200'
   const statusBarClass = isPending ? 'bg-amber-50 text-amber-700' : 'text-emerald-700'
-  const cardBg = isPending ? 'bg-white' : 'bg-emerald-100/70'
+  const cardBg = isPending ? 'bg-white' : 'bg-[#e2f6ec]'
 
   return (
     <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="relative">
     <div className={`transition-opacity duration-200 ${!isPending ? 'opacity-60 hover:opacity-100' : ''}`}>
 
       {/* Green connecting line — centered, visible in the gaps between vendor cards */}
-      {isMultiVendor && isPending && (
+      {isMultiVendor && (
         <div className="absolute left-1/2 -translate-x-px top-3 bottom-3 w-0.5 bg-emerald-400 rounded-full z-0" />
       )}
 
@@ -597,7 +597,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
           : isPending ? 'border-amber-200'
           : 'border-emerald-200'
         return (
-          <div key={vendor} className={`relative z-10 mt-2 rounded-2xl border shadow-sm ${isPending ? 'bg-white' : 'bg-emerald-100/70'} ${subBorder}`}>
+          <div key={vendor} className={`relative z-10 mt-2 rounded-2xl border shadow-sm ${isPending ? 'bg-white' : 'bg-[#e2f6ec]'} ${subBorder}`}>
             <div className="px-3 py-2 border-b border-slate-50 flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 {onToggle && (
@@ -636,14 +636,14 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
           </div>
         )
       })}
+    </div>
 
-      {/* Copy order */}
-      <div className="relative z-10 flex justify-end mt-1">
-        <button onClick={copyOrder} title="Kopiera beställningen"
-          className="p-1.5 rounded-lg text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
-          <Copy size={13} />
-        </button>
-      </div>
+    {/* Copy order */}
+    <div className="flex justify-end mt-1">
+      <button onClick={copyOrder} title="Kopiera beställningen"
+        className="p-1.5 rounded-lg text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
+        <Copy size={13} />
+      </button>
     </div>
 
     {/* Admin note — edit or display */}

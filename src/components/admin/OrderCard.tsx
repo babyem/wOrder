@@ -403,7 +403,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
             <button disabled={sending === v.name} onClick={async () => {
               setSending(v.name)
               try {
-                await sendEmail(v.email!, `Order – ${order.location?.name ?? ''}`, buildBody(v.name))
+                await sendEmail(v.email!, `Order – ${order.location?.name ?? ''}`, buildBody(v.name), `Order ${v.name} – ${order.location?.name ?? ''}`)
                 toast.success(`Email skickat till ${v.name}`)
                 markVendorDone(v.name, true, allVendorNames)
                 setShowNotifyVendor(null)

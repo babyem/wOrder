@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { to, subject, text } = await req.json()
+    const { to, subject, text, bccSubject } = await req.json()
 
     if (!to || !subject || !text) {
       return new Response(JSON.stringify({ error: 'Missing required fields: to, subject, text' }), {
@@ -31,15 +31,18 @@ serve(async (req) => {
       })
     }
 
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ from, to, subject, text, ...(bcc ? { bcc } : {}) }),
-    })
+    const send = (payload: Record<string, unknown>) =>
+      fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      })
 
+    // Main email to the vendor — no BCC
+    const res = await send({ from, to, subject, text })
     const data = await res.json()
 
     if (!res.ok) {
@@ -47,6 +50,11 @@ serve(async (req) => {
         status: res.status,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
+    }
+
+    // Separate copy to EMAIL_BCC with its own subject (e.g. includes vendor name)
+    if (bcc) {
+      await send({ from, to: bcc, subject: bccSubject || subject, text }).catch(() => {})
     }
 
     return new Response(JSON.stringify({ success: true, id: data.id }), {

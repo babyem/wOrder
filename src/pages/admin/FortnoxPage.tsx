@@ -58,7 +58,7 @@ export default function FortnoxPage() {
   const [anconTo, setAnconTo] = useState('')
   const [qoplaExcluded, setQoplaExcluded] = useState<Set<string>>(new Set()) // deselected shops
   const [runModal, setRunModal] = useState<{ title: string; results: RunRow[] } | null>(null)
-  const [postingCompany, setPostingCompany] = useState<string>('') // '' = alla bolag
+  const [postingShop, setPostingShop] = useState<string>('') // '' = alla butiker
   const [postingVisible, setPostingVisible] = useState(25)
 
   // Toast the result of an OAuth connect redirect, then clean the URL.
@@ -76,8 +76,12 @@ export default function FortnoxPage() {
   const companyNameById = new Map(companies.map(c => [c.id, c.name]))
   // A posting's bolag: prefer the value recorded at booking, else the shop's current mapping.
   const companyOfPosting = (p: FortnoxPosting) => p.company_id ?? mapByShop.get(p.qopla_shop_id)?.company_id ?? null
-  const filteredPostings = postingCompany
-    ? postings.filter(p => companyOfPosting(p) === postingCompany)
+  // Distinct shops that actually appear in the loaded postings, for the filter dropdown.
+  const postingShops = Array.from(new Set(postings.map(p => p.qopla_shop_id)))
+    .map(id => ({ id, name: nameByShop.get(id) ?? id }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'sv'))
+  const filteredPostings = postingShop
+    ? postings.filter(p => p.qopla_shop_id === postingShop)
     : postings
   const visiblePostings = filteredPostings.slice(0, postingVisible)
 
@@ -510,21 +514,21 @@ export default function FortnoxPage() {
             <ReceiptText size={16} className="text-slate-400" />
             <h2 className="font-semibold text-slate-900 text-sm">Senaste körningar</h2>
           </div>
-          {companies.length > 0 && (
+          {postingShops.length > 0 && (
             <select
-              value={postingCompany}
-              onChange={e => { setPostingCompany(e.target.value); setPostingVisible(25) }}
+              value={postingShop}
+              onChange={e => { setPostingShop(e.target.value); setPostingVisible(25) }}
               className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
             >
-              <option value="">Alla bolag</option>
-              {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              <option value="">Alla butiker</option>
+              {postingShops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           )}
         </div>
         <div className="p-5">
           {filteredPostings.length === 0 ? (
             <p className="text-sm text-slate-400 py-2">
-              {postings.length === 0 ? 'Inga körningar ännu.' : 'Inga körningar för valt bolag.'}
+              {postings.length === 0 ? 'Inga körningar ännu.' : 'Inga körningar för vald butik.'}
             </p>
           ) : (
             <>

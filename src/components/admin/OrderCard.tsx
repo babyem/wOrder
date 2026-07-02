@@ -438,12 +438,13 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
     : isMerged ? 'border-orange-400 ring-2 ring-orange-100'
     : isMultiVendor && isPending && doneVendors.has(firstVendor) ? 'border-emerald-400'
     : isPending ? 'border-amber-200'
-    : 'border-slate-100'
-  const statusBarClass = isPending ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
+    : 'border-emerald-200'
+  const statusBarClass = isPending ? 'bg-amber-50 text-amber-700' : 'bg-emerald-100/70 text-emerald-700'
+  const cardBg = isPending ? 'bg-white' : 'bg-emerald-50/60'
 
   return (
     <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="relative">
-    <div className={`transition-opacity duration-200 ${!isPending ? 'opacity-50 hover:opacity-100' : ''}`}>
+    <div className={`transition-opacity duration-200 ${!isPending ? 'opacity-60 hover:opacity-100' : ''}`}>
 
       {/* Green connecting line — centered, visible in the gaps between vendor cards */}
       {isMultiVendor && (
@@ -451,7 +452,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
       )}
 
       {/* Main card — order header + first vendor */}
-      <div className={`relative z-10 bg-white rounded-2xl border shadow-sm transition-shadow ${cardBorder}`}>
+      <div className={`relative z-10 rounded-2xl border shadow-sm transition-shadow ${cardBg} ${cardBorder}`}>
         <div className={`px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 rounded-t-2xl ${statusBarClass}`}>
           {onToggle && !isMultiVendor && (
             <button onClick={e => { e.stopPropagation(); onToggle(firstVendor) }} className="shrink-0 mr-0.5">
@@ -578,9 +579,9 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
           : isMerged ? 'border-orange-300'
           : isPending && isVendorDone ? 'border-emerald-400'
           : isPending ? 'border-amber-200'
-          : 'border-slate-100'
+          : 'border-emerald-200'
         return (
-          <div key={vendor} className={`relative z-10 mt-2 bg-white rounded-2xl border shadow-sm ${subBorder}`}>
+          <div key={vendor} className={`relative z-10 mt-2 rounded-2xl border shadow-sm ${isPending ? 'bg-white' : 'bg-emerald-50/60'} ${subBorder}`}>
             <div className="px-3 py-2 border-b border-slate-50 flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 {onToggle && (

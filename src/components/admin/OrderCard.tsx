@@ -184,6 +184,10 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
   const handleSendToChefs = async () => {
     const webhookUrl = import.meta.env.VITE_N8N_CHEFSCULINAR_WEBHOOK
     if (!webhookUrl) { toast.error('Webhook URL saknas'); return }
+    if (!order.location?.chefsculinar_customer_id) {
+      toast.error(`ChefsCulinar-kundnummer saknas för ${order.location?.name ?? 'butiken'} — lägg till det under Butiker`)
+      return
+    }
     const products = chefsItems.map(i => ({
       chefsculinar_id: i.product!.chefsculinar_id,
       quantity: i.quantity,
@@ -357,7 +361,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
   // ChefsCulinar controls — rendered inside whichever vendor card owns the CC items
   const renderChefsControls = () => (
     <div className="mt-2 space-y-1.5">
-      {isPending && chefsStatus !== 'pending' && (
+      {isPending && chefsStatus !== 'pending' && !doneVendors.has(chefsVendorName ?? '') && (
         <button
           onClick={handleSendToChefs}
           disabled={sendingChefs}

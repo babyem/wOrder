@@ -150,8 +150,10 @@ export function useDeleteOrder() {
 export function useMergeOrders() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (orders: OrderWithDetails[]) => {
-      const base = orders[0]
+    mutationFn: async ({ orders, targetLocationId }: { orders: OrderWithDetails[]; targetLocationId?: string }) => {
+      const locId = targetLocationId ?? orders[0].location_id
+      // Prefer employee from an order belonging to the target location
+      const base = orders.find(o => o.location_id === locId) ?? orders[0]
 
       // Sum quantities per product across all orders
       const merged = new Map<string, number>()
@@ -166,12 +168,12 @@ export function useMergeOrders() {
       // Try with is_merged flag; fall back without it if column doesn't exist yet (migration 010)
       let newOrderResult = await supabase
         .from('orders')
-        .insert({ location_id: base.location_id, employee_id: base.employee_id, status: 'pending', note: notes.length ? notes.join(' | ') : null, is_merged: true })
+        .insert({ location_id: locId, employee_id: base.employee_id, status: 'pending', note: notes.length ? notes.join(' | ') : null, is_merged: true })
         .select().single()
       if (newOrderResult.error?.message?.includes('is_merged')) {
         newOrderResult = await supabase
           .from('orders')
-          .insert({ location_id: base.location_id, employee_id: base.employee_id, status: 'pending', note: notes.length ? notes.join(' | ') : null })
+          .insert({ location_id: locId, employee_id: base.employee_id, status: 'pending', note: notes.length ? notes.join(' | ') : null })
           .select().single()
       }
       if (newOrderResult.error) throw newOrderResult.error

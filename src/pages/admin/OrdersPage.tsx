@@ -62,6 +62,7 @@ export default function OrdersPage() {
   // Selection key: "orderId::vendor"
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [showBatchNotify, setShowBatchNotify] = useState(false)
+  const [showMergePicker, setShowMergePicker] = useState(false)
   const [batchSending, setBatchSending] = useState<string | null>(null)
   const [columnOrder, setColumnOrder] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('orders-column-order') ?? '[]') } catch { return [] }
@@ -152,8 +153,13 @@ export default function OrdersPage() {
   // --- Batch notify logic ---
   const vendorMap = Object.fromEntries((vendorList ?? []).map(v => [v.name, v]))
   const selectedOrders = (orders ?? []).filter(o => selectedOrderIds.has(o.id))
-  const sameLocation = selectedOrders.length >= 2 &&
+  const canMerge = selectedOrders.length >= 2
+  const sameLocation = canMerge &&
     new Set(selectedOrders.map(o => o.location_id)).size === 1
+  // Unique locations among selected orders (for cross-location merge target picker)
+  const selectedLocations = [...new Map(
+    selectedOrders.map(o => [o.location_id, o.location?.name ?? 'Unknown'])
+  ).entries()].map(([id, name]) => ({ id, name }))
 
   interface VendorItem { product: string; quantity: number; unit: string }
 
@@ -238,12 +244,13 @@ export default function OrdersPage() {
       .join('\n\n')
   }
 
-  const handleMerge = async () => {
+  const handleMerge = async (targetLocationId?: string) => {
     const toMerge = selectedOrders as OrderWithDetails[]
     if (toMerge.length < 2) return
     try {
-      await mergeOrders.mutateAsync(toMerge)
+      await mergeOrders.mutateAsync({ orders: toMerge, targetLocationId })
       toast.success(`${toMerge.length} orders merged`)
+      setShowMergePicker(false)
       clearSelection()
     } catch {
       toast.error('Failed to merge orders')
@@ -376,9 +383,9 @@ export default function OrdersPage() {
                 <Bell size={13} /> Notify
               </button>
             )}
-            {sameLocation && (
+            {canMerge && (
               <button
-                onClick={handleMerge}
+                onClick={() => sameLocation ? handleMerge() : setShowMergePicker(true)}
                 disabled={mergeOrders.isPending}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white text-slate-900 text-xs font-medium hover:bg-slate-100 disabled:opacity-50 transition-colors"
               >
@@ -388,6 +395,47 @@ export default function OrdersPage() {
             <button onClick={clearSelection} className="p-1.5 rounded-xl text-slate-400 hover:text-white transition-colors">
               <X size={16} />
             </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Merge target picker — choose which location receives the merged order */}
+      <AnimatePresence>
+        {showMergePicker && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+            onClick={() => setShowMergePicker(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 10 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 10 }}
+              className="bg-white rounded-2xl shadow-xl p-5 w-80"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-slate-900 text-sm">Vem ska få den nya ordern?</h3>
+                <button onClick={() => setShowMergePicker(false)} className="p-1 rounded-lg hover:bg-slate-100">
+                  <X size={15} className="text-slate-400" />
+                </button>
+              </div>
+              <div className="space-y-1.5">
+                {selectedLocations.map(loc => (
+                  <button
+                    key={loc.id}
+                    onClick={() => handleMerge(loc.id)}
+                    disabled={mergeOrders.isPending}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-slate-200 text-sm font-medium text-slate-700 hover:border-indigo-300 hover:bg-indigo-50 disabled:opacity-50 transition-colors text-left"
+                  >
+                    <GitMerge size={14} className="text-indigo-500 shrink-0" />
+                    {loc.name}
+                  </button>
+                ))}
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

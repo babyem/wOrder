@@ -393,7 +393,19 @@ async function jernhusenWebReport(report) {
       }),
     });
     const ok = pc.status >= 300 && pc.status < 400; // success = redirect till verksamhetssidan
-    results.push({ name: b.name, status: ok ? "sent" : "error", code: pc.status, exVat: Math.round(shop.salesNet), receipts: shop.orders || 0 });
+    const result = { name: b.name, status: ok ? "sent" : "error", code: pc.status, exVat: Math.round(shop.salesNet), receipts: shop.orders || 0 };
+    if (!ok) {
+      // Fånga ASP.NET-valideringsfel ur svarskroppen så vi ser VARFÖR det misslyckades
+      const pcBody = await pc.text().catch(() => "");
+      const msgs = [];
+      const summary = /class="[^"]*validation-summary-errors[^"]*"[\s\S]*?<\/(?:div|ul)>/.exec(pcBody);
+      if (summary) msgs.push(summary[0]);
+      for (const m of pcBody.matchAll(/class="[^"]*field-validation-error[^"]*"[^>]*>([\s\S]*?)<\/span>/g)) msgs.push(m[1]);
+      for (const m of pcBody.matchAll(/class="[^"]*(?:alert-danger|text-danger)[^"]*"[^>]*>([\s\S]*?)<\//g)) msgs.push(m[1]);
+      const clean = msgs.map((s) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()).filter(Boolean);
+      result.reason = clean.length ? [...new Set(clean)].join(" | ").slice(0, 500) : "okänt (inga valideringsfel hittade i svaret)";
+    }
+    results.push(result);
   }
   return { results };
 }

@@ -564,6 +564,9 @@ async function emporiaReport(report, { dry = false } = {}) {
       if (!ftokenMatch) { results.push({ ...base, status: "error", reason: "hittar ingen ftoken-deklaration i plugin-svaret" }); continue; }
       const ftoken = ftokenMatch[1];
       // Perioderna laddas lazily — plocka ut period_form_id:n och hämta varje periods formulär.
+      // Säkerhetskontroll: plugin-svaret visar vilken butik sessionen står på just nu.
+      const shopHeading = (/<div[^>]*class=["'][^"']*(?:sc-|form-)?heading[^"']*["'][^>]*>\s*([^<]{2,60}?)\s*</i.exec(html)
+        || /<h[1-4][^>]*>\s*([^<]{2,60}?)\s*<\/h[1-4]>/i.exec(html) || [])[1] || null;
       const periodIds = [...new Set([...html.matchAll(/data-period-form-id=["'](\d+)["']/g)].map((m) => m[1]))];
       if (!periodIds.length) { results.push({ ...base, status: "error", reason: "hittar inga perioder i plugin-svaret" }); continue; }
       let form = null;
@@ -586,8 +589,15 @@ async function emporiaReport(report, { dry = false } = {}) {
       for (const d of form.dayFields) submitted[d] = "";
       submitted.Month_Total = String(Math.round(shop.salesGross));
 
+      // Skydd mot att skriva till fel butik om profilbytet inte fått genomslag.
+      const headingOk = !shopHeading || shopHeading.toLowerCase().replace(/\s+/g, " ").includes(target.localName.toLowerCase().split(" ")[0]);
+      if (!headingOk) {
+        results.push({ ...base, status: "error", reason: `plugin-sessionen visar "${shopHeading}" men förväntade "${target.localName}" — profilbytet slog inte igenom` });
+        continue;
+      }
+
       if (dry) {
-        results.push({ ...base, status: "dry", period: `${form.monthName} ${form.year}`, form_periodid: form.fields.form_periodid, wouldSend: submitted.Month_Total });
+        results.push({ ...base, status: "dry", shopInPortal: shopHeading, period: `${form.monthName} ${form.year}`, form_periodid: form.fields.form_periodid, campaignid: form.fields.campaignid, wouldSend: submitted.Month_Total });
         continue;
       }
 

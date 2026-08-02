@@ -559,8 +559,10 @@ async function emporiaReport(report, { dry = false } = {}) {
       // 4) Hämta plugin-formuläret och välj perioden för rapportmånaden
       const pluginUrl = `${MALLCOMM_BASE}/sales-collection?data=${encodeURIComponent(dataString)}`;
       const html = await ljFetch(jar, pluginUrl, { headers: { Accept: "text/html" } }).then((r) => r.text());
-      const ftoken = (/\bftoken\s*=\s*["']([^"']+)["']/.exec(html) || [])[1];
-      if (!ftoken) { results.push({ ...base, status: "error", reason: "hittar ingen ftoken i plugin-svaret" }); continue; }
+      // ftoken är ofta en tom sträng i webbkontext (används bara av app-klienten) — det är OK.
+      const ftokenMatch = /\bftoken\s*=\s*["']([^"']*)["']/.exec(html);
+      if (!ftokenMatch) { results.push({ ...base, status: "error", reason: "hittar ingen ftoken-deklaration i plugin-svaret" }); continue; }
+      const ftoken = ftokenMatch[1];
       const forms = parseSalesForms(html);
       const form = forms.find((f) => f.monthName && f.monthName.toLowerCase() === wantMonth.toLowerCase() && f.year === Year);
       if (!form) {

@@ -347,7 +347,32 @@ const jhToken = (html) => {
 };
 const jhForm = (o) => Object.entries(o).map(([k, v]) => encodeURIComponent(k) + "=" + encodeURIComponent(v)).join("&");
 
+// Fetch med timeout + retry — Jernhusens portal kan vara mycket seg, och utan
+// per-anrop-timeout riskerar hela Vercel-funktionen att dödas vid maxDuration.
+const JH_TIMEOUT_MS = 15000;
+async function jhFetch(url, opts = {}, tries = 2) {
+  let lastErr;
+  for (let i = 0; i < tries; i++) {
+    try {
+      return await fetch(url, { ...opts, signal: AbortSignal.timeout(JH_TIMEOUT_MS) });
+    } catch (err) { lastErr = err; }
+  }
+  throw lastErr;
+}
+
+// Extrahera ASP.NET-valideringsfel ur en svarskropp (så vi ser VARFÖR det misslyckades).
+function jhValidationErrors(body) {
+  const msgs = [];
+  const summary = /class="[^"]*validation-summary-errors[^"]*"[\s\S]*?<\/(?:div|ul)>/.exec(body);
+  if (summary) msgs.push(summary[0]);
+  for (const m of body.matchAll(/class="[^"]*field-validation-error[^"]*"[^>]*>([\s\S]*?)<\/span>/g)) msgs.push(m[1]);
+  for (const m of body.matchAll(/class="[^"]*(?:alert-danger|text-danger)[^"]*"[^>]*>([\s\S]*?)<\//g)) msgs.push(m[1]);
+  const clean = msgs.map((s) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()).filter(Boolean);
+  return [...new Set(clean)].join(" | ").slice(0, 500);
+}
+
 // Logga in på Jernhusen (webbformulär, ASP.NET anti-forgery) och POSTa omsättning per verksamhet.
+// Verksamheterna körs PARALLELLT med varsin cookie-kopia (anti-forgery-token hör ihop med cookien).
 async function jernhusenWebReport(report) {
   const USER = process.env.JERNHUSEN_USER;
   const PASS = process.env.JERNHUSEN_PASS;
@@ -355,58 +380,58 @@ async function jernhusenWebReport(report) {
 
   const [Year, Month] = report.month.split("-").map(Number);
   const byId = new Map(report.shops.map((s) => [s.shopId, s]));
-  const jar = {};
-  const addCookies = (res) => {
+  const parseCookies = (res) => {
+    const out = {};
     const sc = typeof res.headers.getSetCookie === "function" ? res.headers.getSetCookie() : [];
-    for (const c of sc) { const p = c.split(";")[0]; const i = p.indexOf("="); if (i > 0) jar[p.slice(0, i).trim()] = p.slice(i + 1); }
+    for (const c of sc) { const p = c.split(";")[0]; const i = p.indexOf("="); if (i > 0) out[p.slice(0, i).trim()] = p.slice(i + 1); }
+    return out;
   };
-  const cookie = () => Object.entries(jar).map(([k, v]) => k + "=" + v).join("; ");
+  const cookieStr = (jar) => Object.entries(jar).map(([k, v]) => k + "=" + v).join("; ");
 
-  // 1) Login GET → token + cookie
-  const lg = await fetch(`${JERNHUSEN_BASE}/Account/Login`, { redirect: "manual" });
-  addCookies(lg);
+  // 1) Login GET → token + cookie, 2) Login POST (måste vara sekventiellt)
+  const lg = await jhFetch(`${JERNHUSEN_BASE}/Account/Login`, { redirect: "manual" });
+  const baseJar = parseCookies(lg);
   const loginToken = jhToken(await lg.text());
-  // 2) Login POST
-  const lp = await fetch(`${JERNHUSEN_BASE}/Account/Login`, {
+  const lp = await jhFetch(`${JERNHUSEN_BASE}/Account/Login`, {
     method: "POST", redirect: "manual",
-    headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: cookie() },
+    headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: cookieStr(baseJar) },
     body: jhForm({ __RequestVerificationToken: loginToken, Username: USER, Password: PASS, RememberMe: "false" }),
   });
-  addCookies(lp);
+  Object.assign(baseJar, parseCookies(lp));
 
-  // 3) Per verksamhet: GET create (nytt token) → POST create
-  const results = [];
-  for (const b of JERNHUSEN_BUSINESSES) {
+  // 3) Per verksamhet (parallellt): GET create (nytt token) → POST create
+  const results = await Promise.all(JERNHUSEN_BUSINESSES.map(async (b) => {
     const shop = byId.get(b.shopId);
-    if (!shop || shop.salesNet == null) { results.push({ name: b.name, status: "skip", reason: "saknar netto" }); continue; }
-    const gc = await fetch(`${JERNHUSEN_BASE}/turnover/Create?BusinessId=${b.businessId}`, { headers: { Cookie: cookie() }, redirect: "manual" });
-    addCookies(gc);
-    const gcBody = await gc.text();
-    if (/name="Username"/.test(gcBody)) { results.push({ name: b.name, status: "error", reason: "inte inloggad (kontrollera JERNHUSEN_USER/PASS)" }); continue; }
-    const formToken = jhToken(gcBody);
-    const pc = await fetch(`${JERNHUSEN_BASE}/turnover/Create`, {
-      method: "POST", redirect: "manual",
-      headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: cookie() },
-      body: jhForm({
-        __RequestVerificationToken: formToken, BusinessId: b.businessId,
-        Year, Month, MonthlyTurnOverExVat: Math.round(shop.salesNet), NumberOfReceipts: shop.orders || 0, Comment: "",
-      }),
-    });
-    const ok = pc.status >= 300 && pc.status < 400; // success = redirect till verksamhetssidan
-    const result = { name: b.name, status: ok ? "sent" : "error", code: pc.status, exVat: Math.round(shop.salesNet), receipts: shop.orders || 0 };
-    if (!ok) {
-      // Fånga ASP.NET-valideringsfel ur svarskroppen så vi ser VARFÖR det misslyckades
+    if (!shop || shop.salesNet == null) return { name: b.name, status: "skip", reason: "saknar netto" };
+    try {
+      const jar = { ...baseJar };
+      const gc = await jhFetch(`${JERNHUSEN_BASE}/turnover/Create?BusinessId=${b.businessId}`, { headers: { Cookie: cookieStr(jar) }, redirect: "manual" });
+      Object.assign(jar, parseCookies(gc));
+      const gcBody = await gc.text();
+      if (/name="Username"/.test(gcBody)) return { name: b.name, status: "error", reason: "inte inloggad (kontrollera JERNHUSEN_USER/PASS)" };
+      const formToken = jhToken(gcBody);
+      const pc = await jhFetch(`${JERNHUSEN_BASE}/turnover/Create`, {
+        method: "POST", redirect: "manual",
+        headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: cookieStr(jar) },
+        body: jhForm({
+          __RequestVerificationToken: formToken, BusinessId: b.businessId,
+          Year, Month, MonthlyTurnOverExVat: Math.round(shop.salesNet), NumberOfReceipts: shop.orders || 0, Comment: "",
+        }),
+      });
+      const base = { name: b.name, code: pc.status, exVat: Math.round(shop.salesNet), receipts: shop.orders || 0 };
+      // success = redirect till verksamhetssidan
+      if (pc.status >= 300 && pc.status < 400) return { ...base, status: "sent" };
       const pcBody = await pc.text().catch(() => "");
-      const msgs = [];
-      const summary = /class="[^"]*validation-summary-errors[^"]*"[\s\S]*?<\/(?:div|ul)>/.exec(pcBody);
-      if (summary) msgs.push(summary[0]);
-      for (const m of pcBody.matchAll(/class="[^"]*field-validation-error[^"]*"[^>]*>([\s\S]*?)<\/span>/g)) msgs.push(m[1]);
-      for (const m of pcBody.matchAll(/class="[^"]*(?:alert-danger|text-danger)[^"]*"[^>]*>([\s\S]*?)<\//g)) msgs.push(m[1]);
-      const clean = msgs.map((s) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()).filter(Boolean);
-      result.reason = clean.length ? [...new Set(clean)].join(" | ").slice(0, 500) : "okänt (inga valideringsfel hittade i svaret)";
+      // Dubblettspärr = månaden är redan rapporterad. Räknas som OK (idempotent omkörning).
+      if (/finns redan en rapporterad uppgift/i.test(pcBody)) {
+        return { ...base, status: "already_reported", reason: "Det finns redan en rapporterad uppgift för denna månad" };
+      }
+      const reason = jhValidationErrors(pcBody);
+      return { ...base, status: "error", reason: reason || "okänt (inga valideringsfel hittade i svaret)" };
+    } catch (err) {
+      return { name: b.name, status: "error", reason: String((err && err.message) || err) };
     }
-    results.push(result);
-  }
+  }));
   return { results };
 }
 
@@ -490,11 +515,13 @@ export default async function handler(req, res) {
       }
       const out = await jernhusenWebReport(report);
       if (out.error) return res.status(500).json({ error: out.error });
-      const allOk = out.results.length > 0 && out.results.every((r) => r.status === "sent");
+      const isOk = (r) => r.status === "sent" || r.status === "already_reported";
+      const allOk = out.results.length > 0 && out.results.every(isOk);
       return res.status(allOk ? 200 : 207).json({
         month: report.month,
         sent: out.results.filter((r) => r.status === "sent").length,
-        failed: out.results.filter((r) => r.status !== "sent").length,
+        alreadyReported: out.results.filter((r) => r.status === "already_reported").length,
+        failed: out.results.filter((r) => !isOk(r)).length,
         results: out.results,
       });
     }

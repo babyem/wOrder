@@ -563,11 +563,21 @@ async function emporiaReport(report, { dry = false } = {}) {
       const ftokenMatch = /\bftoken\s*=\s*["']([^"']*)["']/.exec(html);
       if (!ftokenMatch) { results.push({ ...base, status: "error", reason: "hittar ingen ftoken-deklaration i plugin-svaret" }); continue; }
       const ftoken = ftokenMatch[1];
-      const forms = parseSalesForms(html);
-      const form = forms.find((f) => f.monthName && f.monthName.toLowerCase() === wantMonth.toLowerCase() && f.year === Year);
+      // Perioderna laddas lazily — plocka ut period_form_id:n och hämta varje periods formulär.
+      const periodIds = [...new Set([...html.matchAll(/data-period-form-id=["'](\d+)["']/g)].map((m) => m[1]))];
+      if (!periodIds.length) { results.push({ ...base, status: "error", reason: "hittar inga perioder i plugin-svaret" }); continue; }
+      let form = null;
+      const seen = [];
+      for (const pid of periodIds) {
+        const slideUrl = `${MALLCOMM_BASE}/sales-collection/period-form-slide?data=${encodeURIComponent(dataString)}&period_form_id=${pid}`;
+        const slide = await ljFetch(jar, slideUrl, { headers: { Accept: "text/html", Referer: pluginUrl } }).then((r) => r.text());
+        const f = parseSalesForms(slide)[0];
+        if (!f) continue;
+        seen.push(`${f.monthName || "?"} ${f.year || "?"}`);
+        if (f.monthName && f.monthName.toLowerCase() === wantMonth.toLowerCase() && f.year === Year) { form = f; break; }
+      }
       if (!form) {
-        const seen = forms.map((f) => `${f.monthName || "?"} ${f.year || "?"}`).join(", ") || "inga";
-        results.push({ ...base, status: "error", reason: `ingen öppen period för ${wantMonth} ${Year} (öppna: ${seen})` });
+        results.push({ ...base, status: "error", reason: `ingen öppen period för ${wantMonth} ${Year} (öppna: ${seen.join(", ") || "inga"})` });
         continue;
       }
 

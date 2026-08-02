@@ -564,12 +564,10 @@ async function emporiaReport(report, { dry = false } = {}) {
       if (!ftokenMatch) { results.push({ ...base, status: "error", reason: "hittar ingen ftoken-deklaration i plugin-svaret" }); continue; }
       const ftoken = ftokenMatch[1];
       // Perioderna laddas lazily — plocka ut period_form_id:n och hämta varje periods formulär.
-      // Säkerhetskontroll: plugin-svaret visar vilken butik sessionen står på just nu.
-      const shopHeading = (/<div[^>]*class=["'][^"']*(?:sc-|form-)?heading[^"']*["'][^>]*>\s*([^<]{2,60}?)\s*</i.exec(html)
-        || /<h[1-4][^>]*>\s*([^<]{2,60}?)\s*<\/h[1-4]>/i.exec(html) || [])[1] || null;
       const periodIds = [...new Set([...html.matchAll(/data-period-form-id=["'](\d+)["']/g)].map((m) => m[1]))];
       if (!periodIds.length) { results.push({ ...base, status: "error", reason: "hittar inga perioder i plugin-svaret" }); continue; }
       let form = null;
+      let shopHeading = null;
       const seen = [];
       for (const pid of periodIds) {
         const slideUrl = `${MALLCOMM_BASE}/sales-collection/period-form-slide?data=${encodeURIComponent(dataString)}&period_form_id=${pid}`;
@@ -577,7 +575,12 @@ async function emporiaReport(report, { dry = false } = {}) {
         const f = parseSalesForms(slide)[0];
         if (!f) continue;
         seen.push(`${f.monthName || "?"} ${f.year || "?"}`);
-        if (f.monthName && f.monthName.toLowerCase() === wantMonth.toLowerCase() && f.year === Year) { form = f; break; }
+        if (f.monthName && f.monthName.toLowerCase() === wantMonth.toLowerCase() && f.year === Year) {
+          form = f;
+          // Butiksnamnet renderas i slide-svaret — används för att verifiera att rätt profil är aktiv.
+          shopHeading = (/<div[^>]*class=["'][^"']*text-uppercase[^"']*["'][^>]*>\s*([^<]{2,60}?)\s*</i.exec(slide) || [])[1] || null;
+          break;
+        }
       }
       if (!form) {
         results.push({ ...base, status: "error", reason: `ingen öppen period för ${wantMonth} ${Year} (öppna: ${seen.join(", ") || "inga"})` });

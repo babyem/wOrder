@@ -27,6 +27,16 @@ const POS_NET_VAT_DIVISOR = {
 // Inga API-nycklar behövs. Login med JERNHUSEN_USER / JERNHUSEN_PASS (Vercel env).
 // Rapporterar EXKL moms (salesNet) + antal kvitton (orders).
 const JERNHUSEN_BASE = "https://omsa.jernhusen.se";
+
+// Emporia (Mallcomm/Let's Join): login → byt profil → hämta plugin-token → POSTa Month_Total.
+// Rapporterar INKL moms (salesGross) i fältet "Month_Total". Login med LETSJOIN_USER / LETSJOIN_PASS.
+const LETSJOIN_BASE = "https://letsjoinshopping.com";
+const MALLCOMM_BASE = "https://plugins.mallcomm.co.uk";
+const EMPORIA_SHOPS = [
+  { shopId: "ancon:IgE", localName: "WOSO Salad & Sushi" },
+  { shopId: "65e5e4fc3bc80a13e1e798ba", localName: "Izakai" },
+];
+const SV_MONTHS = ["Januari", "Februari", "Mars", "April", "Maj", "Juni", "Juli", "Augusti", "September", "Oktober", "November", "December"];
 const JERNHUSEN_BUSINESSES = [
   { shopId: "67bc9ec96c7e0c3b0a59968f", businessId: "c0f63bb3-eda4-44c0-8e3d-bd62d70edf4e", name: "Woso Centralstationen" },
   { shopId: "dinkassa-chao", businessId: "4b7719f3-53a5-4882-b024-105953e8d2f1", name: "Chao Oriental Express" },
@@ -435,6 +445,164 @@ async function jernhusenWebReport(report) {
   return { results };
 }
 
+// ---------- Emporia (Mallcomm / Let's Join) ----------
+
+// Enkel cookie-jar per domän.
+function makeJar() {
+  const jars = {};
+  const host = (url) => new URL(url).host;
+  return {
+    absorb(url, res) {
+      const h = host(url);
+      jars[h] = jars[h] || {};
+      const sc = typeof res.headers.getSetCookie === "function" ? res.headers.getSetCookie() : [];
+      for (const c of sc) { const p = c.split(";")[0]; const i = p.indexOf("="); if (i > 0) jars[h][p.slice(0, i).trim()] = p.slice(i + 1); }
+    },
+    header(url) {
+      const h = host(url);
+      return Object.entries(jars[h] || {}).map(([k, v]) => k + "=" + v).join("; ");
+    },
+  };
+}
+
+async function ljFetch(jar, url, opts = {}, tries = 2) {
+  let lastErr;
+  for (let i = 0; i < tries; i++) {
+    try {
+      const headers = { ...(opts.headers || {}) };
+      const c = jar.header(url);
+      if (c) headers.Cookie = c;
+      const res = await fetch(url, { ...opts, headers, redirect: "manual", signal: AbortSignal.timeout(20000) });
+      jar.absorb(url, res);
+      return res;
+    } catch (err) { lastErr = err; }
+  }
+  throw lastErr;
+}
+
+const formBody = (o) => Object.entries(o).map(([k, v]) => encodeURIComponent(k) + "=" + encodeURIComponent(v)).join("&");
+const FORM_HEADERS = { "Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "XMLHttpRequest", Accept: "application/json, text/javascript, */*" };
+
+// Plocka ut <form>-block ur plugin-HTML:en. Varje öppen period är ett eget formulär.
+function parseSalesForms(html) {
+  const forms = [];
+  for (const m of html.matchAll(/<form[^>]*sales-collection-form[\s\S]*?<\/form>/g)) {
+    const block = m[0];
+    const fields = {};
+    for (const h of block.matchAll(/<input[^>]*type=["']hidden["'][^>]*>/g)) {
+      const name = /name=["']([^"']+)["']/.exec(h[0]);
+      const value = /value=["']([^"']*)["']/.exec(h[0]);
+      if (name) fields[name[1]] = value ? value[1] : "";
+    }
+    const dayFields = [...new Set([...block.matchAll(/name=["'](\d{2}_([A-Za-zÅÄÖåäö]+)_(\d{4}))["']/g)].map((d) => d[1]))];
+    const first = /name=["']\d{2}_([A-Za-zÅÄÖåäö]+)_(\d{4})["']/.exec(block);
+    forms.push({
+      fields,
+      dayFields,
+      monthName: first ? first[1] : null,
+      year: first ? Number(first[2]) : null,
+      hasMonthTotal: /name=["']Month_Total["']/.test(block),
+    });
+  }
+  return forms;
+}
+
+// Logga in, byt till rätt profil och rapportera Month_Total (inkl moms) per Emporia-butik.
+async function emporiaReport(report, { dry = false } = {}) {
+  const USER = process.env.LETSJOIN_USER;
+  const PASS = process.env.LETSJOIN_PASS;
+  if (!USER || !PASS) return { error: "LETSJOIN_USER / LETSJOIN_PASS saknas i miljövariabler" };
+
+  const [Year, Month] = report.month.split("-").map(Number);
+  const wantMonth = SV_MONTHS[Month - 1];
+  const byId = new Map(report.shops.map((s) => [s.shopId, s]));
+  const jar = makeJar();
+
+  // 1) Login (delad session för båda profilerna)
+  const lr = await ljFetch(jar, `${LETSJOIN_BASE}/auth/api_login`, {
+    method: "POST", headers: FORM_HEADERS,
+    body: formBody({ email_address: USER, password: PASS }),
+  });
+  const lj = await lr.json().catch(() => ({}));
+  const user = lj?.data?.user;
+  if (!user || !Array.isArray(user.accounts)) {
+    return { error: `Inloggning på Let's Join misslyckades (status ${lr.status})` };
+  }
+  const accounts = user.accounts;
+
+  const results = [];
+  for (const target of EMPORIA_SHOPS) {
+    const shop = byId.get(target.shopId);
+    const base = { name: target.localName, grossVat: shop ? Math.round(shop.salesGross) : null };
+    try {
+      if (!shop || shop.salesGross == null) { results.push({ ...base, status: "skip", reason: "saknar omsättning" }); continue; }
+
+      // 2) Byt till rätt profil
+      const acc = accounts.find((a) => (a?.local?.name || "").trim().toLowerCase() === target.localName.toLowerCase());
+      if (!acc) { results.push({ ...base, status: "error", reason: `hittar ingen profil som heter "${target.localName}"` }); continue; }
+      const sw = await ljFetch(jar, `${LETSJOIN_BASE}/auth/api_switch_account`, {
+        method: "POST", headers: FORM_HEADERS,
+        body: formBody({ localid: acc.local.id, centreid: acc.centre.id }),
+      });
+      if (sw.status >= 400) { results.push({ ...base, status: "error", reason: `profilbyte misslyckades (${sw.status})` }); continue; }
+
+      // 3) Hitta kategorin "RAPPORT OMSÄTTNING" och hämta dess krypterade data-sträng
+      const cats = await ljFetch(jar, `${LETSJOIN_BASE}/api/get_categories`).then((r) => r.json());
+      const cat = (cats?.data || []).find((c) => c.type === "segue_plugin_sales_collection");
+      if (!cat) { results.push({ ...base, status: "error", reason: "hittar ingen sales_collection-kategori" }); continue; }
+      const gc = await ljFetch(jar, `${LETSJOIN_BASE}/api/get_category`, {
+        method: "POST", headers: FORM_HEADERS, body: formBody({ catid: cat.id }),
+      }).then((r) => r.json());
+      const dataString = gc?.data_string;
+      if (!dataString) { results.push({ ...base, status: "error", reason: "fick ingen data_string från get_category" }); continue; }
+
+      // 4) Hämta plugin-formuläret och välj perioden för rapportmånaden
+      const pluginUrl = `${MALLCOMM_BASE}/sales-collection?data=${encodeURIComponent(dataString)}`;
+      const html = await ljFetch(jar, pluginUrl, { headers: { Accept: "text/html" } }).then((r) => r.text());
+      const ftoken = (/\bftoken\s*=\s*["']([^"']+)["']/.exec(html) || [])[1];
+      if (!ftoken) { results.push({ ...base, status: "error", reason: "hittar ingen ftoken i plugin-svaret" }); continue; }
+      const forms = parseSalesForms(html);
+      const form = forms.find((f) => f.monthName && f.monthName.toLowerCase() === wantMonth.toLowerCase() && f.year === Year);
+      if (!form) {
+        const seen = forms.map((f) => `${f.monthName || "?"} ${f.year || "?"}`).join(", ") || "inga";
+        results.push({ ...base, status: "error", reason: `ingen öppen period för ${wantMonth} ${Year} (öppna: ${seen})` });
+        continue;
+      }
+
+      // 5) Bygg payload: dolda fält + tomma dagsfält + månadssumman inkl moms
+      const submitted = { ...form.fields };
+      for (const d of form.dayFields) submitted[d] = "";
+      submitted.Month_Total = String(Math.round(shop.salesGross));
+
+      if (dry) {
+        results.push({ ...base, status: "dry", period: `${form.monthName} ${form.year}`, form_periodid: form.fields.form_periodid, wouldSend: submitted.Month_Total });
+        continue;
+      }
+
+      const sub = await ljFetch(jar, `${MALLCOMM_BASE}/sales-collection/submit`, {
+        method: "POST", headers: { ...FORM_HEADERS, Referer: pluginUrl },
+        body: formBody({ token: ftoken, data: dataString, plugin_data: JSON.stringify(submitted) }),
+      });
+      const txt = await sub.text().catch(() => "");
+      let ok = sub.status >= 200 && sub.status < 300;
+      let payload;
+      try { payload = JSON.parse(txt); } catch { /* icke-JSON */ }
+      if (payload && (payload.status === 200 || payload.success === true)) ok = true;
+      else if (payload && payload.status && payload.status !== 200) ok = false;
+      results.push({
+        ...base,
+        status: ok ? "sent" : "error",
+        code: sub.status,
+        period: `${form.monthName} ${form.year}`,
+        ...(ok ? {} : { reason: (payload ? JSON.stringify(payload) : txt.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()).slice(0, 300) }),
+      });
+    } catch (err) {
+      results.push({ ...base, status: "error", reason: String((err && err.message) || err) });
+    }
+  }
+  return { results };
+}
+
 async function sendViaResend({ apiKey, from, to, subject, text }) {
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -522,6 +690,21 @@ export default async function handler(req, res) {
         sent: out.results.filter((r) => r.status === "sent").length,
         alreadyReported: out.results.filter((r) => r.status === "already_reported").length,
         failed: out.results.filter((r) => !isOk(r)).length,
+        results: out.results,
+      });
+    }
+
+    // ----- action=emporia: logga in på Let's Join och rapportera Month_Total (eller dry-run) -----
+    if (req.query.action === "emporia") {
+      const dry = req.query.dry === "1" || req.query.dry === "true";
+      const out = await emporiaReport(report, { dry });
+      if (out.error) return res.status(500).json({ error: out.error });
+      const allOk = out.results.length > 0 && out.results.every((r) => r.status === "sent" || r.status === "dry");
+      return res.status(allOk ? 200 : 207).json({
+        month: report.month,
+        dryRun: dry || undefined,
+        sent: out.results.filter((r) => r.status === "sent").length,
+        failed: out.results.filter((r) => r.status !== "sent" && r.status !== "dry").length,
         results: out.results,
       });
     }

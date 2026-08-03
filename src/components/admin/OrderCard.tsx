@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CheckCircle, RotateCcw, Trash2, MapPin, User, FileText, Mail, Phone, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag, AlertTriangle, AlertCircle, Copy } from 'lucide-react'
+import { CheckCircle, RotateCcw, Trash2, MapPin, User, FileText, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag, AlertTriangle, AlertCircle, Copy } from 'lucide-react'
 import type { Order, OrderWithDetails } from '../../types'
 import { useUpdateOrderStatus, useDeleteOrder, useUpdateOrderItem, useMarkVendorDone, useUpdateAdminNote } from '../../hooks/useOrders'
 import { useVendors, useUnits } from '../../hooks/useMetadata'
@@ -406,43 +406,42 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
     </div>
   )
 
-  const renderNotifyPanel = (vendorName: string) => {
+  // Minimal Email/SMS actions — text only, no icons
+  const renderNotifyActions = (vendorName: string) => {
     const v = orderVendors.find(ov => ov.name === vendorName)
     if (!v) return null
     return (
-      <div className="px-3 pb-3 pt-2 space-y-1.5">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Notifiera {v.name}</span>
-          <button onClick={() => setShowNotifyVendor(null)} className="text-slate-300 hover:text-slate-500"><X size={12} /></button>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {v.email && (
-            <button disabled={sending === v.name} onClick={async () => {
-              setSending(v.name)
-              try {
-                await sendEmail(v.email!, `Order – ${order.location?.name ?? ''}`, buildBody(v.name), `Order ${v.name} – ${order.location?.name ?? ''}`)
-                toast.success(`Email skickat till ${v.name}`)
-                markVendorDone(v.name, true, allVendorNames)
-                setShowNotifyVendor(null)
-              } catch (err) {
-                toast.error(`${v.name}: ${err instanceof Error ? err.message : 'Misslyckades'}`)
-              } finally { setSending(null) }
-            }} className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-medium hover:bg-indigo-100 disabled:opacity-50 transition-colors">
-              {sending === v.name ? <Loader2 size={11} className="animate-spin" /> : <Mail size={11} />} Email
-            </button>
-          )}
-          {v.phone && (
-            <a href={`sms:${v.phone}?body=${encodeURIComponent(buildBody(v.name))}`}
-              onClick={() => { markVendorDone(v.name, true, allVendorNames); setShowNotifyVendor(null) }}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 transition-colors">
-              <Phone size={11} /> SMS
-            </a>
-          )}
-          {!v.email && !v.phone && <span className="text-[10px] text-slate-300 italic">Ingen kontaktinfo</span>}
-        </div>
-      </div>
+      <>
+        {v.email && (
+          <button disabled={sending === v.name} onClick={async () => {
+            setSending(v.name)
+            try {
+              await sendEmail(v.email!, `Order – ${order.location?.name ?? ''}`, buildBody(v.name), `Order ${v.name} – ${order.location?.name ?? ''}`)
+              toast.success(`Email skickat till ${v.name}`)
+              markVendorDone(v.name, true, allVendorNames)
+              setShowNotifyVendor(null)
+            } catch (err) {
+              toast.error(`${v.name}: ${err instanceof Error ? err.message : 'Misslyckades'}`)
+            } finally { setSending(null) }
+          }} className="flex-1 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-medium hover:bg-indigo-100 disabled:opacity-50 transition-colors text-center">
+            {sending === v.name ? <Loader2 size={11} className="animate-spin inline" /> : 'Email'}
+          </button>
+        )}
+        {v.phone && (
+          <a href={`sms:${v.phone}?body=${encodeURIComponent(buildBody(v.name))}`}
+            onClick={() => { markVendorDone(v.name, true, allVendorNames); setShowNotifyVendor(null) }}
+            className="flex-1 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 transition-colors text-center">
+            SMS
+          </a>
+        )}
+        {!v.email && !v.phone && <span className="text-[10px] text-slate-300 italic px-2 py-1">Ingen kontaktinfo</span>}
+      </>
     )
   }
+
+  const renderNotifyPanel = (vendorName: string) => (
+    <div className="px-3 py-2 flex gap-1.5">{renderNotifyActions(vendorName)}</div>
+  )
 
   const isMerged = !!(order as Order & { is_merged?: boolean }).is_merged && isPending
   const firstVendor = vendorEntries[0][0]
@@ -505,17 +504,6 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
             </div>
           </div>
 
-          {/* Single-vendor notify — expands under bell in header */}
-          {!isMultiVendor && (
-            <AnimatePresence>
-              {showNotifyVendor === firstVendor && (
-                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-                  {renderNotifyPanel(firstVendor)}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          )}
-
           <div className="border-t border-slate-50 pt-2">
             {isMultiVendor && (
               <div className="flex items-center justify-between mb-1">
@@ -544,16 +532,6 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
               </div>
             )}
             {!isMultiVendor && <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">{vendorEntries[0][0]}</p>}
-            {/* Multi-vendor first-vendor notify — expands under vendor header bell */}
-            {isMultiVendor && (
-              <AnimatePresence>
-                {showNotifyVendor === firstVendor && (
-                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden -mx-3 mb-2 border-b border-slate-50">
-                    {renderNotifyPanel(firstVendor)}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            )}
             <div className={doneVendors.has(vendorEntries[0][0]) ? 'opacity-40' : ''}>
               {renderItems(vendorEntries[0][1])}
             </div>
@@ -578,13 +556,20 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
         {/* Integrated action bar — part of the card background */}
         <div className="rounded-b-2xl overflow-hidden border-t border-black/5">
           <div className="grid grid-cols-4 divide-x divide-black/5 text-xs font-medium">
-            <button
-              onClick={() => toggleNotify(firstVendor)}
-              disabled={orderVendors.length === 0}
-              className={`col-span-2 flex items-center justify-center gap-1.5 py-2 transition-colors disabled:opacity-30 ${showNotifyVendor === firstVendor ? 'bg-indigo-600 text-white' : 'text-indigo-600 hover:bg-indigo-50'}`}
-            >
-              <Bell size={13} /> Order
-            </button>
+            <div className="col-span-2 relative">
+              {showNotifyVendor === firstVendor && (
+                <div className="absolute bottom-full left-1 right-1 mb-1 z-30 bg-white rounded-xl shadow-lg border border-slate-100 p-1.5 flex gap-1.5">
+                  {renderNotifyActions(firstVendor)}
+                </div>
+              )}
+              <button
+                onClick={() => toggleNotify(firstVendor)}
+                disabled={orderVendors.length === 0}
+                className={`w-full flex items-center justify-center gap-1.5 py-2 transition-colors disabled:opacity-30 ${showNotifyVendor === firstVendor ? 'bg-indigo-600 text-white' : 'text-indigo-600 hover:bg-indigo-50'}`}
+              >
+                <Bell size={13} /> Order
+              </button>
+            </div>
             <button
               onClick={() => { setEditingNote(v => !v); setNoteVal(order.admin_note ?? '') }}
               className={`flex items-center justify-center gap-1.5 py-2 transition-colors ${order.admin_note || editingNote ? 'text-red-600 bg-red-50' : 'text-slate-500 hover:bg-red-50 hover:text-red-500'}`}

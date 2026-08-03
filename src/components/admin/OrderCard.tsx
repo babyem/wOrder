@@ -119,9 +119,13 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
       effectiveVendor(i) === vendorName && !isExcluded(i.id)
     )
     const hideUnit = vendorMap[vendorName]?.hide_unit ?? false
+    const isTingstad = vendorName.toLowerCase().includes('tingstad')
     const lines = items.map(i => {
       const unit = hideUnit ? '' : ` ${effectiveUnit(i)}`
-      return `${i.product?.vendor_name ?? i.product?.name ?? '?'}: ${i.quantity}${unit}`
+      const name = i.product?.vendor_name ?? i.product?.name ?? '?'
+      const artnr = i.product?.tingstad_id || i.product?.tingstad_alt_id
+      const prefix = isTingstad && artnr ? `${artnr} — ` : ''
+      return `${prefix}${name}: ${i.quantity}${unit}`
     })
     return `${order.location?.name ?? ''}\n\n${lines.join('\n')}`
   }
@@ -145,9 +149,24 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
   }
 
   const handleComplete = async () => {
+    const prevDoneVendors = order.done_vendors ?? []
     try {
       await updateStatus.mutateAsync({ id: order.id, status: 'done' })
-      toast.success('Order marked as done')
+      toast.success(t => (
+        <span className="flex items-center gap-3">
+          Order klar
+          <button
+            onClick={async () => {
+              toast.dismiss(t.id)
+              await updateStatus.mutateAsync({ id: order.id, status: 'pending' })
+              markVendorDoneMutation.mutate({ id: order.id, done_vendors: prevDoneVendors })
+            }}
+            className="px-2 py-0.5 rounded-lg bg-slate-800 text-white text-xs font-medium hover:bg-slate-700"
+          >
+            Ångra
+          </button>
+        </span>
+      ), { duration: 5000 })
       if (orderVendors.length > 0) setShowNotifyVendor(orderVendors[0].name)
     } catch {
       toast.error('Failed to update order')
@@ -453,10 +472,13 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
   const firstVendor = vendorEntries[0][0]
   const firstSelected = selectedVendors?.has(firstVendor) ?? false
 
+  const isStale = isPending && Date.now() - new Date(order.created_at).getTime() > 24 * 60 * 60 * 1000
+
   const cardBorder = chefsOrderFailed
     ? 'border-red-400 ring-2 ring-red-100'
     : firstSelected ? 'border-indigo-400 ring-2 ring-indigo-100'
     : isMerged ? 'border-orange-400 ring-2 ring-orange-100'
+    : isStale ? 'border-red-300'
     : isMultiVendor && isPending && doneVendors.has(firstVendor) ? 'border-emerald-400'
     : isMultiVendor && isPending ? 'border-amber-200'
     : isMultiVendor ? 'border-emerald-200'
@@ -489,7 +511,8 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
               {firstSelected ? <CheckSquare size={13} className="text-indigo-600" /> : <Square size={13} className="text-slate-400" />}
             </button>
           )}
-          <span className="font-normal opacity-60 tabular-nums">{time}</span>
+          <span className={`font-normal tabular-nums ${isStale ? 'text-red-600 font-semibold opacity-100' : 'opacity-60'}`}>{time}</span>
+          {isStale && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" title="Väntat över 24h" />}
           <button onClick={handleDelete} disabled={deleteOrder.isPending} title="Ta bort order"
             className="ml-auto p-1 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-100/60 disabled:opacity-50 transition-colors">
             <Trash2 size={13} />

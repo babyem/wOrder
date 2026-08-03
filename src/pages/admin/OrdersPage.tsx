@@ -24,10 +24,12 @@ import { CSS } from '@dnd-kit/utilities'
 function SortableColumn({
   loc,
   count,
+  pendingCount,
   children,
 }: {
   loc: Location
   count: number
+  pendingCount: number
   children: React.ReactNode
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: loc.id })
@@ -48,7 +50,12 @@ function SortableColumn({
           </button>
           <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">{loc.name}</h2>
         </div>
-        {count > 0 && <span className="text-xs text-slate-300 font-medium">{count}</span>}
+        <div className="flex items-center gap-1.5">
+          {pendingCount > 0 && (
+            <span className="min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold tabular-nums">{pendingCount}</span>
+          )}
+          {count > 0 && <span className="text-xs text-slate-300 font-medium">{count}</span>}
+        </div>
       </div>
       {children}
     </div>
@@ -161,7 +168,7 @@ export default function OrdersPage() {
     selectedOrders.map(o => [o.location_id, o.location?.name ?? 'Unknown'])
   ).entries()].map(([id, name]) => ({ id, name }))
 
-  interface VendorItem { product: string; quantity: number; unit: string }
+  interface VendorItem { product: string; quantity: number; unit: string; artnr?: string }
 
   // Only include items from selected vendor cards (not the whole order)
   const vendorLocItems = new Map<string, Map<string, VendorItem[]>>()
@@ -184,7 +191,8 @@ export default function OrdersPage() {
         // Fill in unit if first occurrence had none
         if (!existing.unit && unit) existing.unit = unit
       } else {
-        list.push({ product: displayName, quantity: item.quantity, unit })
+        const artnr = item.product?.tingstad_id || item.product?.tingstad_alt_id || undefined
+        list.push({ product: displayName, quantity: item.quantity, unit, artnr })
       }
       locMap.set(loc, list)
     }
@@ -237,9 +245,13 @@ export default function OrdersPage() {
 
   const buildBatchBody = (vendor: typeof batchNotifiableVendors[0]) => {
     const hideUnit = vendorMap[vendor.name]?.hide_unit ?? false
+    const isTingstad = vendor.name.toLowerCase().includes('tingstad')
     return vendor.locations
       .map(({ loc, items }) =>
-        `${loc}\n${items.map(i => hideUnit ? `${i.product}: ${i.quantity}` : `${i.product}: ${i.quantity} ${i.unit}`.trimEnd()).join('\n')}`
+        `${loc}\n${items.map(i => {
+          const prefix = isTingstad && i.artnr ? `${i.artnr} — ` : ''
+          return hideUnit ? `${prefix}${i.product}: ${i.quantity}` : `${prefix}${i.product}: ${i.quantity} ${i.unit}`.trimEnd()
+        }).join('\n')}`
       )
       .join('\n\n')
   }
@@ -323,7 +335,7 @@ export default function OrdersPage() {
                 {sortedLocations.map(loc => {
                   const colOrders = ordersByLocation[loc.id] ?? []
                   return (
-                    <SortableColumn key={loc.id} loc={loc} count={colOrders.length}>
+                    <SortableColumn key={loc.id} loc={loc} count={colOrders.length} pendingCount={colOrders.filter(o => o.status === 'pending').length}>
                       <AnimatePresence mode="popLayout">
                         {colOrders.length === 0 ? (
                           <div className="rounded-2xl border-2 border-dashed border-slate-100 h-20 flex items-center justify-center">

@@ -456,8 +456,16 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
     : isMultiVendor && isPending && doneVendors.has(firstVendor) ? 'border-emerald-400'
     : isPending ? 'border-amber-200'
     : 'border-emerald-200'
-  const statusBarClass = isPending ? 'bg-amber-50 text-amber-700' : 'text-emerald-700'
-  const cardBg = isPending ? 'bg-white' : 'bg-[#e2f6ec]'
+  const statusBarClass = isPending ? 'text-amber-700' : 'text-emerald-700'
+  const cardBg = isPending ? 'bg-[#fffaeb]' : 'bg-[#e2f6ec]'
+
+  // Toggle selection when clicking the card itself — ignore clicks on interactive elements
+  const cardClick = (vendor: string) => (e: React.MouseEvent) => {
+    if (!onToggle) return
+    const el = e.target as HTMLElement
+    if (el.closest('button, a, input, textarea, select')) return
+    onToggle(vendor)
+  }
 
   return (
     <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="relative">
@@ -469,7 +477,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
       )}
 
       {/* Main card — order header + first vendor */}
-      <div className={`relative z-10 rounded-2xl border shadow-sm transition-shadow ${cardBg} ${cardBorder}`}>
+      <div onClick={cardClick(firstVendor)} className={`relative z-10 rounded-2xl border shadow-sm transition-shadow ${onToggle ? 'cursor-pointer' : ''} ${cardBg} ${cardBorder}`}>
         <div className={`px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 rounded-t-2xl ${statusBarClass}`}>
           {onToggle && !isMultiVendor && (
             <button onClick={e => { e.stopPropagation(); onToggle(firstVendor) }} className="shrink-0 mr-0.5">
@@ -602,7 +610,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
           : isPending ? 'border-amber-200'
           : 'border-emerald-200'
         return (
-          <div key={vendor} className={`relative z-10 mt-2 rounded-2xl border shadow-sm ${isPending ? 'bg-white' : 'bg-[#e2f6ec]'} ${subBorder}`}>
+          <div key={vendor} onClick={cardClick(vendor)} className={`relative z-10 mt-2 rounded-2xl border shadow-sm ${onToggle ? 'cursor-pointer' : ''} ${isPending ? 'bg-[#fffaeb]' : 'bg-[#e2f6ec]'} ${subBorder}`}>
             <div className="px-3 py-2 border-b border-slate-50 flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 {onToggle && (

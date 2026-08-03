@@ -561,20 +561,13 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
         {/* Integrated action bar — part of the card background */}
         <div className="border-t border-black/5">
           <div className="grid grid-cols-4 divide-x divide-black/5 text-xs font-medium">
-            <div className="col-span-2 relative">
-              {showNotifyVendor === firstVendor && (
-                <div className="absolute bottom-full left-1 right-1 mb-1 z-30 bg-white rounded-xl shadow-lg border border-slate-100 p-1.5 flex gap-1.5">
-                  {renderNotifyActions(firstVendor)}
-                </div>
-              )}
-              <button
-                onClick={() => toggleNotify(firstVendor)}
-                disabled={orderVendors.length === 0}
-                className={`w-full flex items-center justify-center py-2 transition-colors disabled:opacity-30 ${!isPending ? 'rounded-bl-2xl' : ''} ${showNotifyVendor === firstVendor ? 'bg-indigo-600 text-white' : 'text-indigo-600 hover:bg-indigo-50'}`}
-              >
-                Order
-              </button>
-            </div>
+            <button
+              onClick={() => toggleNotify(firstVendor)}
+              disabled={orderVendors.length === 0}
+              className={`col-span-2 flex items-center justify-center py-2 transition-colors disabled:opacity-30 ${!isPending ? 'rounded-bl-2xl' : ''} ${showNotifyVendor === firstVendor ? 'bg-indigo-600 text-white' : 'text-indigo-600 hover:bg-indigo-50'}`}
+            >
+              Order
+            </button>
             <button
               onClick={() => { setEditingNote(v => !v); setNoteVal(order.admin_note ?? '') }}
               className={`flex items-center justify-center py-2 transition-colors ${order.admin_note || editingNote ? 'text-red-600 bg-red-50' : 'text-slate-500 hover:bg-red-50 hover:text-red-500'}`}
@@ -589,6 +582,13 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
               Ångra
             </button>
           </div>
+          <AnimatePresence>
+            {showNotifyVendor === firstVendor && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+                <div className="flex gap-1.5 px-2 py-1.5">{renderNotifyActions(firstVendor)}</div>
+              </motion.div>
+            )}
+          </AnimatePresence>
           {isPending && (
             <button
               onClick={() => { markAllVendorsDone(allVendorNames); handleComplete(); triggerCelebrate() }}

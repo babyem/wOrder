@@ -17,19 +17,3 @@ select cron.schedule(
   );
   $$
 );
-
--- Monday 05:00 UTC (07:00 svensk sommartid): weekly report email
-select cron.schedule(
-  'weekly-report-monday',
-  '0 5 * * 1',
-  $$
-  select net.http_post(
-    url := 'https://cjrzeoswkzenwlftsahp.supabase.co/functions/v1/weekly-report',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'Authorization', 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqcnplb3N3a3plbndsZnRzYWhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3NjkwMTIsImV4cCI6MjA5NDM0NTAxMn0.KHMSRNjvuzlCny3ciDJj2CtJTOeXKLk3u3HAijlLAEg'
-    ),
-    body := '{}'::jsonb
-  );
-  $$
-);

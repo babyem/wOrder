@@ -6,6 +6,7 @@ import type { Order, OrderWithDetails } from '../../types'
 import { useUpdateOrderStatus, useDeleteOrder, useUpdateOrderItem, useMarkVendorDone, useUpdateAdminNote } from '../../hooks/useOrders'
 import { useVendors, useUnits } from '../../hooks/useMetadata'
 import { sendEmail } from '../../lib/sendEmail'
+import { supabase } from '../../lib/supabase'
 import toast from 'react-hot-toast'
 
 interface Props {
@@ -283,45 +284,30 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
   )
   const tingstadVendorName = tingstadItems.length > 0 ? effectiveVendor(tingstadItems[0]) : null
 
+  // Queue the order for the Tampermonkey script on tingstad.com to pick up
   const handleSendToTingstad = async () => {
-    const webhookUrl = import.meta.env.VITE_N8N_TINGSTAD_WEBHOOK
-    if (!webhookUrl) { toast.error('Tingstad-webhook saknas — sätt VITE_N8N_TINGSTAD_WEBHOOK'); return }
-    const products = tingstadItems.map(i => ({
-      tingstad_id: i.product!.tingstad_id ?? null,
-      tingstad_alt_id: i.product!.tingstad_alt_id ?? null,
-      name: i.product!.name,
-      quantity: i.quantity,
-      unit: i.product!.unit ?? '',
-    }))
+    const products = tingstadItems
+      .filter(i => !isExcluded(i.id))
+      .map(i => ({
+        tingstad_id: i.product!.tingstad_id ?? null,
+        tingstad_alt_id: i.product!.tingstad_alt_id ?? null,
+        name: i.product!.name,
+        quantity: i.quantity,
+        unit: i.product!.unit ?? '',
+      }))
+    if (products.length === 0) { toast.error('Inga Tingstad-artiklar i ordern'); return }
     setSendingTingstad(true)
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 30_000)
     try {
-      const res = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location_id: order.location_id,
-          location_name: order.location?.name ?? '',
-          products,
-        }),
-        signal: controller.signal,
+      const { error } = await supabase.from('tingstad_queue').insert({
+        order_id: order.id,
+        location_name: order.location?.name ?? '',
+        products,
       })
-      clearTimeout(timeout)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      let body: unknown
-      try { body = await res.clone().json() } catch { /* not JSON, ignore */ }
-      if (body && typeof body === 'object' && ('error' in body || 'success' in body && !(body as Record<string, unknown>).success)) {
-        throw new Error(String((body as Record<string, unknown>).error ?? 'Webhook reported failure'))
-      }
+      if (error) throw error
       if (tingstadVendorName) markVendorDone(tingstadVendorName, true, allVendorNames)
-      toast.success('✓ Skickat till Tingstad', { duration: 6000 })
+      toast.success('✓ I kö — varorna läggs i Tingstad-kundvagnen', { duration: 6000 })
     } catch (err) {
-      clearTimeout(timeout)
-      const msg = err instanceof Error
-        ? (err.name === 'AbortError' ? 'Timeout — inget svar från Tingstad-flödet' : err.message)
-        : String(err)
-      toast.error(`Tingstad misslyckades: ${msg}`)
+      toast.error(`Kunde inte köa: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setSendingTingstad(false)
     }
@@ -437,7 +423,6 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
 
   // Tingstad controls — visible only when the n8n webhook is configured
   const renderTingstadControls = () => {
-    if (!import.meta.env.VITE_N8N_TINGSTAD_WEBHOOK) return null
     if (!isPending || doneVendors.has(tingstadVendorName ?? '')) return null
     return (
       <div className="mt-2">

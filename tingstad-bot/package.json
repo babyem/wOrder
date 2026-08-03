@@ -1,0 +1,13 @@
+{
+  "name": "tingstad-bot",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "login": "node bot.mjs login",
+    "watch": "node bot.mjs watch",
+    "once": "node bot.mjs once"
+  },
+  "dependencies": {
+    "playwright": "^1.45.0"
+  }
+}

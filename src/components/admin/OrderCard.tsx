@@ -58,6 +58,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
   const [editingQtyItem, setEditingQtyItem] = useState<string | null>(null)
   const [qtyDraft, setQtyDraft] = useState('')
   const [sendingChefs, setSendingChefs] = useState(false)
+  const [sendingTingstad, setSendingTingstad] = useState(false)
   const [chefsStatus, setChefsStatus] = useState<null | 'pending' | 'failed'>(
     () => (localStorage.getItem(`chefs_status_${order.id}`) as null | 'pending' | 'failed') ?? null
   )
@@ -275,6 +276,57 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
     }
   }
 
+  // ── Tingstad auto-order via n8n webhook ──
+  const isTingstadVendor = (v: string) => v.toLowerCase().includes('tingstad')
+  const tingstadItems = stableItems.filter(i =>
+    (i.product?.tingstad_id || i.product?.tingstad_alt_id) && isTingstadVendor(effectiveVendor(i))
+  )
+  const tingstadVendorName = tingstadItems.length > 0 ? effectiveVendor(tingstadItems[0]) : null
+
+  const handleSendToTingstad = async () => {
+    const webhookUrl = import.meta.env.VITE_N8N_TINGSTAD_WEBHOOK
+    if (!webhookUrl) { toast.error('Tingstad-webhook saknas — sätt VITE_N8N_TINGSTAD_WEBHOOK'); return }
+    const products = tingstadItems.map(i => ({
+      tingstad_id: i.product!.tingstad_id ?? null,
+      tingstad_alt_id: i.product!.tingstad_alt_id ?? null,
+      name: i.product!.name,
+      quantity: i.quantity,
+      unit: i.product!.unit ?? '',
+    }))
+    setSendingTingstad(true)
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 30_000)
+    try {
+      const res = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location_id: order.location_id,
+          location_name: order.location?.name ?? '',
+          products,
+        }),
+        signal: controller.signal,
+      })
+      clearTimeout(timeout)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      let body: unknown
+      try { body = await res.clone().json() } catch { /* not JSON, ignore */ }
+      if (body && typeof body === 'object' && ('error' in body || 'success' in body && !(body as Record<string, unknown>).success)) {
+        throw new Error(String((body as Record<string, unknown>).error ?? 'Webhook reported failure'))
+      }
+      if (tingstadVendorName) markVendorDone(tingstadVendorName, true, allVendorNames)
+      toast.success('✓ Skickat till Tingstad', { duration: 6000 })
+    } catch (err) {
+      clearTimeout(timeout)
+      const msg = err instanceof Error
+        ? (err.name === 'AbortError' ? 'Timeout — inget svar från Tingstad-flödet' : err.message)
+        : String(err)
+      toast.error(`Tingstad misslyckades: ${msg}`)
+    } finally {
+      setSendingTingstad(false)
+    }
+  }
+
   const isPending = order.status === 'pending'
 
   const time = new Date(order.created_at).toLocaleString([], {
@@ -382,6 +434,23 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
       })}
     </div>
   )
+
+  // Tingstad controls — visible only when the n8n webhook is configured
+  const renderTingstadControls = () => {
+    if (!import.meta.env.VITE_N8N_TINGSTAD_WEBHOOK) return null
+    if (!isPending || doneVendors.has(tingstadVendorName ?? '')) return null
+    return (
+      <div className="mt-2">
+        <button
+          onClick={handleSendToTingstad}
+          disabled={sendingTingstad}
+          className="flex w-full items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium disabled:opacity-50 transition-colors bg-orange-50 text-orange-600 hover:bg-orange-100"
+        >
+          {sendingTingstad ? <Loader2 size={12} className="animate-spin" /> : <><ShoppingBag size={12} /> Skicka till Tingstad</>}
+        </button>
+      </div>
+    )
+  }
 
   // ChefsCulinar controls — rendered inside whichever vendor card owns the CC items
   const renderChefsControls = () => (
@@ -564,6 +633,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
               {renderItems(vendorEntries[0][1])}
             </div>
             {firstVendor === chefsVendorName && renderChefsControls()}
+            {firstVendor === tingstadVendorName && renderTingstadControls()}
             <div className="flex justify-end -mb-1.5 -mr-1.5">
               <button onClick={() => copyVendor(firstVendor)} title="Kopiera beställningen"
                 className="p-1.5 rounded-lg text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
@@ -694,6 +764,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
             <div className={`p-3 ${isVendorDone ? 'opacity-40' : ''}`}>
               {renderItems(items)}
               {vendor === chefsVendorName && renderChefsControls()}
+              {vendor === tingstadVendorName && renderTingstadControls()}
             </div>
             <div className="flex justify-end px-1.5 pb-1.5 -mt-2">
               <button onClick={() => copyVendor(vendor)} title="Kopiera beställningen"

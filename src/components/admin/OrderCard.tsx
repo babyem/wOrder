@@ -423,6 +423,8 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
 
   // Tingstad controls — visible only when the n8n webhook is configured
   const renderTingstadControls = () => {
+    return null // Vilande — Tampermonkey-lösningen används tills vidare
+    // eslint-disable-next-line no-unreachable
     if (!isPending || doneVendors.has(tingstadVendorName ?? '')) return null
     return (
       <div className="mt-2">

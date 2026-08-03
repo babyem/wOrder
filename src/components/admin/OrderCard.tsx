@@ -484,7 +484,11 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
               {firstSelected ? <CheckSquare size={13} className="text-indigo-600" /> : <Square size={13} className="text-slate-400" />}
             </button>
           )}
-          <span className="ml-auto font-normal opacity-60 tabular-nums">{time}</span>
+          <span className="font-normal opacity-60 tabular-nums">{time}</span>
+          <button onClick={handleDelete} disabled={deleteOrder.isPending} title="Ta bort order"
+            className="ml-auto p-1 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-100/60 disabled:opacity-50 transition-colors">
+            <Trash2 size={13} />
+          </button>
         </div>
 
         <div className="p-3 space-y-2">
@@ -498,33 +502,6 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
                 <MapPin size={11} className="shrink-0" />
                 <span className="truncate">{order.location?.name ?? 'Unknown location'}</span>
               </div>
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <button onClick={() => { setEditingNote(v => !v); setNoteVal(order.admin_note ?? '') }} title="Admin-anteckning"
-                className={`p-1.5 rounded-lg text-xs transition-colors ${order.admin_note ? 'bg-red-100 text-red-600' : editingNote ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500'}`}>
-                <AlertCircle size={14} />
-              </button>
-              {!isMultiVendor && orderVendors.length > 0 && (
-                <button onClick={() => toggleNotify(firstVendor)} title="Notify vendor"
-                  className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors ${showNotifyVendor === firstVendor ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}>
-                  <Bell size={13} />
-                </button>
-              )}
-              {isPending ? (
-                <button onClick={() => { markAllVendorsDone(allVendorNames); handleComplete() }} disabled={updateStatus.isPending} title="Mark as done"
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors">
-                  <CheckCircle size={13} /> Done
-                </button>
-              ) : (
-                <button onClick={handleReopen} disabled={updateStatus.isPending} title="Reopen order"
-                  className="p-1.5 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200 disabled:opacity-50 transition-colors">
-                  <RotateCcw size={14} />
-                </button>
-              )}
-              <button onClick={handleDelete} disabled={deleteOrder.isPending} title="Delete order"
-                className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 disabled:opacity-50 transition-colors">
-                <Trash2 size={14} />
-              </button>
             </div>
           </div>
 
@@ -596,6 +573,41 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
             </div>
           )}
 
+        </div>
+
+        {/* Integrated action bar — part of the card background */}
+        <div className="rounded-b-2xl overflow-hidden border-t border-black/5">
+          <div className="grid grid-cols-4 divide-x divide-black/5 text-xs font-medium">
+            <button
+              onClick={() => toggleNotify(firstVendor)}
+              disabled={orderVendors.length === 0}
+              className={`col-span-2 flex items-center justify-center gap-1.5 py-2 transition-colors disabled:opacity-30 ${showNotifyVendor === firstVendor ? 'bg-indigo-600 text-white' : 'text-indigo-600 hover:bg-indigo-50'}`}
+            >
+              <Bell size={13} /> Order
+            </button>
+            <button
+              onClick={() => { setEditingNote(v => !v); setNoteVal(order.admin_note ?? '') }}
+              className={`flex items-center justify-center gap-1.5 py-2 transition-colors ${order.admin_note || editingNote ? 'text-red-600 bg-red-50' : 'text-slate-500 hover:bg-red-50 hover:text-red-500'}`}
+            >
+              <AlertCircle size={13} /> Note
+            </button>
+            <button
+              onClick={handleReopen}
+              disabled={isPending || updateStatus.isPending}
+              className="flex items-center justify-center gap-1.5 py-2 text-slate-500 hover:bg-slate-100 disabled:opacity-30 transition-colors"
+            >
+              <RotateCcw size={13} /> Ångra
+            </button>
+          </div>
+          {isPending && (
+            <button
+              onClick={() => { markAllVendorsDone(allVendorNames); handleComplete() }}
+              disabled={updateStatus.isPending}
+              className="w-full flex items-center justify-center gap-1.5 py-2 bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-colors border-t border-black/5"
+            >
+              <CheckCircle size={13} /> Done
+            </button>
+          )}
         </div>
       </div>
 

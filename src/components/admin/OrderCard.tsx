@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CheckCircle, RotateCcw, Trash2, MapPin, User, FileText, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag, AlertTriangle, AlertCircle, Copy } from 'lucide-react'
+import { CheckCircle, RotateCcw, Trash2, User, FileText, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag, AlertTriangle, AlertCircle, Copy } from 'lucide-react'
 import type { Order, OrderWithDetails } from '../../types'
 import { useUpdateOrderStatus, useDeleteOrder, useUpdateOrderItem, useMarkVendorDone, useUpdateAdminNote } from '../../hooks/useOrders'
 import { useVendors, useUnits } from '../../hooks/useMetadata'
@@ -25,6 +25,12 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
   const toggleNotify = (vendor: string) => setShowNotifyVendor(prev => prev === vendor ? null : vendor)
   const [editingNote, setEditingNote] = useState(false)
   const [noteVal, setNoteVal] = useState(order.admin_note ?? '')
+  const [celebrate, setCelebrate] = useState(false)
+
+  const triggerCelebrate = () => {
+    setCelebrate(true)
+    setTimeout(() => setCelebrate(false), 800)
+  }
 
   const saveNote = () => {
     const trimmed = noteVal.trim()
@@ -283,7 +289,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
               {item.product?.name ?? 'Deleted product'}
             </span>
             <div className="flex items-center gap-1 shrink-0">
-              <div className={`flex items-center rounded-lg px-1.5 py-0.5 gap-1 ${excluded_ ? 'bg-red-50' : 'bg-slate-100'}`}>
+              <div className={`flex items-center rounded-lg px-1.5 py-0.5 gap-1 ${excluded_ ? 'bg-red-50' : 'bg-white'}`}>
                 {editingQtyItem === item.id ? (
                   <input
                     type="number" min={1} value={qtyDraft}
@@ -449,12 +455,12 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
 
   const cardBorder = chefsOrderFailed
     ? 'border-red-400 ring-2 ring-red-100'
-    : firstSelected && !isMultiVendor ? 'border-indigo-400 ring-2 ring-indigo-100'
-    : firstSelected && isMultiVendor ? 'border-indigo-300'
+    : firstSelected ? 'border-indigo-400 ring-2 ring-indigo-100'
     : isMerged ? 'border-orange-400 ring-2 ring-orange-100'
     : isMultiVendor && isPending && doneVendors.has(firstVendor) ? 'border-emerald-400'
-    : isPending ? 'border-amber-200'
-    : 'border-emerald-200'
+    : isMultiVendor && isPending ? 'border-amber-200'
+    : isMultiVendor ? 'border-emerald-200'
+    : 'border-transparent'
   const statusBarClass = isPending ? 'text-amber-700' : 'text-emerald-700'
   const cardBg = isPending ? 'bg-[#fffaeb]' : 'bg-[#e2f6ec]'
 
@@ -498,7 +504,6 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
                 <span className="font-medium text-slate-900 truncate">{order.employee?.name ?? 'Unknown'}</span>
               </div>
               <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                <MapPin size={11} className="shrink-0" />
                 <span className="truncate">{order.location?.name ?? 'Unknown location'}</span>
               </div>
             </div>
@@ -545,7 +550,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
           </div>
 
           {order.note && (
-            <div className="flex items-start gap-2 bg-slate-50 rounded-xl p-2.5 text-xs text-slate-600">
+            <div className="flex items-start gap-2 bg-white rounded-xl p-2.5 text-xs text-slate-600">
               <FileText size={12} className="text-slate-400 mt-0.5 shrink-0" />
               {order.note}
             </div>
@@ -554,7 +559,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
         </div>
 
         {/* Integrated action bar — part of the card background */}
-        <div className="rounded-b-2xl overflow-hidden border-t border-black/5">
+        <div className="border-t border-black/5">
           <div className="grid grid-cols-4 divide-x divide-black/5 text-xs font-medium">
             <div className="col-span-2 relative">
               {showNotifyVendor === firstVendor && (
@@ -565,35 +570,59 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
               <button
                 onClick={() => toggleNotify(firstVendor)}
                 disabled={orderVendors.length === 0}
-                className={`w-full flex items-center justify-center gap-1.5 py-2 transition-colors disabled:opacity-30 ${showNotifyVendor === firstVendor ? 'bg-indigo-600 text-white' : 'text-indigo-600 hover:bg-indigo-50'}`}
+                className={`w-full flex items-center justify-center py-2 transition-colors disabled:opacity-30 ${!isPending ? 'rounded-bl-2xl' : ''} ${showNotifyVendor === firstVendor ? 'bg-indigo-600 text-white' : 'text-indigo-600 hover:bg-indigo-50'}`}
               >
-                <Bell size={13} /> Order
+                Order
               </button>
             </div>
             <button
               onClick={() => { setEditingNote(v => !v); setNoteVal(order.admin_note ?? '') }}
-              className={`flex items-center justify-center gap-1.5 py-2 transition-colors ${order.admin_note || editingNote ? 'text-red-600 bg-red-50' : 'text-slate-500 hover:bg-red-50 hover:text-red-500'}`}
+              className={`flex items-center justify-center py-2 transition-colors ${order.admin_note || editingNote ? 'text-red-600 bg-red-50' : 'text-slate-500 hover:bg-red-50 hover:text-red-500'}`}
             >
-              <AlertCircle size={13} /> Note
+              Note
             </button>
             <button
               onClick={handleReopen}
               disabled={isPending || updateStatus.isPending}
-              className="flex items-center justify-center gap-1.5 py-2 text-slate-500 hover:bg-slate-100 disabled:opacity-30 transition-colors"
+              className={`flex items-center justify-center py-2 text-slate-500 hover:bg-slate-100 disabled:opacity-30 transition-colors ${!isPending ? 'rounded-br-2xl' : ''}`}
             >
-              <RotateCcw size={13} /> Ångra
+              Ångra
             </button>
           </div>
           {isPending && (
             <button
-              onClick={() => { markAllVendorsDone(allVendorNames); handleComplete() }}
+              onClick={() => { markAllVendorsDone(allVendorNames); handleComplete(); triggerCelebrate() }}
               disabled={updateStatus.isPending}
-              className="w-full flex items-center justify-center gap-1.5 py-2 bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-colors border-t border-black/5"
+              className="w-full flex items-center justify-center py-2 rounded-b-2xl bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-colors border-t border-black/5"
             >
-              <CheckCircle size={13} /> Done
+              Done
             </button>
           )}
         </div>
+
+        {/* Confetti burst on Done */}
+        <AnimatePresence>
+          {celebrate && (
+            <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center">
+              {Array.from({ length: 14 }).map((_, i) => {
+                const angle = (i / 14) * Math.PI * 2
+                const dist = 70 + (i % 3) * 25
+                const colors = ['#10b981', '#6366f1', '#f59e0b', '#ef4444', '#3b82f6']
+                return (
+                  <motion.span
+                    key={i}
+                    initial={{ x: 0, y: 0, scale: 1, opacity: 1 }}
+                    animate={{ x: Math.cos(angle) * dist, y: Math.sin(angle) * dist, scale: 0, opacity: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.7, ease: 'easeOut' }}
+                    className="absolute w-2 h-2 rounded-full"
+                    style={{ backgroundColor: colors[i % colors.length] }}
+                  />
+                )
+              })}
+            </div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Additional vendor cards — one per extra vendor, connected by the green line */}

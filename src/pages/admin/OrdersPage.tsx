@@ -200,8 +200,8 @@ export default function OrdersPage() {
 
   // After notifying a vendor, persist done_vendors to the DB for every affected order
   // and auto-complete orders where all vendors are now done.
-  const markVendorDoneAcrossOrders = async (vendorName: string) => {
-    const affectedOrderIds = selectedPairs
+  const markVendorDoneAcrossOrders = async (vendorName: string, orderIds?: string[]) => {
+    const affectedOrderIds = orderIds ?? selectedPairs
       .filter(p => p.vendor === vendorName)
       .map(p => p.orderId)
 
@@ -233,6 +233,66 @@ export default function OrdersPage() {
     )
 
     qc.invalidateQueries({ queryKey: ['orders'] })
+  }
+
+  // ── Express: alla väntande varor per leverantör, över samtliga pending-orders ──
+  const [expressSending, setExpressSending] = useState<string | null>(null)
+
+  const expressData = useMemo(() => {
+    const itemsByVendor = new Map<string, Map<string, VendorItem[]>>() // vendor -> location -> items
+    const orderIdsByVendor = new Map<string, Set<string>>()
+    for (const order of orders ?? []) {
+      if (order.status !== 'pending') continue
+      const doneSet = new Set(order.done_vendors ?? [])
+      const loc = order.location?.name ?? 'Unknown'
+      for (const item of order.items) {
+        if (item.notify_excluded) continue
+        const v = item.vendor_override ?? item.product?.vendor
+        if (!v || doneSet.has(v)) continue
+        if (!itemsByVendor.has(v)) itemsByVendor.set(v, new Map())
+        const locMap = itemsByVendor.get(v)!
+        const list = locMap.get(loc) ?? []
+        const displayName = item.product?.vendor_name ?? item.product?.name ?? '?'
+        const unit = item.unit_override || item.product?.unit || ''
+        const artnr = item.product?.tingstad_id || item.product?.tingstad_alt_id || undefined
+        const existing = list.find(e => e.product === displayName)
+        if (existing) {
+          existing.quantity += item.quantity
+          if (!existing.unit && unit) existing.unit = unit
+        } else {
+          list.push({ product: displayName, quantity: item.quantity, unit, artnr })
+        }
+        locMap.set(loc, list)
+        if (!orderIdsByVendor.has(v)) orderIdsByVendor.set(v, new Set())
+        orderIdsByVendor.get(v)!.add(order.id)
+      }
+    }
+    return { itemsByVendor, orderIdsByVendor }
+  }, [orders])
+
+  const expressVendors = [...expressData.itemsByVendor.entries()]
+    .filter(([name]) => vendorMap[name]?.email)
+    .map(([name, locMap]) => ({
+      name,
+      email: vendorMap[name]!.email!,
+      itemCount: [...locMap.values()].reduce((n, l) => n + l.length, 0),
+      locations: [...locMap.entries()].map(([loc, items]) => ({ loc, items })),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  const handleExpress = async (vendor: typeof expressVendors[0]) => {
+    if (!window.confirm(`Skicka ALLA väntande ${vendor.name}-varor (${vendor.itemCount} st) via email?`)) return
+    setExpressSending(vendor.name)
+    try {
+      const body = buildBatchBody({ name: vendor.name, email: vendor.email, phone: undefined, locations: vendor.locations })
+      await sendEmail(vendor.email, `Order – ${vendor.name}`, body)
+      toast.success(`Email skickat till ${vendor.name}`)
+      await markVendorDoneAcrossOrders(vendor.name, [...(expressData.orderIdsByVendor.get(vendor.name) ?? [])])
+    } catch (err) {
+      toast.error(`${vendor.name}: ${err instanceof Error ? err.message : 'Failed to send'}`)
+    } finally {
+      setExpressSending(null)
+    }
   }
 
   const batchNotifiableVendors = Array.from(vendorLocItems.entries())
@@ -323,6 +383,25 @@ export default function OrdersPage() {
           <RefreshCw size={17} />
         </button>
       </div>
+
+      {/* Express — skicka alla väntande varor per leverantör */}
+      {expressVendors.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Express</span>
+          {expressVendors.map(v => (
+            <button
+              key={v.name}
+              onClick={() => handleExpress(v)}
+              disabled={expressSending !== null}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-medium text-slate-700 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 disabled:opacity-50 transition-colors"
+            >
+              {expressSending === v.name ? <Loader2 size={12} className="animate-spin" /> : <span>⚡</span>}
+              {v.name}
+              <span className="text-slate-400 tabular-nums">{v.itemCount}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Kanban board */}
       {isLoading ? (

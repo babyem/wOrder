@@ -280,14 +280,16 @@ export default function OrdersPage() {
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
 
+  const [expressModal, setExpressModal] = useState<typeof expressVendors[0] | null>(null)
+
   const handleExpress = async (vendor: typeof expressVendors[0]) => {
-    if (!window.confirm(`Skicka ALLA väntande ${vendor.name}-varor (${vendor.itemCount} st) via email?`)) return
     setExpressSending(vendor.name)
     try {
       const body = buildBatchBody({ name: vendor.name, email: vendor.email, phone: undefined, locations: vendor.locations })
       await sendEmail(vendor.email, `Order – ${vendor.name}`, body)
       toast.success(`Email skickat till ${vendor.name}`)
       await markVendorDoneAcrossOrders(vendor.name, [...(expressData.orderIdsByVendor.get(vendor.name) ?? [])])
+      setExpressModal(null)
     } catch (err) {
       toast.error(`${vendor.name}: ${err instanceof Error ? err.message : 'Failed to send'}`)
     } finally {
@@ -391,7 +393,7 @@ export default function OrdersPage() {
           {expressVendors.map(v => (
             <button
               key={v.name}
-              onClick={() => handleExpress(v)}
+              onClick={() => setExpressModal(v)}
               disabled={expressSending !== null}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-medium text-slate-700 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 disabled:opacity-50 transition-colors"
             >
@@ -525,6 +527,63 @@ export default function OrdersPage() {
                     {loc.name}
                   </button>
                 ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Express modal — samma stil som batch notify */}
+      <AnimatePresence>
+        {expressModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-end justify-center p-4 bg-black/40 backdrop-blur-sm"
+            onClick={() => setExpressModal(null)}
+          >
+            <motion.div
+              initial={{ y: 60, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 60, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="bg-white rounded-2xl p-5 w-full max-w-sm shadow-2xl space-y-3 max-h-[80vh] overflow-y-auto"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-slate-900">Express order</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Alla väntande varor</p>
+                </div>
+                <button onClick={() => setExpressModal(null)} className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors">
+                  <X size={16} className="text-slate-400" />
+                </button>
+              </div>
+              <div className="border border-slate-100 rounded-xl p-3 space-y-2">
+                <p className="text-sm font-medium text-slate-800">{expressModal.name}</p>
+                <div className="text-xs text-slate-400 space-y-2">
+                  {expressModal.locations.map(({ loc, items }) => (
+                    <div key={loc}>
+                      <p className="font-medium text-slate-500">{loc}</p>
+                      {items.map(i => (
+                        <p key={i.product}>{i.product}: {i.quantity} {i.unit}</p>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    disabled={expressSending === expressModal.name}
+                    onClick={() => handleExpress(expressModal)}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-medium hover:bg-indigo-100 disabled:opacity-50 transition-colors"
+                  >
+                    {expressSending === expressModal.name
+                      ? <Loader2 size={11} className="animate-spin" />
+                      : <Mail size={11} />}
+                    Email
+                  </button>
+                </div>
               </div>
             </motion.div>
           </motion.div>

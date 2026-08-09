@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { authedFetch } from '../lib/authedFetch'
 
 export interface RestaurantSale {
   shopId: string
@@ -9,7 +10,7 @@ export interface RestaurantSale {
 }
 
 async function fetchQoplaSales(): Promise<RestaurantSale[]> {
-  const res = await fetch('/api/qopla')
+  const res = await authedFetch('/api/qopla')
   const json = await res.json()
   if (!res.ok) throw new Error(json.error ?? 'Qopla API fel')
   return json.sales

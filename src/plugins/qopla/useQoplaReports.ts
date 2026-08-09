@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { authedFetch } from '../../lib/authedFetch'
 
 export type QoplaReportType = 'X' | 'Z'
 
@@ -73,7 +74,7 @@ async function fetchReports(opts: FetchOptions): Promise<QoplaShopReports[]> {
   })
   if (opts.shopId) params.set('shopId', opts.shopId)
 
-  const res = await fetch(`/api/qopla?${params.toString()}`)
+  const res = await authedFetch(`/api/qopla?${params.toString()}`)
   const json = await res.json()
   if (!res.ok) throw new Error(json.error ?? 'Qopla rapport-API fel')
   return json.reports

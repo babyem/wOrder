@@ -5,6 +5,7 @@
 // Credentials live server-side (DINKASSA_USERNAME/PASSWORD); see api/_lib/dinkassa.js.
 
 import { listMachines, fetchSalesOverview, bustSession } from "./_lib/dinkassa.js";
+import { requireAuth } from "./_lib/apiAuth.js";
 
 function stockholmDateStr(daysAgo = 0) {
   const today = new Intl.DateTimeFormat("sv-SE", {
@@ -20,6 +21,8 @@ function stockholmDateStr(daysAgo = 0) {
 
 export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).end();
+  // Försäljningssiffror + kassalista — kräver inloggad admin eller CRON_SECRET.
+  if (!(await requireAuth(req, res))) return;
   try {
     const action = req.query.action || "sales";
 
@@ -36,7 +39,7 @@ export default async function handler(req, res) {
 
     if (action === "machines") {
       const machines = await listMachines();
-      res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
+      res.setHeader("Cache-Control", "private, max-age=300");
       return res.status(200).json({ machines, fetchedAt: new Date().toISOString() });
     }
 
@@ -53,7 +56,7 @@ export default async function handler(req, res) {
       sales += Number(it["**TOTAL**|BELOPP"] || 0);
       orders += Number(it["**TOTAL**|ANTAL KVITTON"] || 0);
     }
-    res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
+    res.setHeader("Cache-Control", "private, max-age=300");
     return res.status(200).json({
       sales: [{ shopId: "dinkassa-chao", restaurant: "Chao", sales, orders, currency: "SEK" }],
       items,

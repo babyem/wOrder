@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
+import { authedFetch } from '../lib/authedFetch'
 
 export interface FortnoxCompany {
   id: string
@@ -163,7 +164,7 @@ export function useDinkassaMachines() {
   return useQuery({
     queryKey: ['dinkassa-machines'],
     queryFn: async (): Promise<DinkassaMachine[]> => {
-      const res = await fetch('/api/dinkassa?action=machines')
+      const res = await authedFetch('/api/dinkassa?action=machines')
       if (!res.ok) return []
       const json = await res.json()
       return json.machines ?? []
@@ -324,7 +325,7 @@ export function useDinkassaSales(daysAgo = 0, enabled = true) {
     enabled,
     queryFn: async (): Promise<{ shopId: string; restaurant: string; sales: number; orders: number }> => {
       const url = daysAgo === 1 ? '/api/dinkassa?action=sales&date=yesterday' : '/api/dinkassa?action=sales'
-      const res = await fetch(url)
+      const res = await authedFetch(url)
       const json = await res.json().catch(() => null)
       if (!json) throw new Error('dinkassa: ogiltigt svar')
       if (!res.ok) throw new Error(json.error ?? 'dinkassa misslyckades')

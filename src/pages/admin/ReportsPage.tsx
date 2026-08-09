@@ -6,6 +6,7 @@ import { useQoplaOverview, type QoplaShopOverview } from '../../plugins/qopla/us
 import { useQoplaZSum } from '../../plugins/qopla/useQoplaZSum'
 import { useQoplaHourly } from '../../plugins/qopla/useQoplaHourly'
 import toast from 'react-hot-toast'
+import { authedFetch } from '../../lib/authedFetch'
 import { usePosDailySales, useRunDinkassa, useRunAncon, useRunAnconLive, type PosDailySale } from '../../hooks/useFortnox'
 
 const dymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -299,7 +300,7 @@ interface ShopRowProps {
 }
 
 function ShopRowWithExpand({ shop, period, isExpanded, canExpand, onToggle }: ShopRowProps) {
-  const handleSie = (e: React.MouseEvent) => {
+  const handleSie = async (e: React.MouseEvent) => {
     e.stopPropagation()
     const fileName = `${safeName(shop.shopName)}_SIE${ymd(period.start)}-${ymd(period.end)}.se`
     const params = new URLSearchParams({
@@ -309,13 +310,25 @@ function ShopRowWithExpand({ shop, period, isExpanded, canExpand, onToggle }: Sh
       end: period.end.toISOString(),
       name: fileName,
     })
-    const url = `/api/qopla?${params.toString()}`
-    const a = document.createElement('a')
-    a.href = url
-    a.download = fileName
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
+    // Endpointen kräver bearer-token, så filen hämtas och sparas som blob
+    // istället för att länkas direkt (en <a href> kan inte skicka headers).
+    try {
+      const res = await authedFetch(`/api/qopla?${params.toString()}`)
+      if (!res.ok) {
+        const json = await res.json().catch(() => null)
+        throw new Error(json?.error ?? `SIE-hämtning misslyckades (${res.status})`)
+      }
+      const url = URL.createObjectURL(await res.blob())
+      const a = document.createElement('a')
+      a.href = url
+      a.download = fileName
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      toast.error((err as Error).message)
+    }
   }
 
   return (

@@ -12,6 +12,7 @@ import {
   fetchSiePayload,
   bustSession,
 } from "./_lib/qopla.js";
+import { requireAuth } from "./_lib/apiAuth.js";
 
 // Varje shop bär sitt eget bolags token/companyId (se getAllShops)
 async function fetchShopOverview({ shop, startDate, endDate }) {
@@ -268,6 +269,8 @@ async function handleSie({ shop, startDate, endDate, name, res }) {
 
 export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).end();
+  // Försäljningssiffror — kräver inloggad admin eller CRON_SECRET.
+  if (!(await requireAuth(req, res))) return;
 
   try {
     const { shops, errors } = await getAllShops();
@@ -284,7 +287,7 @@ export default async function handler(req, res) {
       const pageItems = parseInt(req.query.items || "10", 10);
       const shopId = req.query.shopId || null;
       const out = await handleReports({ shops, reportType, pageNumber, pageItems, shopId });
-      res.setHeader("Cache-Control", reportType === "Z" ? "s-maxage=600" : "s-maxage=120");
+      res.setHeader("Cache-Control", reportType === "Z" ? "private, max-age=600" : "private, max-age=120");
       return res.status(200).json({ ...out, ...meta, fetchedAt: new Date().toISOString() });
     }
 
@@ -295,7 +298,7 @@ export default async function handler(req, res) {
       if (!start || !end) return res.status(400).json({ error: "start och end (ISO) krävs" });
       const debug = req.query.debug === "1";
       const out = await handleZSum({ shops, startISO: start, endISO: end, shopId, debug });
-      res.setHeader("Cache-Control", "s-maxage=600, stale-while-revalidate=3600");
+      res.setHeader("Cache-Control", "private, max-age=600");
       return res.status(200).json({ ...out, ...meta, fetchedAt: new Date().toISOString() });
     }
 
@@ -307,7 +310,7 @@ export default async function handler(req, res) {
       }
       const out = await handleOverview({ shops, startDate: start, endDate: end });
       // Vercel edge cache + browser cache
-      res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
+      res.setHeader("Cache-Control", "private, max-age=300");
       return res.status(200).json({ ...out, ...meta, fetchedAt: new Date().toISOString() });
     }
 
@@ -322,7 +325,7 @@ export default async function handler(req, res) {
       if (!shop) return res.status(404).json({ error: `Okänd shopId: ${shopId}` });
       const includeVat = req.query.vat !== "false";
       const out = await handleHourly({ shop, startDate: start, endDate: end, includeVat });
-      res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
+      res.setHeader("Cache-Control", "private, max-age=300");
       return res.status(200).json({ ...out, ...meta, fetchedAt: new Date().toISOString() });
     }
 
@@ -341,7 +344,7 @@ export default async function handler(req, res) {
 
     const daysAgo = req.query.date === "yesterday" ? 1 : 0;
     const out = await handleSales({ shops, daysAgo });
-    res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
+    res.setHeader("Cache-Control", "private, max-age=300");
     return res.status(200).json({ ...out, ...meta, fetchedAt: new Date().toISOString() });
   } catch (err) {
     // Bust cache on auth errors so next request re-logins

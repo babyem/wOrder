@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { authedFetch } from '../../lib/authedFetch'
 import type { QoplaShopOverview } from './useQoplaOverview'
 
 interface FetchOptions {
@@ -8,7 +9,7 @@ interface FetchOptions {
 
 async function fetchZSum(opts: FetchOptions): Promise<QoplaShopOverview[]> {
   const params = new URLSearchParams({ action: 'zsum', start: opts.startISO, end: opts.endISO })
-  const res = await fetch(`/api/qopla?${params.toString()}`)
+  const res = await authedFetch(`/api/qopla?${params.toString()}`)
   const json = await res.json()
   if (!res.ok) throw new Error(json.error ?? 'Qopla zsum API fel')
   return (json.zsum as Array<{

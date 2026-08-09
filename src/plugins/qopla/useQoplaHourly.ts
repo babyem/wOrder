@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { authedFetch } from '../../lib/authedFetch'
 
 export interface QoplaHourBucket {
   hour: number      // 0–23
@@ -20,7 +21,7 @@ async function fetchHourly(opts: FetchOptions): Promise<QoplaHourBucket[]> {
     start: opts.startISO,
     end: opts.endISO,
   })
-  const res = await fetch(`/api/qopla?${params.toString()}`)
+  const res = await authedFetch(`/api/qopla?${params.toString()}`)
   const json = await res.json()
   if (!res.ok) throw new Error(json.error ?? 'Qopla timme-API fel')
   return json.hourly

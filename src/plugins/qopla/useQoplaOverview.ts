@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { authedFetch } from '../../lib/authedFetch'
 
 export interface QoplaShopOverview {
   shopId: string
@@ -19,7 +20,7 @@ async function fetchOverview(opts: FetchOptions): Promise<QoplaShopOverview[]> {
     start: opts.startISO,
     end: opts.endISO,
   })
-  const res = await fetch(`/api/qopla?${params.toString()}`)
+  const res = await authedFetch(`/api/qopla?${params.toString()}`)
   const json = await res.json()
   if (!res.ok) throw new Error(json.error ?? 'Qopla overview-API fel')
   return json.overview

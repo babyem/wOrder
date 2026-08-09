@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { useQoplaSales } from './useQoplaSales'
-import { usePosDailySales, useRunDinkassa, useRunAncon, useRunAnconLive } from '../../hooks/useFortnox'
+import { usePosDailySales, useRunDinkassa, useRunAncon, useRunAnconLive, useAnconLive } from '../../hooks/useFortnox'
 
 function stockholmDate(daysAgo: number): string {
   const s = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Stockholm', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
@@ -31,6 +31,33 @@ export function QoplaSalesWidget() {
   const latestFor = (id: string) => posSales.filter(p => p.qopla_shop_id === id)[0]
   const today = stockholmDate(0)
   const [syncingId, setSyncingId] = useState<string | null>(null)
+
+  // Woso Emporia (ancon) hämtas live som Qopla-butikerna — ingen synk-knapp behövs för idag.
+  // Igår: ingen live-endpoint, då gäller lagrad siffra från pos_daily_sales.
+  const anconShop = syncedShops.find(s => s.source === 'ancon')
+  const manualShops = syncedShops.filter(s => s.source !== 'ancon')
+  const { data: anconLive, isLoading: anconLoading, isError: anconFailed } = useAnconLive(daysAgo === 0 && !!anconShop)
+
+  // Live-siffran gäller bara om servern räknat samma dag som widgeten visar
+  const anconLiveSales = daysAgo === 0 && anconLive?.date === targetDate ? anconLive.sales : null
+  const anconStored = anconShop && hasFor(anconShop.id) ? salesFor(anconShop.id) : null
+  const anconSales = anconLiveSales ?? anconStored
+
+  const rows = [
+    ...(data ?? []).map(r => ({ id: r.shopId, name: r.restaurant, sales: r.sales as number | null, pending: false, shop: null as typeof anconShop | null })),
+    ...(anconShop
+      ? [{
+          id: anconShop.id,
+          name: anconShop.name,
+          sales: anconSales,
+          // Väntar på första live-svaret och har ingen lagrad siffra att visa under tiden
+          pending: anconSales === null && anconLoading,
+          // Live-hämtningen failade — visa manuell synk som reserv
+          shop: anconFailed ? anconShop : null,
+        }]
+      : []),
+  ]
+  const total = rows.reduce((s, r) => s + (r.sales ?? 0), 0)
 
   // ancon TODAY = server-side intraday fetch (~1-2s). Past ancon days = server-side
   // Z-report sync. dinkassa = Playwright Action (~1-2 min).
@@ -89,27 +116,47 @@ export function QoplaSalesWidget() {
 
       {data && (
         <div className="space-y-1.5">
-          {data.map(r => (
-            <div key={r.shopId} className="flex justify-between items-baseline gap-1">
-              <span className="text-xs text-slate-500 truncate">{r.restaurant}</span>
-              <span className="text-xs font-semibold text-slate-700 shrink-0">
-                {r.sales.toLocaleString('sv-SE')} kr
-              </span>
+          {rows.map(r => (
+            <div key={r.id} className="flex justify-between items-baseline gap-1">
+              <span className="text-xs text-slate-500 truncate">{r.name}</span>
+              <div className="flex items-center gap-1 shrink-0">
+                {r.pending
+                  ? <span className="h-3 w-12 bg-slate-200 rounded animate-pulse" />
+                  : r.sales === null
+                    ? <span className="text-xs text-slate-400">—</span>
+                    : <span className="text-xs font-semibold text-slate-700">
+                        {r.sales.toLocaleString('sv-SE')} kr
+                      </span>}
+                {r.shop && (
+                  <button
+                    onClick={() => syncShop(r.shop!)}
+                    disabled={syncingId === r.id}
+                    title={`Hämta ${r.name} manuellt`}
+                    className="p-0.5 rounded text-indigo-500 hover:bg-indigo-50 disabled:opacity-50 transition-colors"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={syncingId === r.id ? 'animate-spin' : ''}>
+                      <polyline points="23 4 23 10 17 10" />
+                      <polyline points="1 20 1 14 7 14" />
+                      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                    </svg>
+                  </button>
+                )}
+              </div>
             </div>
           ))}
           <div className="border-t border-slate-200 pt-1.5 mt-1.5 flex justify-between items-baseline">
             <span className="text-xs font-semibold text-slate-600">Totalt</span>
             <span className="text-xs font-bold" style={{ color: '#4f46e5' }}>
-              {data.reduce((s, r) => s + r.sales, 0).toLocaleString('sv-SE')} kr
+              {total.toLocaleString('sv-SE')} kr
             </span>
           </div>
         </div>
       )}
 
-      {/* Synced (non-live) shops: Chao (dinkassa), Woso Emporia (ancon) */}
-      {syncedShops.length > 0 && (
+      {/* Synced (non-live) shops: Chao (dinkassa). Woso Emporia ligger i listan ovan. */}
+      {manualShops.length > 0 && (
         <div className="border-t border-slate-200 mt-2 pt-2 space-y-1">
-          {syncedShops.map(shop => (
+          {manualShops.map(shop => (
             <div key={shop.id}>
               <div className="flex justify-between items-center gap-1">
                 <span className="text-xs text-slate-500 truncate flex items-center gap-1">

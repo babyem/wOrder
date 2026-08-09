@@ -293,6 +293,29 @@ export function useRunAnconLive() {
   })
 }
 
+// Ancon TODAY, hämtad automatiskt (~1-2s) — samma intervall som Qopla-försäljningen,
+// så Woso Emporia laddar av sig själv istället för att kräva ett knapptryck.
+// Servern upsertar även dagens siffra i pos_daily_sales, så historiken hålls färsk.
+export function useAnconLive(enabled = true) {
+  return useQuery({
+    queryKey: ['ancon-live'],
+    enabled,
+    queryFn: async (): Promise<{ date: string; sales: number; orders: number }> => {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) throw new Error('Ingen inloggad session')
+      const res = await fetch('/api/ancon-live', { headers: { Authorization: `Bearer ${token}` } })
+      const json = await res.json().catch(() => null)
+      if (!json) throw new Error('Ancon live: ogiltigt svar')
+      if (!res.ok) throw new Error(json.error ?? 'Ancon live misslyckades')
+      return json
+    },
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: enabled ? 5 * 60 * 1000 : false,
+    retry: 1,
+  })
+}
+
 // ---- Manual SIE-file import (dinkassa etc.) ----
 export interface ImportResult {
   posted: number

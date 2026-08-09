@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { useQoplaSales } from './useQoplaSales'
 import { usePosDailySales, useRunDinkassa, useRunAncon, useRunAnconLive, useAnconLive, useDinkassaSales } from '../../hooks/useFortnox'
@@ -17,6 +18,19 @@ export function QoplaSalesWidget() {
   const runDinkassa = useRunDinkassa()
   const runAncon = useRunAncon()
   const runAnconLive = useRunAnconLive()
+
+  // Refresh-knappen hämtar om alla tre källorna på en gång (Qopla, ancon, dinkassa)
+  // plus de lagrade siffrorna som används som reserv.
+  const qc = useQueryClient()
+  const refresh = () => {
+    for (const queryKey of [['qopla-sales'], ['ancon-live'], ['dinkassa-sales'], ['pos-daily-sales']]) {
+      qc.invalidateQueries({ queryKey })
+    }
+  }
+  // pos-daily-sales räknas inte in — den pollar var 30:e sekund och skulle snurra jämt.
+  const refreshing = useIsFetching({ queryKey: ['qopla-sales'] })
+    + useIsFetching({ queryKey: ['ancon-live'] })
+    + useIsFetching({ queryKey: ['dinkassa-sales'] })
 
   const targetDate = stockholmDate(daysAgo)
 
@@ -108,6 +122,19 @@ export function QoplaSalesWidget() {
             className={`text-[10px] px-1.5 py-0.5 rounded font-medium transition-colors ${daysAgo === 1 ? 'bg-indigo-100 text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
           >
             Igår
+          </button>
+          <button
+            onClick={refresh}
+            disabled={refreshing > 0}
+            title="Uppdatera försäljningssiffror"
+            aria-label="Uppdatera försäljningssiffror"
+            className="p-0.5 rounded text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 transition-colors"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={refreshing > 0 ? 'animate-spin' : ''}>
+              <polyline points="23 4 23 10 17 10" />
+              <polyline points="1 20 1 14 7 14" />
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+            </svg>
           </button>
         </div>
       </div>

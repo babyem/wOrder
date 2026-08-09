@@ -302,10 +302,7 @@ export function useAnconLive(enabled = true) {
     queryKey: ['ancon-live'],
     enabled,
     queryFn: async (): Promise<{ date: string; sales: number; orders: number }> => {
-      const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.access_token
-      if (!token) throw new Error('Ingen inloggad session')
-      const res = await fetch('/api/ancon-live', { headers: { Authorization: `Bearer ${token}` } })
+      const res = await authedFetch('/api/ancon-live')
       const json = await res.json().catch(() => null)
       if (!json) throw new Error('Ancon live: ogiltigt svar')
       if (!res.ok) throw new Error(json.error ?? 'Ancon live misslyckades')

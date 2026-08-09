@@ -28,9 +28,12 @@ async function authenticate() {
   const Username = cleanEnv(process.env.DINKASSA_USERNAME);
   const Password = cleanEnv(process.env.DINKASSA_PASSWORD);
   if (!Username || !Password) throw new Error("DINKASSA_USERNAME / DINKASSA_PASSWORD saknas i miljövariabler");
-  const res = await fetch(`${BASE}/session/Authenticate`, {
+  // Mirrors the web app exactly (v2 bundle: POST {BASE}/session/Authenticate?type=2 with
+  // a bare {Username, Password} body and no IntegratorId header). Dropping ?type=2 or
+  // adding the header is what the API rejects — not the credentials.
+  const res = await fetch(`${BASE}/session/Authenticate?type=2`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json", IntegratorId: INTEGRATOR_ID },
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({ Username, Password }),
   });
   const text = await res.text();

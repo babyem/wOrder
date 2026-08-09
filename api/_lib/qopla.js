@@ -175,12 +175,27 @@ export async function getSession() {
   return sessions[0];
 }
 
+// Butiker som aldrig ska visas i widget/rapporter. Filtreras på id — namn ändras i Qopla.
+// Lägg till fler via QOPLA_EXCLUDE_SHOPS="id1,id2" i Vercel.
+const EXCLUDED_SHOP_IDS = new Set([
+  "66fbe17ace927a2c900b60b2", // CHINA BOX (inaktiv)
+  "6893513750aa8008e6ad741b", // Restaurang GA
+]);
+
+function isExcluded(shopId) {
+  if (EXCLUDED_SHOP_IDS.has(shopId)) return true;
+  const extra = process.env.QOPLA_EXCLUDE_SHOPS;
+  if (!extra) return false;
+  return extra.split(",").map(s => s.trim()).filter(Boolean).includes(shopId);
+}
+
 // Alla restauranger från alla bolag, var och en med sitt eget token/companyId.
 export async function getAllShops() {
   const { sessions, errors } = await getSessions();
   const shops = [];
   for (const s of sessions) {
     for (const shop of s.shops) {
+      if (isExcluded(shop.id)) continue;
       shops.push({
         id: shop.id,
         name: shop.name,

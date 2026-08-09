@@ -77,7 +77,7 @@ async function main() {
       });
       const salesDays = ((ov && ov.Items) || [])
         .map(it => ({ date: it.Period, sales: Number(it["**TOTAL**|BELOPP"] || 0), orders: Number(it["**TOTAL**|ANTAL KVITTON"] || 0) }))
-        .filter(d => d.date);
+        .filter(d => d.date && d.date !== "**TOTAL**"); // sista raden är en periodsummering, inte en dag
       return { machines: list, salesDays };
     }, { integrator: INTEGRATOR_ID, from, to });
     machines = scraped.machines;

@@ -316,6 +316,26 @@ export function useAnconLive(enabled = true) {
   })
 }
 
+// Chao (dinkassa) — server-side sales overview, ~1s. Same idea as useAnconLive:
+// the Playwright Action is only needed for the Fortnox booking, not for reading sales.
+export function useDinkassaSales(daysAgo = 0, enabled = true) {
+  return useQuery({
+    queryKey: ['dinkassa-sales', daysAgo],
+    enabled,
+    queryFn: async (): Promise<{ shopId: string; restaurant: string; sales: number; orders: number }> => {
+      const url = daysAgo === 1 ? '/api/dinkassa?action=sales&date=yesterday' : '/api/dinkassa?action=sales'
+      const res = await fetch(url)
+      const json = await res.json().catch(() => null)
+      if (!json) throw new Error('dinkassa: ogiltigt svar')
+      if (!res.ok) throw new Error(json.error ?? 'dinkassa misslyckades')
+      return json.sales?.[0]
+    },
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: enabled && daysAgo === 0 ? 5 * 60 * 1000 : false,
+    retry: 1,
+  })
+}
+
 // ---- Manual SIE-file import (dinkassa etc.) ----
 export interface ImportResult {
   posted: number

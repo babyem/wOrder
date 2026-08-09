@@ -45,8 +45,11 @@ export default async function handler(req, res) {
     const start = req.query.start || stockholmDateStr(daysAgo);
     const end = req.query.end || start;
     const items = await fetchSalesOverview({ startDate: start, endDate: end });
+    // The report returns one row per day PLUS a Period="**TOTAL**" summary row —
+    // summing both double-counts the period. Only the day rows are added up.
     let sales = 0, orders = 0;
     for (const it of items) {
+      if (it.Period === "**TOTAL**") continue;
       sales += Number(it["**TOTAL**|BELOPP"] || 0);
       orders += Number(it["**TOTAL**|ANTAL KVITTON"] || 0);
     }

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { useQoplaSales } from './useQoplaSales'
-import { usePosDailySales, useRunDinkassa, useRunAncon, useRunAnconLive, useAnconLive } from '../../hooks/useFortnox'
+import { usePosDailySales, useRunDinkassa, useRunAncon, useRunAnconLive, useAnconLive, useDinkassaSales } from '../../hooks/useFortnox'
 
 function stockholmDate(daysAgo: number): string {
   const s = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Stockholm', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
@@ -32,30 +32,38 @@ export function QoplaSalesWidget() {
   const today = stockholmDate(0)
   const [syncingId, setSyncingId] = useState<string | null>(null)
 
-  // Woso Emporia (ancon) hämtas live som Qopla-butikerna — ingen synk-knapp behövs för idag.
-  // Igår: ingen live-endpoint, då gäller lagrad siffra från pos_daily_sales.
-  const anconShop = syncedShops.find(s => s.source === 'ancon')
-  const manualShops = syncedShops.filter(s => s.source !== 'ancon')
-  const { data: anconLive, isLoading: anconLoading, isError: anconFailed } = useAnconLive(daysAgo === 0 && !!anconShop)
+  // Woso Emporia (ancon) och Chao (dinkassa) hämtas live precis som Qopla-butikerna.
+  // Playwright-körningen behövs bara för Fortnox-bokföringen, inte för att läsa siffran.
+  type Shop = { id: string; name: string; source: string }
+  const anconShop: Shop = syncedShops.find(s => s.source === 'ancon')
+    ?? { id: 'ancon-live', name: 'Woso Emporia', source: 'ancon' }
+  const dinkassaShop: Shop = syncedShops.find(s => s.source === 'dinkassa')
+    ?? { id: 'dinkassa-chao', name: 'Chao', source: 'dinkassa' }
+  const manualShops = syncedShops.filter(s => s.source !== 'ancon' && s.source !== 'dinkassa')
 
-  // Live-siffran gäller bara om servern räknat samma dag som widgeten visar
-  const anconLiveSales = daysAgo === 0 && anconLive?.date === targetDate ? anconLive.sales : null
-  const anconStored = anconShop && hasFor(anconShop.id) ? salesFor(anconShop.id) : null
-  const anconSales = anconLiveSales ?? anconStored
+  const { data: anconLive, isLoading: anconLoading, isError: anconFailed } = useAnconLive(daysAgo === 0)
+  const { data: dinkassaLive, isLoading: dinkassaLoading, isError: dinkassaFailed } = useDinkassaSales(daysAgo)
+
+  // ancon har bara en live-endpoint för idag, och siffran gäller bara om servern
+  // räknat samma dag som widgeten visar. dinkassa klarar både idag och igår.
+  const storedFor = (shop: Shop) => (hasFor(shop.id) ? salesFor(shop.id) : null)
+  const anconSales = (daysAgo === 0 && anconLive?.date === targetDate ? anconLive.sales : null) ?? storedFor(anconShop)
+  const dinkassaSales = (dinkassaLive?.sales ?? null) ?? storedFor(dinkassaShop)
+
+  const liveRow = (shop: Shop, sales: number | null, loading: boolean, failed: boolean) => ({
+    id: shop.id,
+    name: shop.name,
+    sales,
+    // Väntar på första live-svaret och har ingen lagrad siffra att visa under tiden
+    pending: sales === null && loading,
+    // Live-hämtningen failade — visa manuell synk som reserv
+    shop: failed ? shop : null,
+  })
 
   const rows = [
-    ...(data ?? []).map(r => ({ id: r.shopId, name: r.restaurant, sales: r.sales as number | null, pending: false, shop: null as typeof anconShop | null })),
-    ...(anconShop
-      ? [{
-          id: anconShop.id,
-          name: anconShop.name,
-          sales: anconSales,
-          // Väntar på första live-svaret och har ingen lagrad siffra att visa under tiden
-          pending: anconSales === null && anconLoading,
-          // Live-hämtningen failade — visa manuell synk som reserv
-          shop: anconFailed ? anconShop : null,
-        }]
-      : []),
+    ...(data ?? []).map(r => ({ id: r.shopId, name: r.restaurant, sales: r.sales as number | null, pending: false, shop: null as Shop | null })),
+    liveRow(anconShop, anconSales, anconLoading, anconFailed),
+    liveRow(dinkassaShop, dinkassaSales, dinkassaLoading, dinkassaFailed),
   ]
   const total = rows.reduce((s, r) => s + (r.sales ?? 0), 0)
 

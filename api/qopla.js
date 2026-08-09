@@ -14,6 +14,36 @@ import {
 } from "./_lib/qopla.js";
 import { requireAuth } from "./_lib/apiAuth.js";
 
+// Tredjepartskanaler namnger sina "kassor" efter kanalen — samma mappning som Qoplas
+// analysdashboard använder för "Topp 5 försäljningskanaler".
+const CHANNEL_LABELS = { Foodora: "Foodora", UberEats: "Uber Eats", Wolt: "Wolt", Bolt: "Bolt" };
+
+// Kassor per butik ur aggregatedReport[kanal].registerCount = { id: {name, quantity, total} }.
+// Kanalens returer fördelas proportionellt mot kassornas andel av kanalens försäljning —
+// registerCount saknar returuppgift, och utan fördelningen skulle summan av kassorna
+// överstiga butikens "Försäljning inkl returer".
+function collectRegisters(report) {
+  const registers = [];
+  for (const [channel, ch] of Object.entries(report)) {
+    const rc = ch && ch.registerCount;
+    if (!rc || typeof rc !== "object") continue;
+    const gross = Object.values(rc).reduce((n, r) => n + (r.total || 0), 0);
+    const refunds = ch.refundsTotalSum || 0; // negativt
+    for (const [id, r] of Object.entries(rc)) {
+      const total = r.total || 0;
+      const share = gross > 0 ? total / gross : 0;
+      registers.push({
+        id,
+        name: CHANNEL_LABELS[channel] || r.name || id,
+        channel,
+        sales: Math.round((total + refunds * share) * 100) / 100,
+        orders: r.quantity || 0,
+      });
+    }
+  }
+  return registers.sort((a, b) => b.sales - a.sales);
+}
+
 // Varje shop bär sitt eget bolags token/companyId (se getAllShops)
 async function fetchShopOverview({ shop, startDate, endDate }) {
   const data = await fetchOverviewRaw({
@@ -31,7 +61,7 @@ async function fetchShopOverview({ shop, startDate, endDate }) {
     totalOrders += ch.quantityOfOrders || 0;
     byChannel[channel] = { sales: net, orders: ch.quantityOfOrders || 0 };
   }
-  return { totalSum, totalOrders, byChannel };
+  return { totalSum, totalOrders, byChannel, registers: collectRegisters(report) };
 }
 
 // Stockholm-timme (0–23) från unix-sekunder
@@ -70,21 +100,45 @@ async function handleHourly({ shop, startDate, endDate, includeVat = true }) {
   return { hourly };
 }
 
+// Butiker som redovisas per kassa istället för som en klump. Saigon Street kör två
+// varumärken (China box + Saigon Street) i samma butik, så totalen döljer mer än den visar.
+// Fler kan läggas till via QOPLA_SPLIT_SHOPS="id1,id2" utan deploy.
+const SPLIT_SHOP_IDS = ["6a7459c39ad02e48c527f4a1"]; // Saigon Street
+
+function splitsByRegister(shopId) {
+  const extra = (process.env.QOPLA_SPLIT_SHOPS || "").split(",").map(s => s.trim()).filter(Boolean);
+  return SPLIT_SHOP_IDS.includes(shopId) || extra.includes(shopId);
+}
+
 async function handleSales({ shops, daysAgo }) {
   const { startDate, endDate } = getDateRange(daysAgo);
-  const sales = await Promise.all(shops.map(async shop => {
+  const perShop = await Promise.all(shops.map(async shop => {
     const base = {
       shopId: shop.id, restaurant: shop.name,
       company: shop.company, companyId: shop.companyId, currency: "SEK",
     };
     try {
       const o = await fetchShopOverview({ shop, startDate, endDate });
-      return { ...base, sales: o.totalSum, orders: o.totalOrders };
+      // Utan försäljning finns inga kassor i svaret — visa butiken som vanligt då,
+      // annars skulle den försvinna helt ur listan.
+      if (splitsByRegister(shop.id) && o.registers.length > 0) {
+        return o.registers.map(r => ({
+          ...base,
+          shopId: `${shop.id}:${r.id}`,
+          restaurant: r.name,
+          registerOf: shop.id,
+          registerOfName: shop.name,
+          channel: r.channel,
+          sales: r.sales,
+          orders: r.orders,
+        }));
+      }
+      return [{ ...base, sales: o.totalSum, orders: o.totalOrders }];
     } catch {
-      return { ...base, sales: 0, orders: 0 };
+      return [{ ...base, sales: 0, orders: 0 }];
     }
   }));
-  return { sales };
+  return { sales: perShop.flat() };
 }
 
 async function handleOverview({ shops, startDate, endDate }) {
@@ -100,9 +154,10 @@ async function handleOverview({ shops, startDate, endDate }) {
         totalSales: o.totalSum,
         totalOrders: o.totalOrders,
         byChannel: o.byChannel,
+        registers: o.registers,
       };
     } catch {
-      return { ...base, totalSales: 0, totalOrders: 0, byChannel: {} };
+      return { ...base, totalSales: 0, totalOrders: 0, byChannel: {}, registers: [] };
     }
   }));
   return { overview };

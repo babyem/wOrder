@@ -6,6 +6,9 @@ export interface QoplaSaleRow {
   restaurant: string
   company: string      // QOPLA_LABEL* eller companyId
   companyId: string
+  registerOf?: string      // sätts när raden är en kassa i en uppdelad butik
+  registerOfName?: string
+  channel?: string
   sales: number
   orders: number
   currency: string

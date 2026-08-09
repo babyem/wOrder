@@ -7,6 +7,8 @@ export interface QoplaShopOverview {
   totalSales: number
   totalOrders: number
   byChannel: Record<string, { sales: number; orders: number }>
+  // Kassor i butiken, samma data som Qoplas "Topp 5 försäljningskanaler"
+  registers?: { id: string; name: string; channel: string; sales: number; orders: number }[]
 }
 
 interface FetchOptions {

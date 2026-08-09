@@ -63,11 +63,11 @@ export function stockholmHourNow() {
 }
 
 // ---------- Module-scope cache (per warm container) ----------
-let SESSION_CACHE = null; // { token, companyId, shops, expiresAt }
+let SESSIONS_CACHE = null; // { sessions: [...], errors: [...], expiresAt }
 const QR_TOKEN_CACHE = new Map(); // key=shopId -> { token, expiresAt }
 const SESSION_TTL_MS = 5 * 60 * 1000; // 5 min safe under Qopla's ttlTimeoutMs
 
-export function bustSession() { SESSION_CACHE = null; }
+export function bustSession() { SESSIONS_CACHE = null; }
 
 async function loginRaw(email, password) {
   const data = await gql(
@@ -90,26 +90,107 @@ async function getShopsRaw(companyId, token) {
   return data.getCompanyShops;
 }
 
-export async function getSession() {
-  const now = Date.now();
-  if (SESSION_CACHE && SESSION_CACHE.expiresAt > now) {
-    return SESSION_CACHE;
+// Alla konfigurerade Qopla-inloggningar.
+//   Bolag 1:   QOPLA_EMAIL / QOPLA_PASSWORD (+ QOPLA_LABEL)
+//   Bolag 2+:  QOPLA_EMAIL_2 / QOPLA_PASSWORD_2 … upp till _10
+//   Alternativ: QOPLA_ACCOUNTS = [{"email":"…","password":"…","label":"Bolag B"}, …]
+// Ordningen är stabil: QOPLA_EMAIL först (getSession() = det bolaget).
+export function getQoplaAccounts() {
+  const accounts = [];
+  const seen = new Set();
+  const add = (email, password, label) => {
+    if (!email || !password || seen.has(email)) return;
+    seen.add(email);
+    accounts.push({ email, password, label: label || null });
+  };
+
+  const suffixes = ["", ...Array.from({ length: 9 }, (_, i) => `_${i + 2}`)];
+  for (const s of suffixes) {
+    add(process.env[`QOPLA_EMAIL${s}`], process.env[`QOPLA_PASSWORD${s}`], process.env[`QOPLA_LABEL${s}`]);
   }
-  const email = process.env.QOPLA_EMAIL;
-  const password = process.env.QOPLA_PASSWORD;
-  if (!email || !password) {
-    throw new Error("QOPLA_EMAIL / QOPLA_PASSWORD saknas i miljövariabler");
+
+  if (process.env.QOPLA_ACCOUNTS) {
+    let parsed;
+    try {
+      parsed = JSON.parse(process.env.QOPLA_ACCOUNTS);
+    } catch {
+      throw new Error("QOPLA_ACCOUNTS är inte giltig JSON");
+    }
+    for (const a of parsed || []) {
+      if (!a?.email || !a?.password) throw new Error("QOPLA_ACCOUNTS: varje post kräver email och password");
+      add(a.email, a.password, a.label);
+    }
   }
-  const login = await loginRaw(email, password);
+
+  return accounts;
+}
+
+async function buildSession(account) {
+  const login = await loginRaw(account.email, account.password);
   const shops = await getShopsRaw(login.companyId, login.token);
-  const ttl = Math.min(login.ttlTimeoutMs || SESSION_TTL_MS, SESSION_TTL_MS);
-  SESSION_CACHE = {
+  return {
     token: login.token,
     companyId: login.companyId,
     shops,
-    expiresAt: now + ttl - 30_000, // 30s safety margin
+    label: account.label || null,
+    ttlTimeoutMs: login.ttlTimeoutMs,
   };
-  return SESSION_CACHE;
+}
+
+// Alla bolag. Ett bolag som failar (fel lösen, Qopla nere) stoppar inte de andra —
+// felet returneras i .errors och övriga bolag levereras ändå.
+export async function getSessions() {
+  const now = Date.now();
+  if (SESSIONS_CACHE && SESSIONS_CACHE.expiresAt > now) return SESSIONS_CACHE;
+
+  const accounts = getQoplaAccounts();
+  if (accounts.length === 0) {
+    throw new Error("QOPLA_EMAIL / QOPLA_PASSWORD saknas i miljövariabler");
+  }
+
+  const results = await Promise.all(accounts.map(async a => {
+    try { return { session: await buildSession(a) }; }
+    catch (err) { return { error: { account: a.label || a.email, message: err.message } }; }
+  }));
+
+  const sessions = results.map(r => r.session).filter(Boolean);
+  const errors = results.map(r => r.error).filter(Boolean);
+  if (sessions.length === 0) {
+    throw new Error(errors.map(e => `${e.account}: ${e.message}`).join(" | "));
+  }
+
+  const ttl = Math.min(
+    SESSION_TTL_MS,
+    ...sessions.map(s => s.ttlTimeoutMs || SESSION_TTL_MS)
+  );
+  // Kortare cache om något bolag failade — försök igen snart
+  const cacheMs = errors.length > 0 ? Math.min(ttl, 60_000) : ttl;
+  SESSIONS_CACHE = { sessions, errors, expiresAt: now + cacheMs - 30_000 };
+  return SESSIONS_CACHE;
+}
+
+// Första bolaget — bakåtkompatibelt för fortnox-sync och monthly-report.
+export async function getSession() {
+  const { sessions } = await getSessions();
+  return sessions[0];
+}
+
+// Alla restauranger från alla bolag, var och en med sitt eget token/companyId.
+export async function getAllShops() {
+  const { sessions, errors } = await getSessions();
+  const shops = [];
+  for (const s of sessions) {
+    for (const shop of s.shops) {
+      shops.push({
+        id: shop.id,
+        name: shop.name,
+        companyId: s.companyId,
+        token: s.token,
+        company: s.label || s.companyId,
+      });
+    }
+  }
+  return { shops, errors };
 }
 
 export async function getQReportToken(companyId, shopId, token) {

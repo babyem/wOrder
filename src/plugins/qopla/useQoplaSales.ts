@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 export interface QoplaSaleRow {
   shopId: string
   restaurant: string
+  company: string      // QOPLA_LABEL* eller companyId
+  companyId: string
   sales: number
   orders: number
   currency: string

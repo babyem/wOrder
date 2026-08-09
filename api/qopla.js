@@ -1,18 +1,23 @@
 // api/qopla.js — Vercel serverless function
-// Sätt QOPLA_EMAIL och QOPLA_PASSWORD i Vercel Dashboard → Settings → Environment Variables
+// Miljövariabler (Vercel Dashboard → Settings → Environment Variables):
+//   Bolag 1:  QOPLA_EMAIL / QOPLA_PASSWORD (+ QOPLA_LABEL)
+//   Bolag 2+: QOPLA_EMAIL_2 / QOPLA_PASSWORD_2 … upp till _10
 // Delad Qopla-logik (login, session, SIE) ligger i api/_lib/qopla.js.
 
 import {
   gql,
   getDateRange,
-  getSession,
+  getAllShops,
   fetchOverviewRaw,
   fetchSiePayload,
   bustSession,
 } from "./_lib/qopla.js";
 
-async function fetchShopOverview({ companyId, token, shop, startDate, endDate }) {
-  const data = await fetchOverviewRaw({ companyId, token, shopId: shop.id, startDate, endDate });
+// Varje shop bär sitt eget bolags token/companyId (se getAllShops)
+async function fetchShopOverview({ shop, startDate, endDate }) {
+  const data = await fetchOverviewRaw({
+    companyId: shop.companyId, token: shop.token, shopId: shop.id, startDate, endDate,
+  });
   const report = data.aggregatedReport || {};
   let totalSum = 0, totalOrders = 0;
   const byChannel = {};
@@ -38,8 +43,10 @@ function stockholmHourFromUnixSeconds(unixSec) {
 }
 
 // Timme-försäljning: aggregatedReport[channel].saleStatsPerHour = { [hourUnix]: { total, totalNet } }
-async function handleHourly({ companyId, token, shopId, startDate, endDate, includeVat = true }) {
-  const data = await fetchOverviewRaw({ companyId, token, shopId, startDate, endDate });
+async function handleHourly({ shop, startDate, endDate, includeVat = true }) {
+  const data = await fetchOverviewRaw({
+    companyId: shop.companyId, token: shop.token, shopId: shop.id, startDate, endDate,
+  });
   const report = data.aggregatedReport || {};
 
   // hour-of-day (0–23) -> { sales }
@@ -62,32 +69,39 @@ async function handleHourly({ companyId, token, shopId, startDate, endDate, incl
   return { hourly };
 }
 
-async function handleSales({ companyId, token, shops, daysAgo }) {
+async function handleSales({ shops, daysAgo }) {
   const { startDate, endDate } = getDateRange(daysAgo);
   const sales = await Promise.all(shops.map(async shop => {
+    const base = {
+      shopId: shop.id, restaurant: shop.name,
+      company: shop.company, companyId: shop.companyId, currency: "SEK",
+    };
     try {
-      const o = await fetchShopOverview({ companyId, token, shop, startDate, endDate });
-      return { shopId: shop.id, restaurant: shop.name, sales: o.totalSum, orders: o.totalOrders, currency: "SEK" };
+      const o = await fetchShopOverview({ shop, startDate, endDate });
+      return { ...base, sales: o.totalSum, orders: o.totalOrders };
     } catch {
-      return { shopId: shop.id, restaurant: shop.name, sales: 0, orders: 0, currency: "SEK" };
+      return { ...base, sales: 0, orders: 0 };
     }
   }));
   return { sales };
 }
 
-async function handleOverview({ companyId, token, shops, startDate, endDate }) {
+async function handleOverview({ shops, startDate, endDate }) {
   const overview = await Promise.all(shops.map(async shop => {
+    const base = {
+      shopId: shop.id, shopName: shop.name,
+      company: shop.company, companyId: shop.companyId,
+    };
     try {
-      const o = await fetchShopOverview({ companyId, token, shop, startDate, endDate });
+      const o = await fetchShopOverview({ shop, startDate, endDate });
       return {
-        shopId: shop.id,
-        shopName: shop.name,
+        ...base,
         totalSales: o.totalSum,
         totalOrders: o.totalOrders,
         byChannel: o.byChannel,
       };
     } catch {
-      return { shopId: shop.id, shopName: shop.name, totalSales: 0, totalOrders: 0, byChannel: {} };
+      return { ...base, totalSales: 0, totalOrders: 0, byChannel: {} };
     }
   }));
   return { overview };
@@ -108,7 +122,7 @@ const ZSUM_QUERY = `query getReports($shopId: String, $reportType: ReportType, $
 
 // Sum Z-reports whose period falls within [startISO, endISO].
 // Returns gross (totalSalesGross), refunds (totalRefunds), and net (totalSales = gross - refunds).
-async function handleZSum({ token, shops, startISO, endISO, shopId, debug = false }) {
+async function handleZSum({ shops, startISO, endISO, shopId, debug = false }) {
   const PAGE_SIZE = 50;
   const rangeStart = new Date(startISO);
   const rangeEnd   = new Date(endISO);
@@ -122,7 +136,7 @@ async function handleZSum({ token, shops, startISO, endISO, shopId, debug = fals
       const data = await gql(
         ZSUM_QUERY,
         { shopId: shop.id, reportType: "Z", pageNumber: page, pageItems: PAGE_SIZE },
-        token
+        shop.token
       );
       const items = data.getReports ?? [];
       if (!items.length) break;
@@ -147,6 +161,8 @@ async function handleZSum({ token, shops, startISO, endISO, shopId, debug = fals
     return {
       shopId:          shop.id,
       shopName:        shop.name,
+      company:         shop.company,
+      companyId:       shop.companyId,
       totalSales:      gross - refunds, // net — matches Qopla dashboard "Försäljning inkl returer"
       totalOrders:     orders,
       totalSalesGross: gross,
@@ -189,26 +205,26 @@ const REPORTS_QUERY = `query getReports($shopId: String, $posId: String, $report
   }
 }`;
 
-async function handleReports({ token, shops, reportType, pageNumber, pageItems, shopId }) {
+async function handleReports({ shops, reportType, pageNumber, pageItems, shopId }) {
   const targetShops = shopId
     ? shops.filter(s => s.id === shopId)
     : shops;
 
   const reports = await Promise.all(targetShops.map(async shop => {
+    const base = { shopId: shop.id, shopName: shop.name, company: shop.company, companyId: shop.companyId };
     try {
       const data = await gql(
         REPORTS_QUERY,
         { shopId: shop.id, reportType, pageNumber, pageItems },
-        token
+        shop.token
       );
       return {
-        shopId: shop.id,
-        shopName: shop.name,
+        ...base,
         totalCount: data.numberOfReports || 0,
         items: data.getReports || [],
       };
     } catch {
-      return { shopId: shop.id, shopName: shop.name, totalCount: 0, items: [] };
+      return { ...base, totalCount: 0, items: [] };
     }
   }));
   return { reports };
@@ -235,8 +251,8 @@ function buildSieFile(payload) {
   return lines.join("\r\n") + "\r\n";
 }
 
-async function handleSie({ token, shopId, startDate, endDate, name, res }) {
-  const payload = await fetchSiePayload({ token, shopId, startDate, endDate });
+async function handleSie({ shop, startDate, endDate, name, res }) {
+  const payload = await fetchSiePayload({ token: shop.token, shopId: shop.id, startDate, endDate });
   if (!payload) {
     return res.status(500).json({ error: "createSIEFileByDate returnerade tomt" });
   }
@@ -244,7 +260,7 @@ async function handleSie({ token, shopId, startDate, endDate, name, res }) {
   const text = buildSieFile(payload);
   const fileName = (name && /^[\w.\-]+$/.test(name))
     ? name
-    : `rapport-${shopId}-${(startDate || "").slice(0, 10)}.se`;
+    : `rapport-${shop.id}-${(startDate || "").slice(0, 10)}.se`;
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
   return res.status(200).send(text);
@@ -254,8 +270,10 @@ export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).end();
 
   try {
-    const { token, companyId, shops } = await getSession();
+    const { shops, errors } = await getAllShops();
     const action = req.query.action || "sales";
+    // Bolag som inte kunde loggas in — skickas med så frontend kan visa varning
+    const meta = errors.length > 0 ? { errors } : {};
 
     if (action === "reports") {
       const reportType = (req.query.reportType || "X").toUpperCase();
@@ -265,9 +283,9 @@ export default async function handler(req, res) {
       const pageNumber = parseInt(req.query.page || "1", 10);
       const pageItems = parseInt(req.query.items || "10", 10);
       const shopId = req.query.shopId || null;
-      const out = await handleReports({ token, shops, reportType, pageNumber, pageItems, shopId });
+      const out = await handleReports({ shops, reportType, pageNumber, pageItems, shopId });
       res.setHeader("Cache-Control", reportType === "Z" ? "s-maxage=600" : "s-maxage=120");
-      return res.status(200).json({ ...out, fetchedAt: new Date().toISOString() });
+      return res.status(200).json({ ...out, ...meta, fetchedAt: new Date().toISOString() });
     }
 
     if (action === "zsum") {
@@ -276,9 +294,9 @@ export default async function handler(req, res) {
       const shopId = req.query.shopId || null;
       if (!start || !end) return res.status(400).json({ error: "start och end (ISO) krävs" });
       const debug = req.query.debug === "1";
-      const out = await handleZSum({ token, shops, startISO: start, endISO: end, shopId, debug });
+      const out = await handleZSum({ shops, startISO: start, endISO: end, shopId, debug });
       res.setHeader("Cache-Control", "s-maxage=600, stale-while-revalidate=3600");
-      return res.status(200).json({ ...out, fetchedAt: new Date().toISOString() });
+      return res.status(200).json({ ...out, ...meta, fetchedAt: new Date().toISOString() });
     }
 
     if (action === "overview") {
@@ -287,10 +305,10 @@ export default async function handler(req, res) {
       if (!start || !end) {
         return res.status(400).json({ error: "start och end (ISO) krävs" });
       }
-      const out = await handleOverview({ companyId, token, shops, startDate: start, endDate: end });
+      const out = await handleOverview({ shops, startDate: start, endDate: end });
       // Vercel edge cache + browser cache
       res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
-      return res.status(200).json({ ...out, fetchedAt: new Date().toISOString() });
+      return res.status(200).json({ ...out, ...meta, fetchedAt: new Date().toISOString() });
     }
 
     if (action === "hourly") {
@@ -300,10 +318,12 @@ export default async function handler(req, res) {
       if (!shopId || !start || !end) {
         return res.status(400).json({ error: "shopId, start och end krävs" });
       }
+      const shop = shops.find(s => s.id === shopId);
+      if (!shop) return res.status(404).json({ error: `Okänd shopId: ${shopId}` });
       const includeVat = req.query.vat !== "false";
-      const out = await handleHourly({ companyId, token, shopId, startDate: start, endDate: end, includeVat });
+      const out = await handleHourly({ shop, startDate: start, endDate: end, includeVat });
       res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
-      return res.status(200).json({ ...out, fetchedAt: new Date().toISOString() });
+      return res.status(200).json({ ...out, ...meta, fetchedAt: new Date().toISOString() });
     }
 
     if (action === "sie") {
@@ -314,13 +334,15 @@ export default async function handler(req, res) {
       if (!shopId || !start || !end) {
         return res.status(400).json({ error: "shopId, start och end krävs" });
       }
-      return await handleSie({ token, shopId, startDate: start, endDate: end, name, res });
+      const shop = shops.find(s => s.id === shopId);
+      if (!shop) return res.status(404).json({ error: `Okänd shopId: ${shopId}` });
+      return await handleSie({ shop, startDate: start, endDate: end, name, res });
     }
 
     const daysAgo = req.query.date === "yesterday" ? 1 : 0;
-    const out = await handleSales({ companyId, token, shops, daysAgo });
+    const out = await handleSales({ shops, daysAgo });
     res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
-    return res.status(200).json({ ...out, fetchedAt: new Date().toISOString() });
+    return res.status(200).json({ ...out, ...meta, fetchedAt: new Date().toISOString() });
   } catch (err) {
     // Bust cache on auth errors so next request re-logins
     if (/token|auth|login/i.test(err.message)) bustSession();

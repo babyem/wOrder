@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Search, RefreshCw, GitMerge, Bell, X, Mail, Phone, GripVertical, Loader2, ZoomIn, ZoomOut } from 'lucide-react'
 import { useOrders, useMergeOrders } from '../../hooks/useOrders'
-import { useLocations } from '../../hooks/useLocations'
+import { useLocations, useReorderLocations } from '../../hooks/useLocations'
 import { useVendors } from '../../hooks/useMetadata'
 import OrderCard from '../../components/admin/OrderCard'
 import Spinner from '../../components/ui/Spinner'
@@ -71,9 +71,6 @@ export default function OrdersPage() {
   const [showBatchNotify, setShowBatchNotify] = useState(false)
   const [showMergePicker, setShowMergePicker] = useState(false)
   const [batchSending, setBatchSending] = useState<string | null>(null)
-  const [columnOrder, setColumnOrder] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem('orders-column-order') ?? '[]') } catch { return [] }
-  })
   const [zoom, setZoom] = useState<number>(() => {
     const raw = parseFloat(localStorage.getItem('orders-zoom') ?? '1')
     return Number.isFinite(raw) && raw >= 0.5 && raw <= 1.5 ? raw : 1
@@ -99,25 +96,19 @@ export default function OrdersPage() {
   const { data: locations } = useLocations()
   const { data: vendorList } = useVendors()
   const mergeOrders = useMergeOrders()
+  const reorderLocations = useReorderLocations()
 
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
-  const sortedLocations = useMemo(() => {
-    if (!locations) return []
-    const locMap = Object.fromEntries(locations.map(l => [l.id, l]))
-    const ordered = columnOrder.filter(id => locMap[id]).map(id => locMap[id])
-    const rest = locations.filter(l => !columnOrder.includes(l.id))
-    return [...ordered, ...rest]
-  }, [locations, columnOrder])
+  const sortedLocations = locations ?? []
 
   const handleColumnDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
     if (!over || active.id === over.id) return
     const ids = sortedLocations.map(l => l.id)
     const newOrder = arrayMove(ids, ids.indexOf(active.id as string), ids.indexOf(over.id as string))
-    setColumnOrder(newOrder)
-    localStorage.setItem('orders-column-order', JSON.stringify(newOrder))
+    reorderLocations.mutate(newOrder)
   }
 
   useEffect(() => {

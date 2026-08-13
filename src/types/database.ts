@@ -35,6 +35,7 @@ export interface Location {
   name: string
   created_at: string
   chefsculinar_customer_id: string | null
+  sort_order: number
 }
 
 export interface Employee {

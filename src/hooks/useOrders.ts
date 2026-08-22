@@ -162,7 +162,10 @@ export function useDeleteOrder() {
         throw error
       }
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['orders'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['orders'] })
+      qc.invalidateQueries({ queryKey: ['deleted-orders'] })
+    },
   })
 }
 
@@ -173,8 +176,37 @@ export function useRestoreOrder() {
       const { error } = await supabase.from('orders').update({ deleted_at: null }).eq('id', id)
       if (error) throw error
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['orders'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['orders'] })
+      qc.invalidateQueries({ queryKey: ['deleted-orders'] })
+    },
     onError: (err: Error) => toast.error(`Kunde inte återställa ordern: ${err.message}`),
+  })
+}
+
+// The papperskorg log — most recently removed first
+export function useDeletedOrders(enabled = true) {
+  return useQuery({
+    queryKey: ['deleted-orders'],
+    enabled,
+    queryFn: async (): Promise<OrderWithDetails[]> => {
+      const { data, error } = await supabase
+        .from('orders')
+        .select(`
+          *,
+          location:locations(*),
+          employee:employees(*),
+          items:order_items(*, product:products(*))
+        `)
+        .not('deleted_at', 'is', null)
+        .order('deleted_at', { ascending: false })
+        .limit(50)
+      if (error) {
+        if (missingDeletedAt(error)) throw new Error(MIGRATION_HINT)
+        throw error
+      }
+      return data as OrderWithDetails[]
+    },
   })
 }
 

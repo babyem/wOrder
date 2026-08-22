@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Search, RefreshCw, GitMerge, Bell, X, Mail, Phone, GripVertical, Loader2, ZoomIn, ZoomOut } from 'lucide-react'
-import { useOrders, useMergeOrders } from '../../hooks/useOrders'
+import { Search, RefreshCw, GitMerge, Bell, X, Mail, Phone, GripVertical, Loader2, ZoomIn, ZoomOut, Trash2, Undo2 } from 'lucide-react'
+import { useOrders, useMergeOrders, useDeletedOrders, useRestoreOrder } from '../../hooks/useOrders'
 import { useLocations, useReorderLocations } from '../../hooks/useLocations'
 import { useVendors } from '../../hooks/useMetadata'
 import OrderCard from '../../components/admin/OrderCard'
 import Spinner from '../../components/ui/Spinner'
+import Modal from '../../components/ui/Modal'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
@@ -20,6 +21,11 @@ import {
   SortableContext, useSortable, horizontalListSortingStrategy, arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+
+const formatStamp = (iso: string | null | undefined) =>
+  iso
+    ? new Date(iso).toLocaleString('sv-SE', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : '–'
 
 function SortableColumn({
   loc,
@@ -70,6 +76,7 @@ export default function OrdersPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [showBatchNotify, setShowBatchNotify] = useState(false)
   const [showMergePicker, setShowMergePicker] = useState(false)
+  const [showTrash, setShowTrash] = useState(false)
   const [batchSending, setBatchSending] = useState<string | null>(null)
   const [zoom, setZoom] = useState<number>(() => {
     const raw = parseFloat(localStorage.getItem('orders-zoom') ?? '1')
@@ -97,6 +104,8 @@ export default function OrdersPage() {
   const { data: vendorList } = useVendors()
   const mergeOrders = useMergeOrders()
   const reorderLocations = useReorderLocations()
+  const { data: deletedOrders, isLoading: trashLoading, error: trashError } = useDeletedOrders(showTrash)
+  const restoreOrder = useRestoreOrder()
 
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
@@ -309,6 +318,15 @@ export default function OrdersPage() {
       .join('\n\n')
   }
 
+  const handleRestore = async (id: string) => {
+    try {
+      await restoreOrder.mutateAsync(id)
+      toast.success('Order återställd')
+    } catch {
+      // useRestoreOrder already toasts the error
+    }
+  }
+
   const handleMerge = async (targetLocationId?: string) => {
     const toMerge = selectedOrders as OrderWithDetails[]
     if (toMerge.length < 2) return
@@ -369,6 +387,13 @@ export default function OrdersPage() {
             <ZoomIn size={15} />
           </button>
         </div>
+        <button
+          onClick={() => setShowTrash(true)}
+          title="Borttagna ordrar"
+          className="p-2 rounded-xl hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-700"
+        >
+          <Trash2 size={17} />
+        </button>
         <button
           onClick={() => refetch()}
           className="p-2 rounded-xl hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-700"
@@ -482,6 +507,41 @@ export default function OrdersPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Papperskorg — borttagna ordrar med återställning */}
+      <Modal open={showTrash} onClose={() => setShowTrash(false)} title="Borttagna ordrar" maxWidth="max-w-xl">
+        {trashLoading ? (
+          <div className="flex justify-center py-8"><Spinner size={24} /></div>
+        ) : trashError ? (
+          <p className="text-sm text-red-600">{trashError instanceof Error ? trashError.message : 'Kunde inte hämta borttagna ordrar'}</p>
+        ) : !deletedOrders?.length ? (
+          <p className="text-sm text-slate-400 py-4 text-center">Inga borttagna ordrar.</p>
+        ) : (
+          <div className="space-y-2 max-h-[60vh] overflow-y-auto -mx-1 px-1">
+            {deletedOrders.map(o => (
+              <div key={o.id} className="flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-slate-800 truncate">
+                    {o.location?.name ?? 'Okänd butik'}
+                    <span className="text-slate-400 font-normal"> · {o.employee?.name ?? 'Okänd'}</span>
+                  </p>
+                  <p className="text-xs text-slate-400 tabular-nums">
+                    {o.items.length} varor · lagd {formatStamp(o.created_at)} · borttagen {formatStamp(o.deleted_at)}
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleRestore(o.id)}
+                  disabled={restoreOrder.isPending}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 text-white text-xs font-medium hover:bg-slate-700 disabled:opacity-50 transition-colors shrink-0"
+                >
+                  <Undo2 size={12} />
+                  Återställ
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
 
       {/* Merge target picker — choose which location receives the merged order */}
       <AnimatePresence>

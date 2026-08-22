@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CheckCircle, RotateCcw, Trash2, User, FileText, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag, AlertTriangle, AlertCircle, Copy } from 'lucide-react'
 import type { Order, OrderWithDetails } from '../../types'
-import { useUpdateOrderStatus, useDeleteOrder, useUpdateOrderItem, useMarkVendorDone, useUpdateAdminNote } from '../../hooks/useOrders'
+import { useUpdateOrderStatus, useDeleteOrder, useRestoreOrder, useUpdateOrderItem, useMarkVendorDone, useUpdateAdminNote } from '../../hooks/useOrders'
 import { useVendors, useUnits } from '../../hooks/useMetadata'
 import { sendEmail } from '../../lib/sendEmail'
 import { supabase } from '../../lib/supabase'
@@ -18,6 +18,7 @@ interface Props {
 export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
   const updateStatus = useUpdateOrderStatus()
   const deleteOrder = useDeleteOrder()
+  const restoreOrder = useRestoreOrder()
   const updateAdminNote = useUpdateAdminNote()
   const { data: vendorList } = useVendors()
   const updateOrderItem = useUpdateOrderItem()
@@ -191,9 +192,22 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
   const handleDelete = async () => {
     try {
       await deleteOrder.mutateAsync(order.id)
-      toast.success('Order deleted')
-    } catch {
-      toast.error('Failed to delete order')
+      toast.success(t => (
+        <span className="flex items-center gap-3">
+          Order borttagen
+          <button
+            onClick={() => {
+              toast.dismiss(t.id)
+              restoreOrder.mutate(order.id)
+            }}
+            className="px-2 py-0.5 rounded-lg bg-slate-800 text-white text-xs font-medium hover:bg-slate-700"
+          >
+            Ångra
+          </button>
+        </span>
+      ), { duration: 8000 })
+    } catch (err) {
+      toast.error(`Kunde inte ta bort ordern: ${err instanceof Error ? err.message : 'okänt fel'}`)
     }
   }
 

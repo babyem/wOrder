@@ -13,6 +13,7 @@ serve(async () => {
       .from('orders')
       .select('id, created_at, location:locations(name)')
       .eq('status', 'pending')
+      .is('deleted_at', null)
 
     if (!pending || pending.length === 0) return new Response('no pending', { status: 200 })
 

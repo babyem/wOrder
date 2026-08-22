@@ -8,17 +8,26 @@ function useLocationOrders(locationId: string) {
   return useQuery({
     queryKey: ['location-orders', locationId],
     queryFn: async (): Promise<OrderWithDetails[]> => {
-      const { data, error } = await supabase
-        .from('orders')
-        .select(`
-          *,
-          location:locations(*),
-          employee:employees(*),
-          items:order_items(*, product:products(*))
-        `)
-        .eq('location_id', locationId)
-        .order('created_at', { ascending: false })
-        .limit(10)
+      const build = (hideDeleted: boolean) => {
+        const query = supabase
+          .from('orders')
+          .select(`
+            *,
+            location:locations(*),
+            employee:employees(*),
+            items:order_items(*, product:products(*))
+          `)
+          .eq('location_id', locationId)
+          .order('created_at', { ascending: false })
+          .limit(10)
+        return hideDeleted ? query.is('deleted_at', null) : query
+      }
+
+      // Fall back to the unfiltered query if migration 027 hasn't been run yet
+      let { data, error } = await build(true)
+      if (error?.message?.includes('deleted_at')) {
+        ({ data, error } = await build(false))
+      }
       if (error) throw error
       return data as OrderWithDetails[]
     },

@@ -3,31 +3,46 @@ import { supabase } from '../lib/supabase'
 import toast from 'react-hot-toast'
 import type { OrderWithDetails, CartItem } from '../types'
 
+const MIGRATION_HINT = 'kolumnen deleted_at saknas — kör migration 027 i Supabase SQL editor'
+
+const missingDeletedAt = (error: { message?: string; code?: string }) =>
+  !!error.message?.includes('deleted_at')
+
 export function useOrders(filters?: { locationId?: string; status?: string; search?: string; fromDate?: string }) {
   return useQuery({
     queryKey: ['orders', filters],
     queryFn: async (): Promise<OrderWithDetails[]> => {
-      let query = supabase
-        .from('orders')
-        .select(`
-          *,
-          location:locations(*),
-          employee:employees(*),
-          items:order_items(*, product:products(*))
-        `)
-        .order('created_at', { ascending: false })
+      const build = (hideDeleted: boolean) => {
+        let query = supabase
+          .from('orders')
+          .select(`
+            *,
+            location:locations(*),
+            employee:employees(*),
+            items:order_items(*, product:products(*))
+          `)
+          .order('created_at', { ascending: false })
 
-      if (filters?.locationId) {
-        query = query.eq('location_id', filters.locationId)
-      }
-      if (filters?.status && filters.status !== 'all') {
-        query = query.eq('status', filters.status)
-      }
-      if (filters?.fromDate) {
-        query = query.gte('created_at', filters.fromDate)
+        if (hideDeleted) {
+          query = query.is('deleted_at', null)
+        }
+        if (filters?.locationId) {
+          query = query.eq('location_id', filters.locationId)
+        }
+        if (filters?.status && filters.status !== 'all') {
+          query = query.eq('status', filters.status)
+        }
+        if (filters?.fromDate) {
+          query = query.gte('created_at', filters.fromDate)
+        }
+        return query
       }
 
-      const { data, error } = await query
+      // Fall back to the unfiltered query if migration 027 hasn't been run yet
+      let { data, error } = await build(true)
+      if (error && missingDeletedAt(error)) {
+        ({ data, error } = await build(false))
+      }
       if (error) throw error
 
       let result = data as OrderWithDetails[]
@@ -136,14 +151,30 @@ export function useUpdateAdminNote() {
   })
 }
 
+// Soft delete — the row stays so the removal can be undone (migration 027)
 export function useDeleteOrder() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('orders').delete().eq('id', id)
+      const { error } = await supabase.from('orders').update({ deleted_at: new Date().toISOString() }).eq('id', id)
+      if (error) {
+        if (missingDeletedAt(error)) throw new Error(MIGRATION_HINT)
+        throw error
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['orders'] }),
+  })
+}
+
+export function useRestoreOrder() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('orders').update({ deleted_at: null }).eq('id', id)
       if (error) throw error
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['orders'] }),
+    onError: (err: Error) => toast.error(`Kunde inte återställa ordern: ${err.message}`),
   })
 }
 

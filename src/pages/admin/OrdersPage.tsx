@@ -270,13 +270,17 @@ export default function OrdersPage() {
     return { itemsByVendor, orderIdsByVendor }
   }, [orders])
 
+  // Same restaurant order as the kanban columns
+  const locationRank = Object.fromEntries(sortedLocations.map((l, i) => [l.name, i]))
   const expressVendors = [...expressData.itemsByVendor.entries()]
     .filter(([name]) => vendorMap[name]?.email)
     .map(([name, locMap]) => ({
       name,
       email: vendorMap[name]!.email!,
       itemCount: [...locMap.values()].reduce((n, l) => n + l.length, 0),
-      locations: [...locMap.entries()].map(([loc, items]) => ({ loc, items })),
+      locations: [...locMap.entries()]
+        .map(([loc, items]) => ({ loc, items }))
+        .sort((a, b) => (locationRank[a.loc] ?? 999) - (locationRank[b.loc] ?? 999)),
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
 

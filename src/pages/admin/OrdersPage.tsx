@@ -270,30 +270,71 @@ export default function OrdersPage() {
     return { itemsByVendor, orderIdsByVendor }
   }, [orders])
 
+  // Vissa leverantörer beställer för flera butiker under ett och samma namn.
+  // Kho: Izakai Emporia går ihop med Woso Emporia, Lets Grab med Woso Triangeln.
+  const EXPRESS_LOCATION_MERGE: Record<string, Record<string, string>> = {
+    kho: {
+      'izakai emporia': 'Woso Emporia',
+      'lets grab': 'Woso Triangeln',
+    },
+  }
+
+  // Slår ihop butiker enligt reglerna ovan och summerar identiska produkter.
+  const mergeExpressLocations = (vendorName: string, locMap: Map<string, VendorItem[]>) => {
+    const rules = EXPRESS_LOCATION_MERGE[vendorName.trim().toLowerCase()]
+    if (!rules) return locMap
+    const merged = new Map<string, VendorItem[]>()
+    for (const [loc, items] of locMap) {
+      const target = rules[loc.trim().toLowerCase()] ?? loc
+      const list = merged.get(target) ?? []
+      for (const item of items) {
+        const existing = list.find(e => e.product === item.product)
+        if (existing) {
+          existing.quantity += item.quantity
+          if (!existing.unit && item.unit) existing.unit = item.unit
+          if (!existing.artnr && item.artnr) existing.artnr = item.artnr
+        } else {
+          // Kopia — expressData är memoiserad och får inte muteras
+          list.push({ ...item })
+        }
+      }
+      merged.set(target, list)
+    }
+    return merged
+  }
+
   // Same restaurant order as the kanban columns
   const locationRank = Object.fromEntries(sortedLocations.map((l, i) => [l.name, i]))
   const expressVendors = [...expressData.itemsByVendor.entries()]
-    .filter(([name]) => vendorMap[name]?.email)
-    .map(([name, locMap]) => ({
-      name,
-      email: vendorMap[name]!.email!,
-      itemCount: [...locMap.values()].reduce((n, l) => n + l.length, 0),
-      locations: [...locMap.entries()]
-        .map(([loc, items]) => ({ loc, items }))
-        .sort((a, b) => (locationRank[a.loc] ?? 999) - (locationRank[b.loc] ?? 999)),
-    }))
+    .filter(([name]) => vendorMap[name]?.email || vendorMap[name]?.phone)
+    .map(([name, rawLocMap]) => {
+      const locMap = mergeExpressLocations(name, rawLocMap)
+      return {
+        name,
+        email: vendorMap[name]?.email ?? undefined,
+        phone: vendorMap[name]?.phone ?? undefined,
+        itemCount: [...locMap.values()].reduce((n, l) => n + l.length, 0),
+        locations: [...locMap.entries()]
+          .map(([loc, items]) => ({ loc, items }))
+          .sort((a, b) => (locationRank[a.loc] ?? 999) - (locationRank[b.loc] ?? 999)),
+      }
+    })
     .sort((a, b) => a.name.localeCompare(b.name))
 
-  const [expressModal, setExpressModal] = useState<typeof expressVendors[0] | null>(null)
+  // Håll bara namnet i state och slå upp vendorn live — annars visar en öppen
+  // modal gammal data när ordrarna (eller koden) uppdateras under tiden.
+  const [expressModalVendor, setExpressModalVendor] = useState<string | null>(null)
+  const expressModal = expressVendors.find(v => v.name === expressModalVendor) ?? null
 
   const handleExpress = async (vendor: typeof expressVendors[0]) => {
+    if (!vendor.email) return
     setExpressSending(vendor.name)
     try {
-      const body = buildBatchBody({ name: vendor.name, email: vendor.email, phone: undefined, locations: vendor.locations })
+      const body = buildBatchBody({ name: vendor.name, email: vendor.email, phone: vendor.phone, locations: vendor.locations })
       await sendEmail(vendor.email, `Order – ${vendor.name}`, body)
       toast.success(`Email skickat till ${vendor.name}`)
       await markVendorDoneAcrossOrders(vendor.name, [...(expressData.orderIdsByVendor.get(vendor.name) ?? [])])
-      setExpressModal(null)
+      setExpressModalVendor(null)
     } catch (err) {
       toast.error(`${vendor.name}: ${err instanceof Error ? err.message : 'Failed to send'}`)
     } finally {
@@ -413,7 +454,7 @@ export default function OrdersPage() {
           {expressVendors.map(v => (
             <button
               key={v.name}
-              onClick={() => setExpressModal(v)}
+              onClick={() => setExpressModalVendor(v.name)}
               disabled={expressSending !== null}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-medium text-slate-700 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 disabled:opacity-50 transition-colors"
             >
@@ -596,7 +637,7 @@ export default function OrdersPage() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-end justify-center p-4 bg-black/40 backdrop-blur-sm"
-            onClick={() => setExpressModal(null)}
+            onClick={() => setExpressModalVendor(null)}
           >
             <motion.div
               initial={{ y: 60, opacity: 0 }}
@@ -611,7 +652,7 @@ export default function OrdersPage() {
                   <p className="font-semibold text-slate-900">Express order</p>
                   <p className="text-xs text-slate-400 mt-0.5">Alla väntande varor</p>
                 </div>
-                <button onClick={() => setExpressModal(null)} className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors">
+                <button onClick={() => setExpressModalVendor(null)} className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors">
                   <X size={16} className="text-slate-400" />
                 </button>
               </div>
@@ -628,16 +669,33 @@ export default function OrdersPage() {
                   ))}
                 </div>
                 <div className="flex gap-2 pt-1">
-                  <button
-                    disabled={expressSending === expressModal.name}
-                    onClick={() => handleExpress(expressModal)}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-medium hover:bg-indigo-100 disabled:opacity-50 transition-colors"
-                  >
-                    {expressSending === expressModal.name
-                      ? <Loader2 size={11} className="animate-spin" />
-                      : <Mail size={11} />}
-                    Email
-                  </button>
+                  {expressModal.email && (
+                    <button
+                      disabled={expressSending === expressModal.name}
+                      onClick={() => handleExpress(expressModal)}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-medium hover:bg-indigo-100 disabled:opacity-50 transition-colors"
+                    >
+                      {expressSending === expressModal.name
+                        ? <Loader2 size={11} className="animate-spin" />
+                        : <Mail size={11} />}
+                      Email
+                    </button>
+                  )}
+                  {expressModal.phone && (
+                    <a
+                      href={`sms:${expressModal.phone}?body=${encodeURIComponent(buildBatchBody(expressModal))}`}
+                      onClick={() => {
+                        markVendorDoneAcrossOrders(
+                          expressModal.name,
+                          [...(expressData.orderIdsByVendor.get(expressModal.name) ?? [])],
+                        )
+                        setExpressModalVendor(null)
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 transition-colors"
+                    >
+                      <Phone size={11} /> SMS
+                    </a>
+                  )}
                 </div>
               </div>
             </motion.div>

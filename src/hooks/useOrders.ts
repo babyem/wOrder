@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tansta
 import { supabase } from '../lib/supabase'
 import toast from 'react-hot-toast'
 import type { OrderWithDetails, CartItem } from '../types'
+import { planMergedOrder } from '../lib/mergeOrders'
 
 const MIGRATION_HINT = 'kolumnen deleted_at saknas — kör migration 027 i Supabase SQL editor'
 
@@ -106,6 +107,10 @@ export function useSubmitNoOrder() {
         .from('orders')
         .insert({ location_id: locationId, employee_id: employeeId, status: 'pending', no_order_vendor: vendor })
       if (error) {
+        // Unikt index per butik/leverantör/dag (migration 030)
+        if (error.code === '23505') {
+          throw new Error(`Backoffice har redan fått besked om ${vendor} idag`)
+        }
         if (error.message?.includes('no_order_vendor')) {
           throw new Error('kolumnen no_order_vendor saknas — kör migration 028 i Supabase SQL editor')
         }
@@ -237,47 +242,28 @@ export function useMergeOrders() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({ orders, targetLocationId }: { orders: OrderWithDetails[]; targetLocationId?: string }) => {
-      const locId = targetLocationId ?? orders[0].location_id
-      // Prefer employee from an order belonging to the target location
-      const base = orders.find(o => o.location_id === locId) ?? orders[0]
+      // Ren beräkning i src/lib/mergeOrders.ts (testad)
+      const plan = planMergedOrder(orders, targetLocationId)
 
-      // Sum quantities per product across all orders
-      const merged = new Map<string, number>()
-      for (const order of orders) {
-        for (const item of order.items) {
-          merged.set(item.product_id, (merged.get(item.product_id) ?? 0) + item.quantity)
-        }
-      }
-
-      const notes = orders.map(o => o.note).filter(Boolean)
-
-      // Try with is_merged flag; fall back without it if column doesn't exist yet (migration 010)
-      let newOrderResult = await supabase
+      const { data: newOrder, error: orderErr } = await supabase
         .from('orders')
-        .insert({ location_id: locId, employee_id: base.employee_id, status: 'pending', note: notes.length ? notes.join(' | ') : null, is_merged: true })
+        .insert({ location_id: plan.locationId, employee_id: plan.employeeId, status: 'pending', note: plan.note, is_merged: true })
         .select().single()
-      if (newOrderResult.error?.message?.includes('is_merged')) {
-        newOrderResult = await supabase
-          .from('orders')
-          .insert({ location_id: locId, employee_id: base.employee_id, status: 'pending', note: notes.length ? notes.join(' | ') : null })
-          .select().single()
-      }
-      if (newOrderResult.error) throw newOrderResult.error
-      const newOrder = newOrderResult.data
+      if (orderErr) throw orderErr
 
       const { error: itemsErr } = await supabase.from('order_items').insert(
-        Array.from(merged.entries()).map(([product_id, quantity]) => ({
-          order_id: newOrder.id,
-          product_id,
-          quantity,
-        }))
+        plan.items.map(i => ({ order_id: newOrder.id, ...i }))
       )
       if (itemsErr) throw itemsErr
 
-      // Delete originals — items first in case no cascade
+      // Originalen soft-deletas så de kan återställas från papperskorgen.
+      // Deras order_items lämnas kvar — annars är en återställd order tom.
       const ids = orders.map(o => o.id)
-      await supabase.from('order_items').delete().in('order_id', ids)
-      await supabase.from('orders').delete().in('id', ids)
+      const { error: delErr } = await supabase
+        .from('orders')
+        .update({ deleted_at: new Date().toISOString() })
+        .in('id', ids)
+      if (delErr) throw delErr
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['orders'] }),
   })

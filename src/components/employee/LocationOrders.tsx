@@ -8,28 +8,11 @@ function useLocationOrders(locationId: string) {
   return useQuery({
     queryKey: ['location-orders', locationId],
     queryFn: async (): Promise<OrderWithDetails[]> => {
-      const build = (hideDeleted: boolean) => {
-        const query = supabase
-          .from('orders')
-          .select(`
-            *,
-            location:locations(*),
-            employee:employees(*),
-            items:order_items(*, product:products(*))
-          `)
-          .eq('location_id', locationId)
-          .order('created_at', { ascending: false })
-          .limit(10)
-        return hideDeleted ? query.is('deleted_at', null) : query
-      }
-
-      // Fall back to the unfiltered query if migration 027 hasn't been run yet
-      let { data, error } = await build(true)
-      if (error?.message?.includes('deleted_at')) {
-        ({ data, error } = await build(false))
-      }
+      // Personalsidan är anonym och har ingen läs-policy på orders. RPC:n
+      // (migration 030) returnerar bara den här butikens senaste ordrar.
+      const { data, error } = await supabase.rpc('location_recent_orders', { p_location_id: locationId, p_limit: 10 })
       if (error) throw error
-      return data as OrderWithDetails[]
+      return (data ?? []) as OrderWithDetails[]
     },
     enabled: !!locationId,
     refetchInterval: 30_000,

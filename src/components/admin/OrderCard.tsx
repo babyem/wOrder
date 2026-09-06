@@ -6,6 +6,7 @@ import type { Order, OrderWithDetails } from '../../types'
 import { useUpdateOrderStatus, useDeleteOrder, useRestoreOrder, useUpdateOrderItem, useMarkVendorDone, useUpdateAdminNote } from '../../hooks/useOrders'
 import { useVendors, useUnits } from '../../hooks/useMetadata'
 import { sendEmail } from '../../lib/sendEmail'
+import SmsLink from './SmsLink'
 import { supabase } from '../../lib/supabase'
 import toast from 'react-hot-toast'
 
@@ -463,7 +464,6 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
   // Tingstad controls — visible only when the n8n webhook is configured
   const renderTingstadControls = () => {
     return null // Vilande — Tampermonkey-lösningen används tills vidare
-    // eslint-disable-next-line no-unreachable
     if (!isPending || doneVendors.has(tingstadVendorName ?? '')) return null
     return (
       <div className="mt-2">
@@ -548,11 +548,13 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
           </button>
         )}
         {v.phone && (
-          <a href={`sms:${v.phone}?body=${encodeURIComponent(buildBody(v.name))}`}
-            onClick={() => { markVendorDone(v.name, true, allVendorNames); setShowNotifyVendor(null) }}
-            className="flex-1 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 transition-colors text-center">
-            SMS
-          </a>
+          <SmsLink
+            phone={v.phone}
+            body={buildBody(v.name)}
+            showIcon={false}
+            onSent={() => { markVendorDone(v.name, true, allVendorNames); setShowNotifyVendor(null) }}
+            className="flex-1 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 transition-colors text-center"
+          />
         )}
         {!v.email && !v.phone && <span className="text-[10px] text-slate-300 italic px-2 py-1">Ingen kontaktinfo</span>}
       </>

@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Search, RefreshCw, GitMerge, Bell, X, Mail, Phone, GripVertical, Loader2, ZoomIn, ZoomOut, Trash2, Undo2, Ban } from 'lucide-react'
+import { Search, RefreshCw, GitMerge, Bell, X, Mail, GripVertical, Loader2, ZoomIn, ZoomOut, Trash2, Undo2, Ban } from 'lucide-react'
 import { useOrders, useMergeOrders, useDeletedOrders, useRestoreOrder } from '../../hooks/useOrders'
 import { useLocations, useReorderLocations } from '../../hooks/useLocations'
 import { useVendors } from '../../hooks/useMetadata'
 import OrderCard from '../../components/admin/OrderCard'
+import SmsLink from '../../components/admin/SmsLink'
 import Spinner from '../../components/ui/Spinner'
 import Modal from '../../components/ui/Modal'
 import { supabase } from '../../lib/supabase'
@@ -12,6 +13,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import type { OrderWithDetails } from '../../types'
 import { sendEmail } from '../../lib/sendEmail'
+import { buildExpressData, expressOrderCount, mergeExpressLocations, type VendorItem } from '../../lib/express'
 import type { Location } from '../../types/database'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -168,8 +170,6 @@ export default function OrdersPage() {
     selectedOrders.map(o => [o.location_id, o.location?.name ?? 'Unknown'])
   ).entries()].map(([id, name]) => ({ id, name }))
 
-  interface VendorItem { product: string; quantity: number; unit: string; artnr?: string }
-
   // Only include items from selected vendor cards (not the whole order)
   const vendorLocItems = new Map<string, Map<string, VendorItem[]>>()
   for (const { orderId, vendor: selVendor } of selectedPairs) {
@@ -236,86 +236,9 @@ export default function OrdersPage() {
   }
 
   // ── Express: alla väntande varor per leverantör, över samtliga pending-orders ──
+  // Logiken ligger i src/lib/express.ts (testad i src/lib/__tests__/express.test.ts)
   const [expressSending, setExpressSending] = useState<string | null>(null)
-
-  const expressData = useMemo(() => {
-    const itemsByVendor = new Map<string, Map<string, VendorItem[]>>() // vendor -> location -> items
-    const orderIdsByVendor = new Map<string, Set<string>>()
-    const noOrderByVendor = new Map<string, string[]>() // vendor -> butiker som sagt "ingen beställning"
-    const noOrderIds = new Set<string>() // räknas inte som ordercard i express-knappen
-    for (const order of orders ?? []) {
-      if (order.status !== 'pending') continue
-      const doneSet = new Set(order.done_vendors ?? [])
-      const loc = order.location?.name ?? 'Unknown'
-      // "Ingen beställning" — inga items, men express-utskicket ska markera den som klar
-      if (order.no_order_vendor) {
-        const v = order.no_order_vendor
-        if (doneSet.has(v)) continue
-        const locs = noOrderByVendor.get(v) ?? []
-        if (!locs.includes(loc)) locs.push(loc)
-        noOrderByVendor.set(v, locs)
-        noOrderIds.add(order.id)
-        if (!orderIdsByVendor.has(v)) orderIdsByVendor.set(v, new Set())
-        orderIdsByVendor.get(v)!.add(order.id)
-        continue
-      }
-      for (const item of order.items) {
-        if (item.notify_excluded) continue
-        const v = item.vendor_override ?? item.product?.vendor
-        if (!v || doneSet.has(v)) continue
-        if (!itemsByVendor.has(v)) itemsByVendor.set(v, new Map())
-        const locMap = itemsByVendor.get(v)!
-        const list = locMap.get(loc) ?? []
-        const displayName = item.product?.vendor_name ?? item.product?.name ?? '?'
-        const unit = item.unit_override || item.product?.unit || ''
-        const artnr = item.product?.tingstad_id || item.product?.tingstad_alt_id || undefined
-        const existing = list.find(e => e.product === displayName)
-        if (existing) {
-          existing.quantity += item.quantity
-          if (!existing.unit && unit) existing.unit = unit
-        } else {
-          list.push({ product: displayName, quantity: item.quantity, unit, artnr })
-        }
-        locMap.set(loc, list)
-        if (!orderIdsByVendor.has(v)) orderIdsByVendor.set(v, new Set())
-        orderIdsByVendor.get(v)!.add(order.id)
-      }
-    }
-    return { itemsByVendor, orderIdsByVendor, noOrderByVendor, noOrderIds }
-  }, [orders])
-
-  // Vissa leverantörer beställer för flera butiker under ett och samma namn.
-  // Kho: Izakai Emporia går ihop med Woso Emporia, Lets Grab med Woso Triangeln.
-  const EXPRESS_LOCATION_MERGE: Record<string, Record<string, string>> = {
-    kho: {
-      'izakai emporia': 'Woso Emporia',
-      'lets grab': 'Woso Triangeln',
-    },
-  }
-
-  // Slår ihop butiker enligt reglerna ovan och summerar identiska produkter.
-  const mergeExpressLocations = (vendorName: string, locMap: Map<string, VendorItem[]>) => {
-    const rules = EXPRESS_LOCATION_MERGE[vendorName.trim().toLowerCase()]
-    if (!rules) return locMap
-    const merged = new Map<string, VendorItem[]>()
-    for (const [loc, items] of locMap) {
-      const target = rules[loc.trim().toLowerCase()] ?? loc
-      const list = merged.get(target) ?? []
-      for (const item of items) {
-        const existing = list.find(e => e.product === item.product)
-        if (existing) {
-          existing.quantity += item.quantity
-          if (!existing.unit && item.unit) existing.unit = item.unit
-          if (!existing.artnr && item.artnr) existing.artnr = item.artnr
-        } else {
-          // Kopia — expressData är memoiserad och får inte muteras
-          list.push({ ...item })
-        }
-      }
-      merged.set(target, list)
-    }
-    return merged
-  }
+  const expressData = useMemo(() => buildExpressData(orders ?? []), [orders])
 
   // Same restaurant order as the kanban columns
   const locationRank = Object.fromEntries(sortedLocations.map((l, i) => [l.name, i]))
@@ -328,7 +251,7 @@ export default function OrdersPage() {
         email: vendorMap[name]?.email ?? undefined,
         phone: vendorMap[name]?.phone ?? undefined,
         // Antal ordercard (inte artiklar) som går med i utskicket
-        orderCount: [...(expressData.orderIdsByVendor.get(name) ?? [])].filter(id => !expressData.noOrderIds.has(id)).length,
+        orderCount: expressOrderCount(expressData, name),
         locations: [...locMap.entries()]
           .map(([loc, items]) => ({ loc, items }))
           .sort((a, b) => (locationRank[a.loc] ?? 999) - (locationRank[b.loc] ?? 999)),
@@ -707,9 +630,10 @@ export default function OrdersPage() {
                     </button>
                   )}
                   {expressModal.phone && (
-                    <a
-                      href={`sms:${expressModal.phone}?body=${encodeURIComponent(buildBatchBody(expressModal))}`}
-                      onClick={() => {
+                    <SmsLink
+                      phone={expressModal.phone}
+                      body={buildBatchBody(expressModal)}
+                      onSent={() => {
                         markVendorDoneAcrossOrders(
                           expressModal.name,
                           [...(expressData.orderIdsByVendor.get(expressModal.name) ?? [])],
@@ -717,9 +641,7 @@ export default function OrdersPage() {
                         setExpressModalVendor(null)
                       }}
                       className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 transition-colors"
-                    >
-                      <Phone size={11} /> SMS
-                    </a>
+                    />
                   )}
                 </div>
               </div>
@@ -796,13 +718,12 @@ export default function OrdersPage() {
                         </button>
                       )}
                       {v.phone && (
-                        <a
-                          href={`sms:${v.phone}?body=${encodeURIComponent(buildBatchBody(v))}`}
-                          onClick={() => { markVendorDoneAcrossOrders(v.name); setShowBatchNotify(false); clearSelection() }}
+                        <SmsLink
+                          phone={v.phone}
+                          body={buildBatchBody(v)}
+                          onSent={() => { markVendorDoneAcrossOrders(v.name); setShowBatchNotify(false); clearSelection() }}
                           className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 transition-colors"
-                        >
-                          <Phone size={11} /> SMS
-                        </a>
+                        />
                       )}
                     </div>
                   </div>

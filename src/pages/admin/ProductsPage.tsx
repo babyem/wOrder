@@ -577,6 +577,8 @@ interface FormModalProps {
   onSaved: () => void
 }
 
+const emptyForm = { name: '', vendor_name: '', vendor: '', category: '', unit: '', image_url: '', active: true, sort_order: 0 }
+
 function ProductFormModal({ open, onClose, onSaved }: FormModalProps) {
   const createProduct = useCreateProduct()
   const setProductLocations = useSetProductLocations()
@@ -585,7 +587,6 @@ function ProductFormModal({ open, onClose, onSaved }: FormModalProps) {
   const { data: units } = useUnits()
   const { data: allLocations } = useAdminLocations()
 
-  const emptyForm = { name: '', vendor_name: '', vendor: '', category: '', unit: '', image_url: '', active: true, sort_order: 0 }
   const [form, setForm] = useState(emptyForm)
   const [selectedLocIds, setSelectedLocIds] = useState<string[]>([])
   const [uploading, setUploading] = useState(false)

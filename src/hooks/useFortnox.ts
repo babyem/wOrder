@@ -205,10 +205,12 @@ export async function startFortnoxConnect(companyId: string): Promise<void> {
 }
 
 // ---- Manual trigger ("Kör nu") ----
+type FortnoxSyncRun = { ranAt: string; dates?: string[]; results: SyncResult[]; note?: string }
+
 export function useRunFortnoxSync() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (range: { from?: string; to?: string; shops?: string[] } = {}): Promise<{ ranAt: string; dates?: string[]; results: SyncResult[]; note?: string }> => {
+    mutationFn: async (range: { from?: string; to?: string; shops?: string[] } = {}): Promise<FortnoxSyncRun> => {
       const { data: { session } } = await supabase.auth.getSession()
       const token = session?.access_token
       if (!token) throw new Error('Ingen inloggad session')
@@ -220,7 +222,7 @@ export function useRunFortnoxSync() {
         headers: { Authorization: `Bearer ${token}` },
       })
       const text = await res.text()
-      let json: any = null
+      let json: (FortnoxSyncRun & { error?: string }) | null = null
       try { json = JSON.parse(text) } catch { /* non-JSON = Vercel timeout/error page */ }
       if (!json) throw new Error('Körningen tog för lång tid och avbröts. Kör igen för att fortsätta — redan bokförda dagar hoppas över. (Tips: dela upp långa perioder.)')
       if (!res.ok) throw new Error(json.error ?? 'Synk misslyckades')
@@ -250,10 +252,12 @@ export function useRunDinkassa() {
 }
 
 // ---- Run ancon (Woso Emporia) — server-side, returns results synchronously ----
+type AnconRun = { from: string; to: string; results: SyncResult[] }
+
 export function useRunAncon() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (range: { from?: string; to?: string } = {}): Promise<{ from: string; to: string; results: SyncResult[] }> => {
+    mutationFn: async (range: { from?: string; to?: string } = {}): Promise<AnconRun> => {
       const { data: { session } } = await supabase.auth.getSession()
       const token = session?.access_token
       if (!token) throw new Error('Ingen inloggad session')
@@ -262,7 +266,7 @@ export function useRunAncon() {
       if (range.to) params.set('to', range.to)
       const res = await fetch(`/api/ancon-sync?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } })
       const text = await res.text()
-      let json: any = null
+      let json: (AnconRun & { error?: string }) | null = null
       try { json = JSON.parse(text) } catch { /* non-JSON = timeout/error page */ }
       if (!json) throw new Error('Körningen tog för lång tid och avbröts. Kör igen — redan bokförda dagar hoppas över.')
       if (!res.ok) throw new Error(json.error ?? 'Ancon-körning misslyckades')

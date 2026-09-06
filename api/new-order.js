@@ -156,14 +156,14 @@ export default async function handler(req, res) {
     for (let i = 0; i < buttons.length; i += 2) keyboard.push(buttons.slice(i, i + 2))
     keyboard.push([{ text: '🔗 Öppna Staff Orders', url: 'https://worder.woso.se/admin/orders' }])
 
-    // Push-body: leverantör inramad av linjer, sedan en rad per produkt
-    const RULE = '─'.repeat(22)
+    // Push-body: leverantör som kort rubrikrad (ikon + versaler), sedan en rad per produkt.
+    // Inga linjer — de radbryts olika beroende på fontstorlek och blir rörigt.
     const pushBody = Object.entries(byVendor)
       .map(([v, lines]) => {
         const items = lines
           .map(l => l.replace(/^\s+•\s+/, '').replace(/\s+—\s+/, ' ').trim())
           .join('\n')
-        return `${RULE}\n${v}\n${RULE}\n${items}`
+        return `📦 ${v.toUpperCase()}\n${items}`
       })
       .join('\n\n')
 

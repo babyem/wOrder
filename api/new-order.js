@@ -156,13 +156,14 @@ export default async function handler(req, res) {
     for (let i = 0; i < buttons.length; i += 2) keyboard.push(buttons.slice(i, i + 2))
     keyboard.push([{ text: '🔗 Öppna Staff Orders', url: 'https://worder.woso.se/admin/orders' }])
 
-    // Bygg push-body med leverantörer + produkter (plain text, en rad per produkt)
-    const vendorSummary = Object.entries(byVendor)
+    // Push-body: leverantör inramad av linjer, sedan en rad per produkt
+    const RULE = '─'.repeat(22)
+    const pushBody = Object.entries(byVendor)
       .map(([v, lines]) => {
         const items = lines
           .map(l => l.replace(/^\s+•\s+/, '').replace(/\s+—\s+/, ' ').trim())
           .join('\n')
-        return `▸ ${v}\n${items}`
+        return `${RULE}\n${v}\n${RULE}\n${items}`
       })
       .join('\n\n')
 
@@ -174,8 +175,8 @@ export default async function handler(req, res) {
 
     // Skicka Telegram + web push + ntfy parallellt — en misslyckad kanal stoppar inte de andra
     const pushPayload = {
-      title: `Ny order 🛒 — ${locationName}`,
-      body: `${locationName} - ${employeeName} · kl ${time}\n\n${vendorSummary}`,
+      title: `${locationName} - ${employeeName} kl ${time}`,
+      body: pushBody,
       orderId,
     }
 

@@ -70,7 +70,8 @@ async function sendWebPush(payload) {
         )
         console.log(`[push] ok statusCode=${r.statusCode}`)
       } catch (err) {
-        console.error(`[push] failed statusCode=${err.statusCode} msg=${err.message}`)
+        // err.body innehåller push-tjänstens förklaring (t.ex. VapidPkHashMismatch) — logga den
+        console.error(`[push] failed statusCode=${err.statusCode} endpoint=${new URL(sub.endpoint).host} msg=${err.message} body=${err.body || ''}`)
         if (err.statusCode === 410 || err.statusCode === 404) {
           await fetch(
             `${SUPABASE_URL}/rest/v1/push_subscriptions?endpoint=eq.${encodeURIComponent(sub.endpoint)}`,

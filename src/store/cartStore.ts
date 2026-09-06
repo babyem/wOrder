@@ -6,6 +6,8 @@ interface CartStore {
   addItem: (product: Product) => void
   removeItem: (productId: string) => void
   updateQuantity: (productId: string, quantity: number) => void
+  /** Sätter antal för en produkt, lägger till den om den saknas */
+  setItem: (product: Product, quantity: number) => void
   clearCart: () => void
   totalItems: () => number
 }
@@ -45,6 +47,19 @@ export const useCartStore = create<CartStore>((set, get) => ({
       items: state.items.map(i =>
         i.product_id === productId ? { ...i, quantity } : i
       ),
+    }))
+  },
+
+  setItem: (product, quantity) => {
+    if (quantity <= 0) {
+      get().removeItem(product.id)
+      return
+    }
+    const exists = get().items.some(i => i.product_id === product.id)
+    set(state => ({
+      items: exists
+        ? state.items.map(i => i.product_id === product.id ? { ...i, quantity } : i)
+        : [...state.items, { product_id: product.id, product, quantity }],
     }))
   },
 

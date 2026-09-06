@@ -1,11 +1,14 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Minus, Plus, Trash2, Send, CheckCircle } from 'lucide-react'
+import { Minus, Plus, Trash2, Send, CheckCircle, AlertTriangle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Modal from '../ui/Modal'
 import Spinner from '../ui/Spinner'
 import { useCartStore } from '../../store/cartStore'
 import { useSubmitOrder } from '../../hooks/useOrders'
+import { useProducts } from '../../hooks/useProducts'
+import { useOrderHistoryStats } from '../../hooks/useOrderHistory'
+import { checkCart } from '../../lib/suggest'
 
 interface Props {
   open: boolean
@@ -17,8 +20,21 @@ interface Props {
 export default function OrderModal({ open, onClose, locationId, employeeId }: Props) {
   const [note, setNote] = useState('')
   const [submitted, setSubmitted] = useState(false)
-  const { items, updateQuantity, clearCart } = useCartStore()
+  const { items, updateQuantity, setItem, clearCart } = useCartStore()
   const submit = useSubmitOrder()
+
+  // Rimlighetskoll mot butikens historik: konstiga antal och glömda produkter.
+  // Visas första gången man trycker Skicka; andra trycket skickar ändå.
+  const { stats } = useOrderHistoryStats(locationId)
+  const { data: products } = useProducts(true, locationId)
+  const [showWarnings, setShowWarnings] = useState(false)
+  const warnings = useMemo(
+    () => checkCart(items.map(i => ({ product_id: i.product_id, quantity: i.quantity, vendor: i.product.vendor })), stats),
+    [items, stats],
+  )
+  const productById = useMemo(() => new Map((products ?? []).map(p => [p.id, p])), [products])
+  const productName = (id: string) => productById.get(id)?.name ?? items.find(i => i.product_id === id)?.product.name ?? '?'
+  useEffect(() => { if (!open) setShowWarnings(false) }, [open])
   const [scrubber, setScrubber] = useState<{ x: number; y: number; qty: number } | null>(null)
   const dragState = useRef<{ startY: number; startQty: number; last: number; productId: string } | null>(null)
 
@@ -52,6 +68,10 @@ export default function OrderModal({ open, onClose, locationId, employeeId }: Pr
 
   const handleSubmit = async () => {
     if (!items.length) return
+    if (warnings.length && !showWarnings) {
+      setShowWarnings(true)
+      return
+    }
     try {
       await submit.mutateAsync({ locationId, employeeId, note, items })
       setSubmitted(true)
@@ -59,6 +79,7 @@ export default function OrderModal({ open, onClose, locationId, employeeId }: Pr
         clearCart()
         setSubmitted(false)
         setNote('')
+        setShowWarnings(false)
         onClose()
         toast.success('Order submitted successfully!')
       }, 1800)
@@ -179,13 +200,51 @@ export default function OrderModal({ open, onClose, locationId, employeeId }: Pr
           />
         </div>
 
+        {showWarnings && warnings.length > 0 && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
+            <div className="flex items-center gap-1.5 text-amber-700 text-xs font-semibold">
+              <AlertTriangle size={13} /> Kolla en extra gång
+            </div>
+            <div className="space-y-1.5">
+              {warnings.map(w => {
+                const p = productById.get(w.product_id)
+                const unit = w.unit ?? p?.unit ?? ''
+                if (w.kind === 'forgotten') {
+                  return (
+                    <div key={`f-${w.product_id}`} className="flex items-center gap-2 text-xs">
+                      <span className="flex-1 min-w-0 text-amber-900">
+                        Glömt <b>{productName(w.product_id)}</b>? <span className="text-amber-600">Med i {w.orders} av {w.vendorOrders} {w.vendor}-beställningar</span>
+                      </span>
+                      {p && (
+                        <button onClick={() => setItem(p, w.quantity)} className="shrink-0 px-2 py-1 rounded-lg bg-white border border-amber-200 text-amber-800 font-medium hover:bg-amber-100 transition-colors">
+                          + {w.quantity} {unit}
+                        </button>
+                      )}
+                    </div>
+                  )
+                }
+                return (
+                  <div key={`q-${w.product_id}`} className="flex items-center gap-2 text-xs">
+                    <span className="flex-1 min-w-0 text-amber-900">
+                      <b>{productName(w.product_id)}</b>: {w.quantity} {unit}, brukar vara {w.usual}
+                    </span>
+                    <button onClick={() => updateQuantity(w.product_id, w.usual)} className="shrink-0 px-2 py-1 rounded-lg bg-white border border-amber-200 text-amber-800 font-medium hover:bg-amber-100 transition-colors">
+                      Ändra till {w.usual}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         <button
           onClick={handleSubmit}
           disabled={submit.isPending || !items.length}
           className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white py-3.5 rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {submit.isPending ? <Spinner size={18} className="border-white border-t-white/30" /> : <Send size={18} />}
-          {submit.isPending ? 'Sending...' : 'Submit Order'}
+          {submit.isPending ? 'Sending...' : showWarnings && warnings.length ? 'Skicka ändå' : 'Submit Order'}
         </button>
       </div>
     </Modal>

@@ -9,6 +9,7 @@ import CartBar from '../components/employee/CartBar'
 import OrderModal from '../components/employee/OrderModal'
 import LocationOrders from '../components/employee/LocationOrders'
 import NoOrderButton from '../components/employee/NoOrderButton'
+import SuggestedOrder from '../components/employee/SuggestedOrder'
 import { useLocationAlarms } from '../hooks/useLocationAlarms'
 import { useAdminLocations } from '../hooks/useAdminData'
 import { toSlug } from '../lib/slug'
@@ -313,6 +314,7 @@ export default function OrderPage() {
             >
               {/* Bara Kho: personalen kan meddela backoffice att de inte beställer idag */}
               <NoOrderButton key={locationId} locationId={locationId} employeeId={employeeId} locationName={locationName ?? ''} />
+              <SuggestedOrder locationId={locationId} />
               <ProductGrid locationId={locationId} />
             </motion.div>
           ) : (

@@ -45,8 +45,13 @@ serve(async (req) => {
       })
       .join('\n\n')
 
+    // "Ingen beställning" — raden har inga items, personalen meddelar bara att de inte beställer
+    const noOrderVendor = typeof record.no_order_vendor === 'string' ? record.no_order_vendor : null
     const note = record.note ? `\n\n📝 ${record.note}` : ''
-    const message = `${locationName} · ${employeeName}\n\n${vendorLines}${note}`
+    const message = noOrderVendor
+      ? `${locationName} · ${employeeName}\n\nBeställer inget från ${noOrderVendor} idag.`
+      : `${locationName} · ${employeeName}\n\n${vendorLines}${note}`
+    const title = noOrderVendor ? 'Ingen beställning 🚫' : 'New Order 🛒'
 
     const ntfyTopic = Deno.env.get('NTFY_TOPIC') ?? 'new_order_notification'
 
@@ -56,11 +61,11 @@ serve(async (req) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         topic: ntfyTopic,
-        title: 'New Order 🛒',
+        title,
         message,
         markdown: true,
         priority: 4,
-        tags: ['shopping'],
+        tags: [noOrderVendor ? 'no_entry_sign' : 'shopping'],
       }),
     })
 
@@ -93,7 +98,7 @@ serve(async (req) => {
         )
 
         const pushPayload = JSON.stringify({
-          title: 'New Order 🛒',
+          title,
           body: `${locationName} · ${employeeName}\n${message.split('\n\n').slice(1).join('\n')}`.trim(),
           orderId: record.id,
         })

@@ -82,6 +82,8 @@ export interface Order {
   deleted_at?: string | null
   done_vendors?: string[] | null
   is_merged?: boolean
+  // Satt när personalen meddelat "ingen beställning" från en leverantör — ordern har inga items
+  no_order_vendor?: string | null
 }
 
 export interface OrderItem {

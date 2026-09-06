@@ -96,6 +96,29 @@ export function useSubmitOrder() {
   })
 }
 
+// "Ingen beställning" — en order utan items som talar om för backoffice att butiken
+// inte beställer från leverantören idag (migration 028)
+export function useSubmitNoOrder() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ locationId, employeeId, vendor }: { locationId: string; employeeId: string; vendor: string }) => {
+      const { error } = await supabase
+        .from('orders')
+        .insert({ location_id: locationId, employee_id: employeeId, status: 'pending', no_order_vendor: vendor })
+      if (error) {
+        if (error.message?.includes('no_order_vendor')) {
+          throw new Error('kolumnen no_order_vendor saknas — kör migration 028 i Supabase SQL editor')
+        }
+        throw error
+      }
+    },
+    onSuccess: (_data, { locationId }) => {
+      qc.invalidateQueries({ queryKey: ['location-orders', locationId] })
+      qc.invalidateQueries({ queryKey: ['orders'] })
+    },
+  })
+}
+
 export function useUpdateOrderStatus() {
   const qc = useQueryClient()
   return useMutation({

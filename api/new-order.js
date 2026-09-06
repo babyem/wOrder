@@ -84,7 +84,7 @@ export default async function handler(req, res) {
     const orderId = record.id
 
     const [orders, items] = await Promise.all([
-      db(`orders?id=eq.${orderId}&select=id,created_at,locations(name),employees(name)&limit=1`),
+      db(`orders?id=eq.${orderId}&select=id,created_at,no_order_vendor,locations(name),employees(name)&limit=1`),
       db(`order_items?order_id=eq.${orderId}&select=quantity,unit_override,product:products(name,unit,vendor)`),
     ])
 
@@ -96,6 +96,25 @@ export default async function handler(req, res) {
     const time = new Date(order.created_at).toLocaleTimeString('sv-SE', {
       hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Stockholm',
     })
+
+    // "Ingen beställning" — personalen meddelar att butiken inte beställer från leverantören idag
+    if (order.no_order_vendor) {
+      const vendor = order.no_order_vendor
+      const text =
+        `🚫 <b>Ingen beställning — ${locationName}</b>\n` +
+        `👤 ${employeeName} · kl ${time}\n\n` +
+        `${locationName} beställer inget från <b>${vendor}</b> idag.`
+      const keyboard = [[{ text: '🔗 Öppna Staff Orders', url: 'https://worder.woso.se/admin/orders' }]]
+      await Promise.all([
+        sendTelegram(text, { inline_keyboard: keyboard }),
+        sendWebPush({
+          title: `Ingen beställning 🚫 — ${locationName}`,
+          body: `${employeeName} · kl ${time}\nInget från ${vendor} idag`,
+          orderId,
+        }),
+      ])
+      return res.status(200).end()
+    }
 
     // Gruppera items per leverantör
     const byVendor = {}

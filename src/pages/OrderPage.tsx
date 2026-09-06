@@ -8,6 +8,7 @@ import ProductGrid from '../components/employee/ProductGrid'
 import CartBar from '../components/employee/CartBar'
 import OrderModal from '../components/employee/OrderModal'
 import LocationOrders from '../components/employee/LocationOrders'
+import NoOrderButton from '../components/employee/NoOrderButton'
 import { useLocationAlarms } from '../hooks/useLocationAlarms'
 import { useAdminLocations } from '../hooks/useAdminData'
 import { toSlug } from '../lib/slug'
@@ -308,7 +309,10 @@ export default function OrderPage() {
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 16 }}
+              className="space-y-4"
             >
+              {/* Bara Kho: personalen kan meddela backoffice att de inte beställer idag */}
+              <NoOrderButton key={locationId} locationId={locationId} employeeId={employeeId} locationName={locationName ?? ''} />
               <ProductGrid locationId={locationId} />
             </motion.div>
           ) : (

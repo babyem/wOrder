@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { Clock, CheckCircle, AlertCircle } from 'lucide-react'
+import { Clock, CheckCircle, AlertCircle, Ban } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import type { OrderWithDetails } from '../../types'
 
@@ -71,6 +71,12 @@ function OrderCard({ order }: { order: OrderWithDetails }) {
 
       {/* Products by vendor */}
       <div className="px-3 pb-3 space-y-2 flex-1">
+        {order.no_order_vendor && (
+          <div className="flex items-center gap-1.5 text-xs text-slate-600">
+            <Ban size={11} className="text-slate-400 shrink-0" />
+            <span>Ingen {order.no_order_vendor}-beställning</span>
+          </div>
+        )}
         {[...byVendor.entries()].map(([vendor, items]) => (
           <div key={vendor}>
             <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">{vendor}</p>

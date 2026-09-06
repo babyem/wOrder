@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CheckCircle, RotateCcw, Trash2, User, FileText, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag, AlertTriangle, AlertCircle, Copy } from 'lucide-react'
+import { CheckCircle, RotateCcw, Trash2, User, FileText, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag, AlertTriangle, AlertCircle, Copy, Ban } from 'lucide-react'
 import type { Order, OrderWithDetails } from '../../types'
 import { useUpdateOrderStatus, useDeleteOrder, useRestoreOrder, useUpdateOrderItem, useMarkVendorDone, useUpdateAdminNote } from '../../hooks/useOrders'
 import { useVendors, useUnits } from '../../hooks/useMetadata'
@@ -537,6 +537,62 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
   const renderNotifyPanel = (vendorName: string) => (
     <div className="px-3 py-2 flex gap-1.5">{renderNotifyActions(vendorName)}</div>
   )
+
+  // "Ingen beställning" — inga items, bara ett besked från butiken. Egen kompakt
+  // kortvy; resten av komponenten förutsätter minst en leverantör.
+  if (order.no_order_vendor) {
+    const vendor = order.no_order_vendor
+    const markSeen = async () => {
+      try {
+        await updateStatus.mutateAsync({ id: order.id, status: 'done' })
+      } catch {
+        toast.error('Failed to update order')
+      }
+    }
+    return (
+      <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="relative">
+        <div className={`transition-opacity duration-200 ${!isPending ? 'opacity-60 hover:opacity-100' : ''}`}>
+          <div className={`rounded-2xl border shadow-sm ${isPending ? 'bg-slate-100 border-dashed border-slate-300' : 'bg-[#e2f6ec] border-transparent'}`}>
+            <div className="px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 text-slate-500">
+              <span className="font-normal tabular-nums opacity-60">{time}</span>
+              <button onClick={handleDelete} disabled={deleteOrder.isPending} title="Ta bort"
+                className="ml-auto p-1 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-100/60 disabled:opacity-50 transition-colors">
+                <Trash2 size={13} />
+              </button>
+            </div>
+            <div className="px-3 pb-3 flex items-center gap-2.5">
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${isPending ? 'bg-slate-200' : 'bg-emerald-100'}`}>
+                {isPending ? <Ban size={16} className="text-slate-500" /> : <CheckCircle size={16} className="text-emerald-600" />}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-800 truncate">Ingen beställning · {vendor}</p>
+                <p className="text-xs text-slate-400 truncate">{order.employee?.name ?? 'Unknown'} · {order.location?.name ?? 'Unknown location'}</p>
+              </div>
+            </div>
+            <div className="border-t border-black/5">
+              {isPending ? (
+                <button
+                  onClick={markSeen}
+                  disabled={updateStatus.isPending}
+                  className="w-full flex items-center justify-center py-2 rounded-b-2xl bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                >
+                  OK
+                </button>
+              ) : (
+                <button
+                  onClick={handleReopen}
+                  disabled={updateStatus.isPending}
+                  className="w-full flex items-center justify-center py-2 rounded-b-2xl text-xs font-medium text-slate-500 hover:bg-slate-100 disabled:opacity-30 transition-colors"
+                >
+                  Ångra
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    )
+  }
 
   const isMerged = !!(order as Order & { is_merged?: boolean }).is_merged && isPending
   const firstVendor = vendorEntries[0][0]

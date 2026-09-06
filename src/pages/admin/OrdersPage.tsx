@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Search, RefreshCw, GitMerge, Bell, X, Mail, Phone, GripVertical, Loader2, ZoomIn, ZoomOut, Trash2, Undo2 } from 'lucide-react'
+import { Search, RefreshCw, GitMerge, Bell, X, Mail, Phone, GripVertical, Loader2, ZoomIn, ZoomOut, Trash2, Undo2, Ban } from 'lucide-react'
 import { useOrders, useMergeOrders, useDeletedOrders, useRestoreOrder } from '../../hooks/useOrders'
 import { useLocations, useReorderLocations } from '../../hooks/useLocations'
 import { useVendors } from '../../hooks/useMetadata'
@@ -241,10 +241,22 @@ export default function OrdersPage() {
   const expressData = useMemo(() => {
     const itemsByVendor = new Map<string, Map<string, VendorItem[]>>() // vendor -> location -> items
     const orderIdsByVendor = new Map<string, Set<string>>()
+    const noOrderByVendor = new Map<string, string[]>() // vendor -> butiker som sagt "ingen beställning"
     for (const order of orders ?? []) {
       if (order.status !== 'pending') continue
       const doneSet = new Set(order.done_vendors ?? [])
       const loc = order.location?.name ?? 'Unknown'
+      // "Ingen beställning" — inga items, men express-utskicket ska markera den som klar
+      if (order.no_order_vendor) {
+        const v = order.no_order_vendor
+        if (doneSet.has(v)) continue
+        const locs = noOrderByVendor.get(v) ?? []
+        if (!locs.includes(loc)) locs.push(loc)
+        noOrderByVendor.set(v, locs)
+        if (!orderIdsByVendor.has(v)) orderIdsByVendor.set(v, new Set())
+        orderIdsByVendor.get(v)!.add(order.id)
+        continue
+      }
       for (const item of order.items) {
         if (item.notify_excluded) continue
         const v = item.vendor_override ?? item.product?.vendor
@@ -267,7 +279,7 @@ export default function OrdersPage() {
         orderIdsByVendor.get(v)!.add(order.id)
       }
     }
-    return { itemsByVendor, orderIdsByVendor }
+    return { itemsByVendor, orderIdsByVendor, noOrderByVendor }
   }, [orders])
 
   // Vissa leverantörer beställer för flera butiker under ett och samma namn.
@@ -317,6 +329,9 @@ export default function OrdersPage() {
         locations: [...locMap.entries()]
           .map(([loc, items]) => ({ loc, items }))
           .sort((a, b) => (locationRank[a.loc] ?? 999) - (locationRank[b.loc] ?? 999)),
+        // Visas bara i modalen som info till backoffice — går inte med i meddelandet
+        noOrderLocations: [...(expressData.noOrderByVendor.get(name) ?? [])]
+          .sort((a, b) => (locationRank[a] ?? 999) - (locationRank[b] ?? 999)),
       }
     })
     .sort((a, b) => a.name.localeCompare(b.name))
@@ -571,7 +586,7 @@ export default function OrdersPage() {
                     <span className="text-slate-400 font-normal"> · {o.employee?.name ?? 'Okänd'}</span>
                   </p>
                   <p className="text-xs text-slate-400 tabular-nums">
-                    {o.items.length} varor · lagd {formatStamp(o.created_at)} · borttagen {formatStamp(o.deleted_at)}
+                    {o.no_order_vendor ? `Ingen ${o.no_order_vendor}-beställning` : `${o.items.length} varor`} · lagd {formatStamp(o.created_at)} · borttagen {formatStamp(o.deleted_at)}
                   </p>
                 </div>
                 <button
@@ -668,6 +683,12 @@ export default function OrdersPage() {
                     </div>
                   ))}
                 </div>
+                {expressModal.noOrderLocations.length > 0 && (
+                  <div className="flex items-start gap-1.5 rounded-lg bg-slate-50 px-2.5 py-2 text-xs text-slate-500">
+                    <Ban size={12} className="mt-0.5 shrink-0" />
+                    <span>Ingen beställning idag: <span className="font-medium text-slate-700">{expressModal.noOrderLocations.join(', ')}</span></span>
+                  </div>
+                )}
                 <div className="flex gap-2 pt-1">
                   {expressModal.email && (
                     <button

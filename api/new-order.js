@@ -1,6 +1,9 @@
 /**
  * Vercel webhook — triggas av Supabase Database Webhook vid ny order (INSERT)
  *
+ * Enda notis-vägen för nya ordrar: Telegram, web push och ntfy skickas härifrån.
+ * (Edge-funktionen notify-order är borttagen, migration 031.)
+ *
  * Supabase-inställningar:
  *   Table: orders | Event: INSERT
  *   URL: https://worder.woso.se/api/new-order
@@ -16,6 +19,7 @@ const CHAT_ID          = process.env.TELEGRAM_CHAT_ID
 const WEBHOOK_SECRET   = process.env.WEBHOOK_SECRET
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY
+const NTFY_TOPIC       = process.env.NTFY_TOPIC || 'new_order_notification'
 
 async function db(path) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -31,6 +35,14 @@ async function sendTelegram(text, reply_markup) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+  })
+}
+
+async function sendNtfy(title, message, tags) {
+  await fetch('https://ntfy.sh/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ topic: NTFY_TOPIC, title, message, markdown: true, priority: 4, tags }),
   })
 }
 
@@ -84,7 +96,7 @@ export default async function handler(req, res) {
     const orderId = record.id
 
     const [orders, items] = await Promise.all([
-      db(`orders?id=eq.${orderId}&select=id,created_at,no_order_vendor,locations(name),employees(name)&limit=1`),
+      db(`orders?id=eq.${orderId}&select=id,created_at,note,no_order_vendor,locations(name),employees(name)&limit=1`),
       db(`order_items?order_id=eq.${orderId}&select=quantity,unit_override,product:products(name,unit,vendor)`),
     ])
 
@@ -105,13 +117,14 @@ export default async function handler(req, res) {
         `👤 ${employeeName} · kl ${time}\n\n` +
         `${locationName} beställer inget från <b>${vendor}</b> idag.`
       const keyboard = [[{ text: '🔗 Öppna Staff Orders', url: 'https://worder.woso.se/admin/orders' }]]
-      await Promise.all([
+      await Promise.allSettled([
         sendTelegram(text, { inline_keyboard: keyboard }),
         sendWebPush({
           title: `Ingen beställning 🚫 — ${locationName}`,
           body: `${employeeName} · kl ${time}\nInget från ${vendor} idag`,
           orderId,
         }),
+        sendNtfy('Ingen beställning 🚫', `${locationName} · ${employeeName}\n\nBeställer inget från ${vendor} idag.`, ['no_entry_sign']),
       ])
       return res.status(200).end()
     }
@@ -152,16 +165,23 @@ export default async function handler(req, res) {
       })
       .join('\n\n')
 
-    // Skicka Telegram + web push parallellt
+    // ntfy: markdown med fet leverantör, en rad per produkt
+    const ntfyBody = Object.entries(byVendor)
+      .map(([v, lines]) => `**${v}**\n${lines.map(l => l.replace(/^\s+•\s+/, '').replace(/\s+—\s+/, ' ').trim()).join('\n')}`)
+      .join('\n\n')
+    const ntfyNote = order.note ? `\n\n📝 ${order.note}` : ''
+
+    // Skicka Telegram + web push + ntfy parallellt — en misslyckad kanal stoppar inte de andra
     const pushPayload = {
       title: `Ny order 🛒 — ${locationName}`,
       body: `${locationName} - ${employeeName} · kl ${time}\n\n${vendorSummary}`,
       orderId,
     }
 
-    await Promise.all([
+    await Promise.allSettled([
       sendTelegram(text, { inline_keyboard: keyboard }),
       sendWebPush(pushPayload),
+      sendNtfy('New Order 🛒', `${locationName} · ${employeeName}\n\n${ntfyBody}${ntfyNote}`, ['shopping']),
     ])
 
     return res.status(200).end()

@@ -122,10 +122,10 @@ export function useSubmitNoOrder() {
 export function useUpdateOrderStatus() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: 'pending' | 'done' }) => {
+    mutationFn: async ({ id, status }: { id: string; status: 'pending' | 'done' | 'stopped' }) => {
       const updates: Record<string, unknown> = { status }
-      if (status === 'done') updates.completed_at = new Date().toISOString()
-      if (status === 'pending') updates.completed_at = null
+      // 'stopped' kräver migration 029 (check-constraint på status)
+      updates.completed_at = status === 'done' ? new Date().toISOString() : null
       const { error } = await supabase.from('orders').update(updates).eq('id', id)
       if (error) throw error
     },

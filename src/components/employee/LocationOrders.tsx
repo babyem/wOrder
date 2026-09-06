@@ -38,6 +38,7 @@ function useLocationOrders(locationId: string) {
 
 function OrderCard({ order }: { order: OrderWithDetails }) {
   const isPending = order.status === 'pending'
+  const isStopped = order.status === 'stopped'
 
   const byVendor = new Map<string, typeof order.items>()
   for (const item of order.items) {
@@ -58,9 +59,9 @@ function OrderCard({ order }: { order: OrderWithDetails }) {
       className={`rounded-2xl border bg-white shadow-sm overflow-hidden flex flex-col transition-opacity ${!isPending ? 'opacity-50' : ''}`}
     >
       {/* Status bar */}
-      <div className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold ${isPending ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
-        {isPending ? <Clock size={9} /> : <CheckCircle size={9} />}
-        {isPending ? 'Pending' : 'Done'}
+      <div className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold ${isPending ? 'bg-amber-50 text-amber-600' : isStopped ? 'bg-slate-100 text-slate-500' : 'bg-emerald-50 text-emerald-600'}`}>
+        {isPending ? <Clock size={9} /> : isStopped ? <Ban size={9} /> : <CheckCircle size={9} />}
+        {isPending ? 'Pending' : isStopped ? 'Ingen beställning' : 'Done'}
         <span className="ml-auto font-normal opacity-70 tabular-nums">{time}</span>
       </div>
 

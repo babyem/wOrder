@@ -242,6 +242,7 @@ export default function OrdersPage() {
     const itemsByVendor = new Map<string, Map<string, VendorItem[]>>() // vendor -> location -> items
     const orderIdsByVendor = new Map<string, Set<string>>()
     const noOrderByVendor = new Map<string, string[]>() // vendor -> butiker som sagt "ingen beställning"
+    const noOrderIds = new Set<string>() // räknas inte som ordercard i express-knappen
     for (const order of orders ?? []) {
       if (order.status !== 'pending') continue
       const doneSet = new Set(order.done_vendors ?? [])
@@ -253,6 +254,7 @@ export default function OrdersPage() {
         const locs = noOrderByVendor.get(v) ?? []
         if (!locs.includes(loc)) locs.push(loc)
         noOrderByVendor.set(v, locs)
+        noOrderIds.add(order.id)
         if (!orderIdsByVendor.has(v)) orderIdsByVendor.set(v, new Set())
         orderIdsByVendor.get(v)!.add(order.id)
         continue
@@ -279,7 +281,7 @@ export default function OrdersPage() {
         orderIdsByVendor.get(v)!.add(order.id)
       }
     }
-    return { itemsByVendor, orderIdsByVendor, noOrderByVendor }
+    return { itemsByVendor, orderIdsByVendor, noOrderByVendor, noOrderIds }
   }, [orders])
 
   // Vissa leverantörer beställer för flera butiker under ett och samma namn.
@@ -325,7 +327,8 @@ export default function OrdersPage() {
         name,
         email: vendorMap[name]?.email ?? undefined,
         phone: vendorMap[name]?.phone ?? undefined,
-        itemCount: [...locMap.values()].reduce((n, l) => n + l.length, 0),
+        // Antal ordercard (inte artiklar) som går med i utskicket
+        orderCount: [...(expressData.orderIdsByVendor.get(name) ?? [])].filter(id => !expressData.noOrderIds.has(id)).length,
         locations: [...locMap.entries()]
           .map(([loc, items]) => ({ loc, items }))
           .sort((a, b) => (locationRank[a.loc] ?? 999) - (locationRank[b.loc] ?? 999)),
@@ -421,6 +424,7 @@ export default function OrdersPage() {
           <option value="all">All statuses</option>
           <option value="pending">Pending</option>
           <option value="done">Done</option>
+          <option value="stopped">Stoppad</option>
         </select>
         <div className="flex items-center gap-0.5 rounded-xl border border-slate-200 bg-white px-1 py-1">
           <button
@@ -475,7 +479,7 @@ export default function OrdersPage() {
             >
               {expressSending === v.name ? <Loader2 size={12} className="animate-spin" /> : <span>⚡</span>}
               {v.name}
-              <span className="text-slate-400 tabular-nums">{v.itemCount}</span>
+              <span className="text-slate-400 tabular-nums">{v.orderCount}</span>
             </button>
           ))}
         </div>

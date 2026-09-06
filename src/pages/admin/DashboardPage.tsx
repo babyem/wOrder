@@ -81,9 +81,9 @@ export default function DashboardPage() {
                   <p className="text-xs text-slate-400">{o.location?.name} · {new Date(o.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                 </div>
                 <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                  o.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+                  o.status === 'pending' ? 'bg-amber-100 text-amber-700' : o.status === 'stopped' ? 'bg-slate-200 text-slate-600' : 'bg-emerald-100 text-emerald-700'
                 }`}>
-                  {o.status}
+                  {o.status === 'stopped' ? 'ingen beställning' : o.status}
                 </span>
               </div>
             ))}

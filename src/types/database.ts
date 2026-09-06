@@ -74,7 +74,8 @@ export interface Order {
   id: string
   location_id: string
   employee_id: string
-  status: 'pending' | 'done'
+  // 'stopped' = backoffice har stoppat ordern (ingen beställning) utan att ta bort den
+  status: 'pending' | 'done' | 'stopped'
   note: string | null
   admin_note: string | null
   created_at: string

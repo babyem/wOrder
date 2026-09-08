@@ -4,25 +4,27 @@ import { ChefHat, MapPin, ChevronRight, LayoutDashboard } from 'lucide-react'
 import { useAdminLocations } from '../hooks/useAdminData'
 import { toSlug } from '../lib/slug'
 import Spinner from '../components/ui/Spinner'
+import ThemeToggle from '../components/ui/ThemeToggle'
 
 export default function LocationListPage() {
   const navigate = useNavigate()
   const { data: locations, isLoading } = useAdminLocations()
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      <header className="bg-white border-b border-slate-100">
+    <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 flex flex-col">
+      <header className="bg-white dark:bg-zinc-900 border-b border-slate-100 dark:border-zinc-800">
         <div className="max-w-lg mx-auto px-5 py-5 flex items-center gap-3">
           <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shrink-0">
             <ChefHat size={22} className="text-white" />
           </div>
           <div className="flex-1">
-            <h1 className="font-bold text-slate-900 text-lg leading-tight">Staff Orders</h1>
-            <p className="text-xs text-slate-400">Select your location to get started</p>
+            <h1 className="font-bold text-slate-900 dark:text-zinc-100 text-lg leading-tight">Staff Orders</h1>
+            <p className="text-xs text-slate-400 dark:text-zinc-500">Select your location to get started</p>
           </div>
+          <ThemeToggle compact />
           <Link
             to="/admin"
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-500 hover:text-indigo-700 hover:bg-indigo-50 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-500 dark:text-zinc-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950 transition-colors"
           >
             <LayoutDashboard size={14} />
             <span>Backoffice</span>
@@ -42,13 +44,13 @@ export default function LocationListPage() {
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.06, type: 'spring', damping: 20, stiffness: 260 }}
-                className="w-full flex items-center gap-4 bg-white rounded-2xl px-5 py-4 border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 hover:-translate-y-0.5 active:scale-[0.98] transition-all text-left group"
+                className="w-full flex items-center gap-4 bg-white dark:bg-zinc-900 rounded-2xl px-5 py-4 border border-slate-100 dark:border-zinc-800 shadow-sm hover:shadow-md hover:border-indigo-200 dark:hover:border-indigo-800 hover:-translate-y-0.5 active:scale-[0.98] transition-all text-left group"
               >
-                <div className="w-11 h-11 bg-indigo-50 rounded-xl flex items-center justify-center shrink-0 group-hover:bg-indigo-100 transition-colors">
-                  <MapPin size={20} className="text-indigo-500" />
+                <div className="w-11 h-11 bg-indigo-50 dark:bg-indigo-950 rounded-xl flex items-center justify-center shrink-0 group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900 transition-colors">
+                  <MapPin size={20} className="text-indigo-500 dark:text-indigo-400" />
                 </div>
-                <span className="flex-1 font-semibold text-slate-800 text-base">{loc.name}</span>
-                <ChevronRight size={18} className="text-slate-300 group-hover:text-indigo-400 transition-colors shrink-0" />
+                <span className="flex-1 font-semibold text-slate-800 dark:text-zinc-200 text-base">{loc.name}</span>
+                <ChevronRight size={18} className="text-slate-300 dark:text-zinc-600 group-hover:text-indigo-400 transition-colors shrink-0" />
               </motion.button>
             ))}
           </div>

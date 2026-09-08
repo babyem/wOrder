@@ -18,8 +18,8 @@ export default function LocationSelector({ selected, onSelect }: Props) {
   return (
     <div>
       <div className="flex items-center gap-2 mb-3">
-        <MapPin size={16} className="text-slate-400" />
-        <span className="text-sm font-medium text-slate-500 uppercase tracking-wide">Select Location</span>
+        <MapPin size={16} className="text-slate-400 dark:text-zinc-500" />
+        <span className="text-sm font-medium text-slate-500 dark:text-zinc-400 uppercase tracking-wide">Select Location</span>
       </div>
       <div className="flex flex-wrap gap-2">
         {locations?.map(loc => (
@@ -29,8 +29,8 @@ export default function LocationSelector({ selected, onSelect }: Props) {
             onClick={() => onSelect(loc.id)}
             className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
               selected === loc.id
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200'
-                : 'bg-white text-slate-600 border border-slate-200 hover:border-indigo-300 hover:text-indigo-600'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200 dark:shadow-none'
+                : 'bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-300 border border-slate-200 dark:border-zinc-800 hover:border-indigo-300 dark:hover:border-indigo-800 hover:text-indigo-600 dark:hover:text-indigo-400'
             }`}
           >
             {loc.name}

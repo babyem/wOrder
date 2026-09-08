@@ -73,10 +73,10 @@ export default function ProductCard({ product }: Props) {
                     key={offset}
                     className={`text-center leading-tight ${
                       isCenter
-                        ? 'text-indigo-600 font-bold text-xl py-0.5'
+                        ? 'text-indigo-600 dark:text-indigo-400 font-bold text-xl py-0.5'
                         : Math.abs(offset) === 1
-                          ? 'text-slate-400 text-sm py-0.5'
-                          : 'text-slate-200 text-xs py-0.5'
+                          ? 'text-slate-400 dark:text-zinc-500 text-sm py-0.5'
+                          : 'text-slate-200 dark:text-zinc-700 text-xs py-0.5'
                     }`}
                   >
                     {n >= 0 ? n : ''}
@@ -92,13 +92,13 @@ export default function ProductCard({ product }: Props) {
         layout
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors group"
+        className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors group"
         onClick={() => addItem(product)}
       >
         {/* Thumbnail — trash overlaid when item is in cart */}
         <div className="relative w-12 h-12 shrink-0">
           <div
-            className="w-12 h-12 rounded-xl bg-slate-100 overflow-hidden cursor-zoom-in"
+            className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-zinc-800 overflow-hidden cursor-zoom-in"
             onClick={e => {
               e.stopPropagation()
               if (product.image_url) setLightboxOpen(true)
@@ -113,7 +113,7 @@ export default function ProductCard({ product }: Props) {
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center">
-                <Package size={18} className="text-slate-300" />
+                <Package size={18} className="text-slate-300 dark:text-zinc-600" />
               </div>
             )}
           </div>
@@ -136,8 +136,8 @@ export default function ProductCard({ product }: Props) {
 
         {/* Info */}
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-slate-900 text-sm leading-tight">{product.name}</p>
-          <p className="text-xs text-slate-400 mt-0.5">{product.unit}</p>
+          <p className="font-medium text-slate-900 dark:text-zinc-100 text-sm leading-tight">{product.name}</p>
+          <p className="text-xs text-slate-400 dark:text-zinc-500 mt-0.5">{product.unit}</p>
         </div>
 
         {/* Quantity controls */}
@@ -151,9 +151,9 @@ export default function ProductCard({ product }: Props) {
                 exit={{ scale: 0.8, opacity: 0 }}
                 transition={{ duration: 0.15 }}
                 onClick={() => addItem(product)}
-                className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center hover:bg-indigo-100 transition-colors"
+                className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950 flex items-center justify-center hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-colors"
               >
-                <Plus size={16} className="text-indigo-600" />
+                <Plus size={16} className="text-indigo-600 dark:text-indigo-400" />
               </motion.button>
             ) : (
               <motion.div
@@ -166,12 +166,12 @@ export default function ProductCard({ product }: Props) {
               >
                 <button
                   onClick={() => updateQuantity(product.id, quantity - 1)}
-                  className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors"
+                  className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-zinc-800 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors"
                 >
-                  <Minus size={14} className="text-slate-600" />
+                  <Minus size={14} className="text-slate-600 dark:text-zinc-300" />
                 </button>
                 <span
-                  className="text-sm font-bold text-slate-900 w-5 text-center tabular-nums cursor-ns-resize select-none touch-none transition-opacity"
+                  className="text-sm font-bold text-slate-900 dark:text-zinc-100 w-5 text-center tabular-nums cursor-ns-resize select-none touch-none transition-opacity"
                   style={{ opacity: scrubber ? 0 : 1 }}
                   onPointerDown={onQtyPointerDown}
                   onPointerMove={onQtyPointerMove}

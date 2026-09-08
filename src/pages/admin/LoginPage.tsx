@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Lock, ChefHat } from 'lucide-react'
+import ThemeToggle from '../../components/ui/ThemeToggle'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/authStore'
 import Spinner from '../../components/ui/Spinner'
@@ -29,7 +30,8 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 flex items-center justify-center p-4">
+      <ThemeToggle compact className="absolute top-4 right-4" />
       <motion.div
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
@@ -39,39 +41,39 @@ export default function LoginPage() {
           <div className="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <ChefHat size={28} className="text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">Admin Login</h1>
-          <p className="text-slate-400 text-sm mt-1">Staff Orders Management</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-zinc-100">Admin Login</h1>
+          <p className="text-slate-400 dark:text-zinc-500 text-sm mt-1">Staff Orders Management</p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+        <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 p-6">
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
+              <label className="block text-sm font-medium text-slate-700 dark:text-zinc-200 mb-1.5">Email</label>
               <input
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 required
                 autoComplete="email"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 placeholder="admin@example.com"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Password</label>
+              <label className="block text-sm font-medium text-slate-700 dark:text-zinc-200 mb-1.5">Password</label>
               <input
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
                 autoComplete="current-password"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 placeholder="••••••••"
               />
             </div>
 
             {error && (
-              <div className="text-red-500 text-sm bg-red-50 px-3 py-2 rounded-lg">{error}</div>
+              <div className="text-red-500 dark:text-red-400 text-sm bg-red-50 dark:bg-red-950 px-3 py-2 rounded-lg">{error}</div>
             )}
 
             <button

@@ -32,17 +32,17 @@ export default function Modal({ open, onClose, title, children, maxWidth = 'max-
             onClick={onClose}
           />
           <motion.div
-            className={`relative w-full ${maxWidth} bg-white rounded-2xl shadow-2xl overflow-hidden`}
+            className={`relative w-full ${maxWidth} bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl overflow-hidden`}
             initial={{ opacity: 0, y: 40, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 40, scale: 0.96 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
           >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-              <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-zinc-800">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-zinc-100">{title}</h2>
               <button
                 onClick={onClose}
-                className="p-2 rounded-xl hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-600"
+                className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300"
               >
                 <X size={18} />
               </button>

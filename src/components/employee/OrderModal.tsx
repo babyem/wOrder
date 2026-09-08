@@ -106,10 +106,10 @@ export default function OrderModal({ open, onClose, locationId, employeeId }: Pr
               key={offset}
               className={`text-center leading-tight ${
                 isCenter
-                  ? 'text-indigo-600 font-bold text-xl py-0.5'
+                  ? 'text-indigo-600 dark:text-indigo-400 font-bold text-xl py-0.5'
                   : Math.abs(offset) === 1
-                    ? 'text-slate-400 text-sm py-0.5'
-                    : 'text-slate-200 text-xs py-0.5'
+                    ? 'text-slate-400 dark:text-zinc-500 text-sm py-0.5'
+                    : 'text-slate-200 dark:text-zinc-700 text-xs py-0.5'
               }`}
             >
               {n >= 0 ? n : ''}
@@ -131,8 +131,8 @@ export default function OrderModal({ open, onClose, locationId, employeeId }: Pr
           >
             <CheckCircle size={56} className="text-emerald-500" />
           </motion.div>
-          <p className="text-lg font-semibold text-slate-900">Order sent!</p>
-          <p className="text-slate-400 text-sm">Your order has been received.</p>
+          <p className="text-lg font-semibold text-slate-900 dark:text-zinc-100">Order sent!</p>
+          <p className="text-slate-400 dark:text-zinc-500 text-sm">Your order has been received.</p>
         </div>
       </Modal>
     )
@@ -152,23 +152,23 @@ export default function OrderModal({ open, onClose, locationId, employeeId }: Pr
         <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
           {Object.entries(byVendor).map(([vendor, vendorItems]) => (
             <div key={vendor}>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1 px-0.5">{vendor}</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-zinc-500 mb-1 px-0.5">{vendor}</p>
               <div className="space-y-0.5">
                 {vendorItems.map(item => (
-                  <div key={item.product_id} className="flex items-center gap-2 py-1 px-2 rounded-lg hover:bg-slate-50">
+                  <div key={item.product_id} className="flex items-center gap-2 py-1 px-2 rounded-lg hover:bg-slate-50 dark:hover:bg-zinc-800">
                     <div className="flex-1 min-w-0">
-                      <span className="text-sm text-slate-900 truncate block">{item.product.name}</span>
+                      <span className="text-sm text-slate-900 dark:text-zinc-100 truncate block">{item.product.name}</span>
                     </div>
-                    <span className="text-xs text-slate-400 shrink-0">{item.product.unit}</span>
+                    <span className="text-xs text-slate-400 dark:text-zinc-500 shrink-0">{item.product.unit}</span>
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         onClick={() => updateQuantity(item.product_id, item.quantity - 1)}
-                        className="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-100 transition-colors"
+                        className="w-6 h-6 rounded-md bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
                       >
-                        {item.quantity === 1 ? <Trash2 size={11} className="text-red-400" /> : <Minus size={11} className="text-slate-600" />}
+                        {item.quantity === 1 ? <Trash2 size={11} className="text-red-400" /> : <Minus size={11} className="text-slate-600 dark:text-zinc-300" />}
                       </button>
                       <span
-                        className="text-sm font-semibold w-5 text-center text-slate-900 cursor-ns-resize select-none touch-none"
+                        className="text-sm font-semibold w-5 text-center text-slate-900 dark:text-zinc-100 cursor-ns-resize select-none touch-none"
                         onPointerDown={e => onQtyPointerDown(e, item.product_id, item.quantity)}
                         onPointerMove={onQtyPointerMove}
                         onPointerUp={onQtyPointerUp}
@@ -190,19 +190,19 @@ export default function OrderModal({ open, onClose, locationId, employeeId }: Pr
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1.5">Note (optional)</label>
+          <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1.5">Note (optional)</label>
           <textarea
             value={note}
             onChange={e => setNote(e.target.value)}
             placeholder="Any special instructions..."
             rows={2}
-            className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+            className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 text-sm text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
           />
         </div>
 
         {showWarnings && warnings.length > 0 && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
-            <div className="flex items-center gap-1.5 text-amber-700 text-xs font-semibold">
+          <div className="rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950 p-3 space-y-2">
+            <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-300 text-xs font-semibold">
               <AlertTriangle size={13} /> Kolla en extra gång
             </div>
             <div className="space-y-1.5">
@@ -212,11 +212,11 @@ export default function OrderModal({ open, onClose, locationId, employeeId }: Pr
                 if (w.kind === 'forgotten') {
                   return (
                     <div key={`f-${w.product_id}`} className="flex items-center gap-2 text-xs">
-                      <span className="flex-1 min-w-0 text-amber-900">
-                        Glömt <b>{productName(w.product_id)}</b>? <span className="text-amber-600">Med i {w.orders} av {w.vendorOrders} {w.vendor}-beställningar</span>
+                      <span className="flex-1 min-w-0 text-amber-900 dark:text-amber-200">
+                        Glömt <b>{productName(w.product_id)}</b>? <span className="text-amber-600 dark:text-amber-400">Med i {w.orders} av {w.vendorOrders} {w.vendor}-beställningar</span>
                       </span>
                       {p && (
-                        <button onClick={() => setItem(p, w.quantity)} className="shrink-0 px-2 py-1 rounded-lg bg-white border border-amber-200 text-amber-800 font-medium hover:bg-amber-100 transition-colors">
+                        <button onClick={() => setItem(p, w.quantity)} className="shrink-0 px-2 py-1 rounded-lg bg-white dark:bg-zinc-900 border border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-200 font-medium hover:bg-amber-100 dark:hover:bg-amber-900 transition-colors">
                           + {w.quantity} {unit}
                         </button>
                       )}
@@ -225,10 +225,10 @@ export default function OrderModal({ open, onClose, locationId, employeeId }: Pr
                 }
                 return (
                   <div key={`q-${w.product_id}`} className="flex items-center gap-2 text-xs">
-                    <span className="flex-1 min-w-0 text-amber-900">
+                    <span className="flex-1 min-w-0 text-amber-900 dark:text-amber-200">
                       <b>{productName(w.product_id)}</b>: {w.quantity} {unit}, brukar vara {w.usual}
                     </span>
-                    <button onClick={() => updateQuantity(w.product_id, w.usual)} className="shrink-0 px-2 py-1 rounded-lg bg-white border border-amber-200 text-amber-800 font-medium hover:bg-amber-100 transition-colors">
+                    <button onClick={() => updateQuantity(w.product_id, w.usual)} className="shrink-0 px-2 py-1 rounded-lg bg-white dark:bg-zinc-900 border border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-200 font-medium hover:bg-amber-100 dark:hover:bg-amber-900 transition-colors">
                       Ändra till {w.usual}
                     </button>
                   </div>

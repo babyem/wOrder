@@ -181,21 +181,21 @@ export default function FortnoxPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-            <ReceiptText size={20} className="text-indigo-600" />
+          <h1 className="text-xl font-bold text-slate-900 dark:text-zinc-100 flex items-center gap-2">
+            <ReceiptText size={20} className="text-indigo-600 dark:text-indigo-400" />
             Fortnox-bokföring
           </h1>
-          <p className="text-sm text-slate-500 mt-0.5">
+          <p className="text-sm text-slate-500 dark:text-zinc-400 mt-0.5">
             Koppla Qopla-butiker till Fortnox-bolag. Körs automatiskt varje morgon (bokför gårdagen och tar igen missade dagar) — verifikat skapas i serie F.
           </p>
         </div>
-        <div className="shrink-0 flex items-center gap-2">
+        <div className="shrink-0 flex flex-wrap items-center gap-2">
           <button
             onClick={handleReconcile}
             disabled={reconcile.isPending}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 transition-colors"
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-200 text-sm font-medium hover:bg-slate-50 dark:hover:bg-zinc-800 disabled:opacity-50 transition-colors"
             title="Kontrollera bokförda verifikat mot Fortnox och flagga borttagna"
           >
             {reconcile.isPending ? <Spinner size={16} /> : <RefreshCw size={16} />}
@@ -213,7 +213,7 @@ export default function FortnoxPage() {
       </div>
 
       {/* Prerequisites note */}
-      <div className="flex gap-2.5 text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+      <div className="flex gap-2.5 text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950 border border-amber-100 dark:border-amber-900 rounded-xl px-4 py-3">
         <Info size={15} className="shrink-0 mt-0.5 text-amber-500" />
         <span>
           Varje Fortnox-bolag måste auktorisera integrationen en gång (egen token), serie <b>F</b> måste finnas
@@ -222,10 +222,10 @@ export default function FortnoxPage() {
       </div>
 
       {/* Bolag */}
-      <section className="bg-white rounded-2xl border border-slate-100 shadow-sm">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
-          <Building2 size={16} className="text-slate-400" />
-          <h2 className="font-semibold text-slate-900 text-sm">Fortnox-bolag</h2>
+      <section className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-sm">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100 dark:border-zinc-800">
+          <Building2 size={16} className="text-slate-400 dark:text-zinc-500" />
+          <h2 className="font-semibold text-slate-900 dark:text-zinc-100 text-sm">Fortnox-bolag</h2>
         </div>
         <div className="p-5 space-y-3">
           <div className="flex gap-2">
@@ -234,20 +234,20 @@ export default function FortnoxPage() {
               onChange={e => setNewCompany(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleAddCompany()}
               placeholder="Nytt bolag (namn)"
-              className="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
+              className="flex-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900 focus:border-indigo-300 dark:focus:border-indigo-500"
             />
             <button
               onClick={handleAddCompany}
               disabled={!newCompany.trim() || createCompany.isPending}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 disabled:opacity-40 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 dark:bg-zinc-800 text-white text-sm font-medium hover:bg-slate-800 dark:hover:bg-zinc-700 disabled:opacity-40 transition-colors"
             >
               <Plus size={16} /> Lägg till
             </button>
           </div>
           {companies.length === 0 ? (
-            <p className="text-sm text-slate-400 py-2">Inga bolag ännu.</p>
+            <p className="text-sm text-slate-400 dark:text-zinc-500 py-2">Inga bolag ännu.</p>
           ) : (
-            <div className="divide-y divide-slate-50">
+            <div className="divide-y divide-slate-50 dark:divide-zinc-800">
               {companies.map(c => <CompanyRow key={c.id} company={c} connected={!!connections[c.id]} />)}
             </div>
           )}
@@ -255,16 +255,16 @@ export default function FortnoxPage() {
       </section>
 
       {/* Butik → Bolag */}
-      <section className="bg-white rounded-2xl border border-slate-100 shadow-sm">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
-          <ReceiptText size={16} className="text-slate-400" />
-          <h2 className="font-semibold text-slate-900 text-sm">Butik → Bolag</h2>
+      <section className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-sm">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100 dark:border-zinc-800">
+          <ReceiptText size={16} className="text-slate-400 dark:text-zinc-500" />
+          <h2 className="font-semibold text-slate-900 dark:text-zinc-100 text-sm">Butik → Bolag</h2>
         </div>
         <div className="p-5">
           {shopsLoading && allShops.length === 0 ? (
             <div className="flex justify-center py-6"><Spinner /></div>
           ) : allShops.length === 0 ? (
-            <p className="text-sm text-slate-400 py-2">Inga butiker/kassor hämtade.</p>
+            <p className="text-sm text-slate-400 dark:text-zinc-500 py-2">Inga butiker/kassor hämtade.</p>
           ) : (
             <div className="space-y-2">
               {allShops.map(shop => {
@@ -272,16 +272,16 @@ export default function FortnoxPage() {
                 const enabled = m?.enabled ?? true
                 return (
                   <div key={shop.id} className="flex flex-wrap items-center gap-2 py-1.5">
-                    <span className="flex-1 min-w-[8rem] text-sm font-medium text-slate-700 truncate flex items-center gap-1.5">
+                    <span className="flex-1 min-w-[8rem] text-sm font-medium text-slate-700 dark:text-zinc-200 truncate flex items-center gap-1.5">
                       {shop.name}
                       {shop.source !== 'qopla' && (
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">{shop.source}</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950 px-1.5 py-0.5 rounded">{shop.source}</span>
                       )}
                     </span>
                     <select
                       value={m?.company_id ?? ''}
                       onChange={e => saveMap(shop, { company_id: e.target.value || null })}
-                      className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
+                      className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-800 text-sm bg-white dark:bg-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900 focus:border-indigo-300 dark:focus:border-indigo-500"
                     >
                       <option value="">— ej kopplad —</option>
                       {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -293,15 +293,15 @@ export default function FortnoxPage() {
                         if (val !== (m?.cost_center ?? '')) saveMap(shop, { cost_center: val || null })
                       }}
                       placeholder="Kostnadsställe"
-                      className="w-32 px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
+                      className="w-32 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900 focus:border-indigo-300 dark:focus:border-indigo-500"
                     />
                     <button
                       onClick={() => saveMap(shop, { enabled: !enabled })}
                       title={enabled ? 'Aktiv — klicka för att pausa' : 'Pausad — klicka för att aktivera'}
                       className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                         enabled
-                          ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                          : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                          ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900'
+                          : 'bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-500 hover:bg-slate-200 dark:hover:bg-zinc-700'
                       }`}
                     >
                       {enabled ? <Check size={13} /> : <X size={13} />}
@@ -316,35 +316,35 @@ export default function FortnoxPage() {
       </section>
 
       {/* Kör Qopla för datum/period */}
-      <section className="bg-white rounded-2xl border border-slate-100 shadow-sm">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
-          <Play size={16} className="text-slate-400" />
-          <h2 className="font-semibold text-slate-900 text-sm">Kör Qopla</h2>
+      <section className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-sm">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100 dark:border-zinc-800">
+          <Play size={16} className="text-slate-400 dark:text-zinc-500" />
+          <h2 className="font-semibold text-slate-900 dark:text-zinc-100 text-sm">Kör Qopla</h2>
         </div>
         <div className="p-5 space-y-3">
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-500 dark:text-zinc-400">
             Bokför valda Qopla-butiker för valt datum eller period (olika bolag kan köras separat).
             Tomt datum = idag. En verifikation per butik per dag. Redan bokförda dagar hoppas över.
           </p>
           {shops.length > 0 && (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-slate-600">
+                <span className="text-xs font-medium text-slate-600 dark:text-zinc-300">
                   Butiker ({shops.filter(s => !qoplaExcluded.has(s.shopId)).length}/{shops.length})
                 </span>
                 <div className="flex gap-3 text-xs">
-                  <button onClick={() => setQoplaExcluded(new Set())} className="text-indigo-600 hover:underline">Alla</button>
-                  <button onClick={() => setQoplaExcluded(new Set(shops.map(s => s.shopId)))} className="text-slate-400 hover:underline">Inga</button>
+                  <button onClick={() => setQoplaExcluded(new Set())} className="text-indigo-600 dark:text-indigo-400 hover:underline">Alla</button>
+                  <button onClick={() => setQoplaExcluded(new Set(shops.map(s => s.shopId)))} className="text-slate-400 dark:text-zinc-500 hover:underline">Inga</button>
                 </div>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-40 overflow-auto pr-1">
                 {shops.map(s => (
-                  <label key={s.shopId} className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                  <label key={s.shopId} className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-zinc-200 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={!qoplaExcluded.has(s.shopId)}
                       onChange={() => toggleQoplaShop(s.shopId)}
-                      className="rounded border-slate-300"
+                      className="rounded border-slate-300 dark:border-zinc-700"
                     />
                     <span className="truncate">{s.restaurant}</span>
                   </label>
@@ -353,22 +353,22 @@ export default function FortnoxPage() {
             </div>
           )}
           <div className="flex flex-wrap items-end gap-2">
-            <label className="text-xs text-slate-500">
+            <label className="text-xs text-slate-500 dark:text-zinc-400">
               Från
               <input
                 type="date"
                 value={qoplaFrom}
                 onChange={e => setQoplaFrom(e.target.value)}
-                className="block mt-0.5 px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
+                className="block mt-0.5 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900 focus:border-indigo-300 dark:focus:border-indigo-500"
               />
             </label>
-            <label className="text-xs text-slate-500">
-              Till <span className="text-slate-400">(valfritt)</span>
+            <label className="text-xs text-slate-500 dark:text-zinc-400">
+              Till <span className="text-slate-400 dark:text-zinc-500">(valfritt)</span>
               <input
                 type="date"
                 value={qoplaTo}
                 onChange={e => setQoplaTo(e.target.value)}
-                className="block mt-0.5 px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
+                className="block mt-0.5 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900 focus:border-indigo-300 dark:focus:border-indigo-500"
               />
             </label>
             <button
@@ -384,34 +384,34 @@ export default function FortnoxPage() {
       </section>
 
       {/* Kör dinkassa (trigga GitHub Action) */}
-      <section className="bg-white rounded-2xl border border-slate-100 shadow-sm">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
-          <Play size={16} className="text-slate-400" />
-          <h2 className="font-semibold text-slate-900 text-sm">Kör dinkassa</h2>
+      <section className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-sm">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100 dark:border-zinc-800">
+          <Play size={16} className="text-slate-400 dark:text-zinc-500" />
+          <h2 className="font-semibold text-slate-900 dark:text-zinc-100 text-sm">Kör dinkassa</h2>
         </div>
         <div className="p-5 space-y-3">
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-500 dark:text-zinc-400">
             Startar dinkassa-hämtningen (via GitHub Actions) och bokför mot kopplade bolag.
             Tomt = gårdagen. Ange Från för en dag, eller Från + Till för en period. En verifikation per kassa per dag.
             Redan bokförda dagar hoppas över. Resultat syns i Senaste körningar om ~1–2 min.
           </p>
           <div className="flex flex-wrap items-end gap-2">
-            <label className="text-xs text-slate-500">
+            <label className="text-xs text-slate-500 dark:text-zinc-400">
               Från
               <input
                 type="date"
                 value={dinkassaFrom}
                 onChange={e => setDinkassaFrom(e.target.value)}
-                className="block mt-0.5 px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
+                className="block mt-0.5 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900 focus:border-indigo-300 dark:focus:border-indigo-500"
               />
             </label>
-            <label className="text-xs text-slate-500">
-              Till <span className="text-slate-400">(valfritt)</span>
+            <label className="text-xs text-slate-500 dark:text-zinc-400">
+              Till <span className="text-slate-400 dark:text-zinc-500">(valfritt)</span>
               <input
                 type="date"
                 value={dinkassaTo}
                 onChange={e => setDinkassaTo(e.target.value)}
-                className="block mt-0.5 px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
+                className="block mt-0.5 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900 focus:border-indigo-300 dark:focus:border-indigo-500"
               />
             </label>
             <button
@@ -427,33 +427,33 @@ export default function FortnoxPage() {
       </section>
 
       {/* Kör Woso Emporia (ancon) */}
-      <section className="bg-white rounded-2xl border border-slate-100 shadow-sm">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
-          <Play size={16} className="text-slate-400" />
-          <h2 className="font-semibold text-slate-900 text-sm">Kör Woso Emporia</h2>
+      <section className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-sm">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100 dark:border-zinc-800">
+          <Play size={16} className="text-slate-400 dark:text-zinc-500" />
+          <h2 className="font-semibold text-slate-900 dark:text-zinc-100 text-sm">Kör Woso Emporia</h2>
         </div>
         <div className="p-5 space-y-3">
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-500 dark:text-zinc-400">
             Hämtar Woso Emporia (ancon) och bokför mot kopplat bolag. Tomt = idag, eller Från (+ Till) för en period.
             En verifikation per dag. Redan bokförda dagar hoppas. Resultat visas direkt.
           </p>
           <div className="flex flex-wrap items-end gap-2">
-            <label className="text-xs text-slate-500">
+            <label className="text-xs text-slate-500 dark:text-zinc-400">
               Från
               <input
                 type="date"
                 value={anconFrom}
                 onChange={e => setAnconFrom(e.target.value)}
-                className="block mt-0.5 px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
+                className="block mt-0.5 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900 focus:border-indigo-300 dark:focus:border-indigo-500"
               />
             </label>
-            <label className="text-xs text-slate-500">
-              Till <span className="text-slate-400">(valfritt)</span>
+            <label className="text-xs text-slate-500 dark:text-zinc-400">
+              Till <span className="text-slate-400 dark:text-zinc-500">(valfritt)</span>
               <input
                 type="date"
                 value={anconTo}
                 onChange={e => setAnconTo(e.target.value)}
-                className="block mt-0.5 px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
+                className="block mt-0.5 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900 focus:border-indigo-300 dark:focus:border-indigo-500"
               />
             </label>
             <button
@@ -469,21 +469,21 @@ export default function FortnoxPage() {
       </section>
 
       {/* Importera SIE-fil (dinkassa m.fl.) */}
-      <section className="bg-white rounded-2xl border border-slate-100 shadow-sm">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
-          <FileUp size={16} className="text-slate-400" />
-          <h2 className="font-semibold text-slate-900 text-sm">Importera SIE-fil</h2>
+      <section className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-sm">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100 dark:border-zinc-800">
+          <FileUp size={16} className="text-slate-400 dark:text-zinc-500" />
+          <h2 className="font-semibold text-slate-900 dark:text-zinc-100 text-sm">Importera SIE-fil</h2>
         </div>
         <div className="p-5 space-y-3">
-          <p className="text-xs text-slate-500">
-            För kassasystem utan API (t.ex. dinkassa): ladda ner <code className="text-slate-700">.se</code>-filen
+          <p className="text-xs text-slate-500 dark:text-zinc-400">
+            För kassasystem utan API (t.ex. dinkassa): ladda ner <code className="text-slate-700 dark:text-zinc-200">.se</code>-filen
             och bokför den mot valt bolag. Samma verifikationer hoppas över automatiskt — ingen dubbelbokföring.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <select
               value={importCompany}
               onChange={e => setImportCompany(e.target.value)}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
+              className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-800 text-sm bg-white dark:bg-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900 focus:border-indigo-300 dark:focus:border-indigo-500"
             >
               <option value="">— välj bolag —</option>
               {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -491,7 +491,7 @@ export default function FortnoxPage() {
             <label className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium cursor-pointer transition-colors ${
               importCompany && !importSie.isPending
                 ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                : 'bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-500 cursor-not-allowed'
             }`}>
               {importSie.isPending ? <Spinner size={14} className="border-white border-t-white/30" /> : <FileUp size={14} />}
               Välj .se-fil & bokför
@@ -508,17 +508,17 @@ export default function FortnoxPage() {
       </section>
 
       {/* Senaste körning */}
-      <section className="bg-white rounded-2xl border border-slate-100 shadow-sm">
-        <div className="flex items-center justify-between gap-2 px-5 py-4 border-b border-slate-100">
+      <section className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-sm">
+        <div className="flex items-center justify-between gap-2 px-5 py-4 border-b border-slate-100 dark:border-zinc-800">
           <div className="flex items-center gap-2">
-            <ReceiptText size={16} className="text-slate-400" />
-            <h2 className="font-semibold text-slate-900 text-sm">Senaste körningar</h2>
+            <ReceiptText size={16} className="text-slate-400 dark:text-zinc-500" />
+            <h2 className="font-semibold text-slate-900 dark:text-zinc-100 text-sm">Senaste körningar</h2>
           </div>
           {postingShops.length > 0 && (
             <select
               value={postingShop}
               onChange={e => { setPostingShop(e.target.value); setPostingVisible(25) }}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
+              className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-800 text-xs bg-white dark:bg-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900 focus:border-indigo-300 dark:focus:border-indigo-500"
             >
               <option value="">Alla butiker</option>
               {postingShops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -527,12 +527,12 @@ export default function FortnoxPage() {
         </div>
         <div className="p-5">
           {filteredPostings.length === 0 ? (
-            <p className="text-sm text-slate-400 py-2">
+            <p className="text-sm text-slate-400 dark:text-zinc-500 py-2">
               {postings.length === 0 ? 'Inga körningar ännu.' : 'Inga körningar för vald butik.'}
             </p>
           ) : (
             <>
-              <div className="divide-y divide-slate-50">
+              <div className="divide-y divide-slate-50 dark:divide-zinc-800">
                 {visiblePostings.map(p => {
                   const bolag = companyNameById.get(companyOfPosting(p) ?? '')
                   const detail = [bolag, p.message].filter(Boolean).join(' · ')
@@ -540,14 +540,14 @@ export default function FortnoxPage() {
                     <div key={p.id} className="flex items-center gap-3 py-2 text-sm">
                       <StatusBadge status={p.status} />
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-slate-700 truncate">
+                        <div className="font-medium text-slate-700 dark:text-zinc-200 truncate">
                           {nameByShop.get(p.qopla_shop_id) ?? p.qopla_shop_id}
-                          <span className="text-slate-400 font-normal"> · {p.business_date}</span>
+                          <span className="text-slate-400 dark:text-zinc-500 font-normal"> · {p.business_date}</span>
                         </div>
-                        {detail && <div className="text-xs text-slate-400 truncate">{detail}</div>}
+                        {detail && <div className="text-xs text-slate-400 dark:text-zinc-500 truncate">{detail}</div>}
                       </div>
                       {p.voucher_number && (
-                        <span className={`shrink-0 text-xs font-mono ${p.status === 'deleted' ? 'text-red-400 line-through' : 'text-slate-500'}`}>
+                        <span className={`shrink-0 text-xs font-mono ${p.status === 'deleted' ? 'text-red-400 line-through' : 'text-slate-500 dark:text-zinc-400'}`}>
                           {p.voucher_number}
                         </span>
                       )}
@@ -555,12 +555,12 @@ export default function FortnoxPage() {
                   )
                 })}
               </div>
-              <div className="flex items-center justify-between pt-3 mt-1 border-t border-slate-50 text-xs text-slate-400">
+              <div className="flex items-center justify-between pt-3 mt-1 border-t border-slate-50 dark:border-zinc-800 text-xs text-slate-400 dark:text-zinc-500">
                 <span>Visar {visiblePostings.length} av {filteredPostings.length}</span>
                 {filteredPostings.length > postingVisible && (
                   <button
                     onClick={() => setPostingVisible(v => v + 25)}
-                    className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 font-medium hover:bg-slate-200 transition-colors"
+                    className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 font-medium hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors"
                   >
                     Visa fler
                   </button>
@@ -585,27 +585,27 @@ function RunResults({ results }: { results: RunRow[] }) {
   return (
     <div className="space-y-3">
       <div className="flex gap-3 text-sm">
-        <span className="text-emerald-600 font-semibold">{ok} bokförda</span>
-        <span className="text-slate-400">{skip} hoppade</span>
-        {err > 0 && <span className="text-red-500 font-semibold">{err} fel</span>}
+        <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{ok} bokförda</span>
+        <span className="text-slate-400 dark:text-zinc-500">{skip} hoppade</span>
+        {err > 0 && <span className="text-red-500 dark:text-red-400 font-semibold">{err} fel</span>}
       </div>
       {results.length === 0 ? (
-        <p className="text-sm text-slate-400 py-2">Inget att visa.</p>
+        <p className="text-sm text-slate-400 dark:text-zinc-500 py-2">Inget att visa.</p>
       ) : (
-        <div className="divide-y divide-slate-50 max-h-[55vh] overflow-auto -mx-1 px-1">
+        <div className="divide-y divide-slate-50 dark:divide-zinc-800 max-h-[55vh] overflow-auto -mx-1 px-1">
           {results.map((r, i) => {
             const num = r.voucherNumbers?.length ? r.voucherNumbers.join(', ') : r.voucher
             return (
               <div key={i} className="flex items-center gap-3 py-2 text-sm">
                 <StatusBadge status={r.status} />
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium text-slate-700 truncate">
+                  <div className="font-medium text-slate-700 dark:text-zinc-200 truncate">
                     {r.shop || r.date || '—'}
-                    {r.shop && r.date && <span className="text-slate-400 font-normal"> · {r.date}</span>}
+                    {r.shop && r.date && <span className="text-slate-400 dark:text-zinc-500 font-normal"> · {r.date}</span>}
                   </div>
-                  {r.message && r.status !== 'ok' && <div className="text-xs text-slate-400 truncate">{r.message}</div>}
+                  {r.message && r.status !== 'ok' && <div className="text-xs text-slate-400 dark:text-zinc-500 truncate">{r.message}</div>}
                 </div>
-                {num && <span className="shrink-0 text-xs font-mono text-slate-500">{num}</span>}
+                {num && <span className="shrink-0 text-xs font-mono text-slate-500 dark:text-zinc-400">{num}</span>}
               </div>
             )
           })}
@@ -617,12 +617,12 @@ function RunResults({ results }: { results: RunRow[] }) {
 
 function StatusBadge({ status }: { status: string }) {
   if (status === 'ok')
-    return <span className="shrink-0 inline-flex items-center gap-1 text-emerald-600"><CheckCircle2 size={15} /></span>
+    return <span className="shrink-0 inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400"><CheckCircle2 size={15} /></span>
   if (status === 'error')
-    return <span className="shrink-0 inline-flex items-center gap-1 text-red-500"><AlertCircle size={15} /></span>
+    return <span className="shrink-0 inline-flex items-center gap-1 text-red-500 dark:text-red-400"><AlertCircle size={15} /></span>
   if (status === 'deleted')
-    return <span className="shrink-0 inline-flex items-center gap-1 text-red-500" title="Borttagen i Fortnox"><Ban size={15} /></span>
-  return <span className="shrink-0 inline-flex items-center gap-1 text-slate-300"><MinusCircle size={15} /></span>
+    return <span className="shrink-0 inline-flex items-center gap-1 text-red-500 dark:text-red-400" title="Borttagen i Fortnox"><Ban size={15} /></span>
+  return <span className="shrink-0 inline-flex items-center gap-1 text-slate-300 dark:text-zinc-600"><MinusCircle size={15} /></span>
 }
 
 function CompanyRow({ company, connected }: { company: FortnoxCompany; connected: boolean }) {
@@ -669,20 +669,20 @@ function CompanyRow({ company, connected }: { company: FortnoxCompany; connected
           onChange={e => setName(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { setEditing(false); setName(company.name) } }}
           onBlur={save}
-          className="flex-1 px-2.5 py-1.5 rounded-lg border border-indigo-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100"
+          className="flex-1 px-2.5 py-1.5 rounded-lg border border-indigo-300 dark:border-indigo-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900"
         />
       ) : (
-        <span className="flex-1 text-sm text-slate-700">{company.name}</span>
+        <span className="flex-1 text-sm text-slate-700 dark:text-zinc-200">{company.name}</span>
       )}
       {connected ? (
-        <span className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium">
+        <span className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-xs font-medium">
           <Link2 size={13} /> Ansluten
         </span>
       ) : (
         <button
           onClick={handleConnect}
           disabled={connecting}
-          className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-medium hover:bg-indigo-100 disabled:opacity-50 transition-colors"
+          className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-xs font-medium hover:bg-indigo-100 dark:hover:bg-indigo-900 disabled:opacity-50 transition-colors"
           title="Anslut bolaget till Fortnox"
         >
           {connecting ? <Spinner size={12} /> : <Plug size={13} />} Anslut
@@ -690,14 +690,14 @@ function CompanyRow({ company, connected }: { company: FortnoxCompany; connected
       )}
       <button
         onClick={() => setEditing(true)}
-        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+        className="p-1.5 rounded-lg text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
         title="Byt namn"
       >
         <Pencil size={14} />
       </button>
       <button
         onClick={handleDelete}
-        className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+        className="p-1.5 rounded-lg text-slate-400 dark:text-zinc-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 transition-colors"
         title="Ta bort"
       >
         <Trash2 size={14} />

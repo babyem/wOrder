@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Search, RefreshCw, GitMerge, Bell, X, Mail, GripVertical, Loader2, ZoomIn, ZoomOut, Trash2, Undo2, Ban } from 'lucide-react'
-import { useOrders, useMergeOrders, useDeletedOrders, useRestoreOrder } from '../../hooks/useOrders'
+import { useOrders, useMergeOrders, useMergeVendorCards, useDeletedOrders, useRestoreOrder } from '../../hooks/useOrders'
 import { useLocations, useReorderLocations } from '../../hooks/useLocations'
 import { useVendors } from '../../hooks/useMetadata'
 import OrderCard from '../../components/admin/OrderCard'
@@ -45,24 +45,25 @@ function SortableColumn({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
-      className="w-64 flex-none flex flex-col gap-2"
+      id={`order-col-${loc.id}`}
+      className="w-[calc(100vw-2rem)] snap-start md:w-64 flex-none flex flex-col gap-2"
     >
-      <div className="sticky top-0 z-30 bg-slate-50 flex items-center justify-between px-1 py-1 -my-1 mb-0">
+      <div className="sticky top-0 z-30 bg-slate-50 dark:bg-zinc-800 flex items-center justify-between px-1 py-1 -my-1 mb-0">
         <div className="flex items-center gap-1.5">
           <button
             {...attributes}
             {...listeners}
-            className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-400 touch-none"
+            className="cursor-grab active:cursor-grabbing text-slate-300 dark:text-zinc-600 hover:text-slate-400 dark:hover:text-zinc-500 touch-none"
           >
             <GripVertical size={14} />
           </button>
-          <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">{loc.name}</h2>
+          <h2 className="text-xs font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-widest">{loc.name}</h2>
         </div>
         <div className="flex items-center gap-1.5">
           {pendingCount > 0 && (
             <span className="min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold tabular-nums">{pendingCount}</span>
           )}
-          {count > 0 && <span className="text-xs text-slate-300 font-medium">{count}</span>}
+          {count > 0 && <span className="text-xs text-slate-300 dark:text-zinc-600 font-medium">{count}</span>}
         </div>
       </div>
       {children}
@@ -72,12 +73,14 @@ function SortableColumn({
 
 export default function OrdersPage() {
   const [status, setStatus] = useState('all')
+  const [mobileCol, setMobileCol] = useState(0)
   const [search, setSearch] = useState('')
   const [daysBack, setDaysBack] = useState(8)
   // Selection key: "orderId::vendor"
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [showBatchNotify, setShowBatchNotify] = useState(false)
   const [showMergePicker, setShowMergePicker] = useState(false)
+  const [showVendorMergePicker, setShowVendorMergePicker] = useState(false)
   const [showTrash, setShowTrash] = useState(false)
   const [batchSending, setBatchSending] = useState<string | null>(null)
   const [zoom, setZoom] = useState<number>(() => {
@@ -105,6 +108,7 @@ export default function OrdersPage() {
   const { data: locations } = useLocations()
   const { data: vendorList } = useVendors()
   const mergeOrders = useMergeOrders()
+  const mergeVendorCards = useMergeVendorCards()
   const reorderLocations = useReorderLocations()
   const { data: deletedOrders, isLoading: trashLoading, error: trashError } = useDeletedOrders(showTrash)
   const restoreOrder = useRestoreOrder()
@@ -158,11 +162,19 @@ export default function OrdersPage() {
     if (!ordersByLocation[lid]) ordersByLocation[lid] = []
     ordersByLocation[lid].push(order)
   }
+  // Pending on top, then finished — newest first inside each group
+  const statusRank = (o: OrderWithDetails) => (o.status === 'pending' ? 0 : 1)
+  for (const list of Object.values(ordersByLocation)) {
+    list.sort((a, b) => statusRank(a) - statusRank(b) || b.created_at.localeCompare(a.created_at))
+  }
 
   // --- Batch notify logic ---
   const vendorMap = Object.fromEntries((vendorList ?? []).map(v => [v.name, v]))
   const selectedOrders = (orders ?? []).filter(o => selectedOrderIds.has(o.id))
   const canMerge = selectedOrders.length >= 2
+  // Flera leverantörskort valda inom en och samma order → slå ihop korten (vendor_override)
+  const vendorMergeOrder = selectedOrders.length === 1 && selectedPairs.length >= 2 ? selectedOrders[0] : null
+  const vendorMergeVendors = vendorMergeOrder ? selectedPairs.map(p => p.vendor) : []
   const sameLocation = canMerge &&
     new Set(selectedOrders.map(o => o.location_id)).size === 1
   // Unique locations among selected orders (for cross-location merge target picker)
@@ -326,42 +338,54 @@ export default function OrdersPage() {
     }
   }
 
+  const handleVendorMerge = async (targetVendor: string) => {
+    if (!vendorMergeOrder) return
+    try {
+      await mergeVendorCards.mutateAsync({ order: vendorMergeOrder, vendors: vendorMergeVendors, targetVendor })
+      toast.success(`Kort sammanslagna till ${targetVendor}`)
+      setShowVendorMergePicker(false)
+      clearSelection()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Kunde inte slå ihop korten')
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4 h-full pb-20">
       {/* Top bar */}
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex-1 min-w-48 relative">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <div className="basis-full md:basis-auto md:flex-1 relative">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-zinc-500" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search..."
-            className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+            className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-zinc-900"
           />
         </div>
         <select
           value={status}
           onChange={e => setStatus(e.target.value)}
-          className="px-3 py-2 rounded-xl border border-slate-200 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+          className="flex-1 md:flex-none px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-800 text-sm text-slate-700 dark:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-zinc-900"
         >
           <option value="all">All statuses</option>
           <option value="pending">Pending</option>
           <option value="done">Done</option>
           <option value="stopped">Stoppad</option>
         </select>
-        <div className="flex items-center gap-0.5 rounded-xl border border-slate-200 bg-white px-1 py-1">
+        <div className="hidden md:flex items-center gap-0.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-1 py-1">
           <button
             onClick={() => setZoomPersist(zoom - ZOOM_STEP)}
             disabled={zoom <= ZOOM_MIN + 0.001}
             title="Zoom out"
-            className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="p-1.5 rounded-lg text-slate-500 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 hover:text-slate-700 dark:hover:text-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             <ZoomOut size={15} />
           </button>
           <button
             onClick={() => setZoomPersist(1)}
             title="Reset zoom"
-            className="px-1.5 text-xs tabular-nums font-medium text-slate-500 hover:text-slate-700 min-w-[40px]"
+            className="px-1.5 text-xs tabular-nums font-medium text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-zinc-200 min-w-[40px]"
           >
             {Math.round(zoom * 100)}%
           </button>
@@ -369,7 +393,7 @@ export default function OrdersPage() {
             onClick={() => setZoomPersist(zoom + ZOOM_STEP)}
             disabled={zoom >= ZOOM_MAX - 0.001}
             title="Zoom in"
-            className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="p-1.5 rounded-lg text-slate-500 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 hover:text-slate-700 dark:hover:text-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             <ZoomIn size={15} />
           </button>
@@ -377,13 +401,13 @@ export default function OrdersPage() {
         <button
           onClick={() => setShowTrash(true)}
           title="Borttagna ordrar"
-          className="p-2 rounded-xl hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-700"
+          className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-200"
         >
           <Trash2 size={17} />
         </button>
         <button
           onClick={() => refetch()}
-          className="p-2 rounded-xl hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-700"
+          className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-200"
         >
           <RefreshCw size={17} />
         </button>
@@ -392,17 +416,17 @@ export default function OrdersPage() {
       {/* Express — skicka alla väntande varor per leverantör */}
       {expressVendors.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Express</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-zinc-500">Express</span>
           {expressVendors.map(v => (
             <button
               key={v.name}
               onClick={() => setExpressModalVendor(v.name)}
               disabled={expressSending !== null}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-medium text-slate-700 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 disabled:opacity-50 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-medium text-slate-700 dark:text-zinc-200 hover:border-indigo-300 dark:hover:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950 hover:text-indigo-700 dark:hover:text-indigo-300 disabled:opacity-50 transition-colors"
             >
               {expressSending === v.name ? <Loader2 size={12} className="animate-spin" /> : <span>⚡</span>}
               {v.name}
-              <span className="text-slate-400 tabular-nums">{v.orderCount}</span>
+              <span className="text-slate-400 dark:text-zinc-500 tabular-nums">{v.orderCount}</span>
             </button>
           ))}
         </div>
@@ -412,7 +436,37 @@ export default function OrdersPage() {
       {isLoading ? (
         <div className="flex justify-center py-16"><Spinner size={32} /></div>
       ) : (
-        <div className="no-scrollbar overflow-x-auto overflow-y-auto -mx-4 md:-mx-6 px-4 md:px-6" style={{ zoom, maxHeight: `calc((100vh - 150px) / ${zoom})` }}>
+        <>
+        {/* Mobile: location tabs — one column fills the screen, tap or swipe between them */}
+        <div className="md:hidden -mx-4 px-4 flex gap-1.5 overflow-x-auto no-scrollbar">
+          {sortedLocations.map((loc, i) => {
+            const pend = (ordersByLocation[loc.id] ?? []).filter(o => o.status === 'pending').length
+            const active = i === mobileCol
+            return (
+              <button
+                key={loc.id}
+                onClick={() => {
+                  setMobileCol(i)
+                  document.getElementById(`order-col-${loc.id}`)?.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' })
+                }}
+                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-colors ${active ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-300'}`}
+              >
+                {loc.name}
+                {pend > 0 && <span className={`min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold tabular-nums flex items-center justify-center ${active ? 'bg-white/20 text-white' : 'bg-red-500 text-white'}`}>{pend}</span>}
+              </button>
+            )
+          })}
+        </div>
+        <div
+          className="no-scrollbar overflow-x-auto overflow-y-auto -mx-4 md:-mx-6 px-4 md:px-6 snap-x snap-mandatory md:snap-none scroll-px-4"
+          style={{ zoom, maxHeight: `calc((100vh - 150px) / ${zoom})` }}
+          onScroll={e => {
+            if (window.innerWidth >= 768) return
+            const el = e.currentTarget
+            const idx = Math.round(el.scrollLeft / (el.clientWidth - 16))
+            if (idx !== mobileCol) setMobileCol(idx)
+          }}
+        >
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleColumnDragEnd}>
             <SortableContext items={sortedLocations.map(l => l.id)} strategy={horizontalListSortingStrategy}>
               <div className="flex gap-4 pb-4" style={{ minWidth: 'max-content' }}>
@@ -422,8 +476,8 @@ export default function OrdersPage() {
                     <SortableColumn key={loc.id} loc={loc} count={colOrders.length} pendingCount={colOrders.filter(o => o.status === 'pending').length}>
                       <AnimatePresence mode="popLayout">
                         {colOrders.length === 0 ? (
-                          <div className="rounded-2xl border-2 border-dashed border-slate-100 h-20 flex items-center justify-center">
-                            <span className="text-xs text-slate-300">No orders</span>
+                          <div className="rounded-2xl border-2 border-dashed border-slate-100 dark:border-zinc-800 h-20 flex items-center justify-center">
+                            <span className="text-xs text-slate-300 dark:text-zinc-600">No orders</span>
                           </div>
                         ) : (
                           colOrders.map(order => {
@@ -436,6 +490,7 @@ export default function OrdersPage() {
                               order={order}
                               selectedVendors={orderSelectedVendors}
                               onToggle={(vendor) => toggleSelect(order.id, vendor)}
+                              showLocation={false}
                             />
                             )
                           })
@@ -448,13 +503,14 @@ export default function OrdersPage() {
             </SortableContext>
           </DndContext>
         </div>
+        </>
       )}
 
       {/* Load more */}
       <div className="flex justify-center pt-2 pb-4">
         <button
           onClick={() => setDaysBack(d => d + 8)}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-slate-500 bg-white border border-slate-200 hover:bg-slate-50 hover:text-slate-700 transition-colors shadow-sm"
+          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-slate-500 dark:text-zinc-400 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-800 hover:text-slate-700 dark:hover:text-zinc-200 transition-colors shadow-sm"
         >
           Visa fler — visar {daysBack} dagar tillbaka
         </button>
@@ -468,7 +524,7 @@ export default function OrdersPage() {
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 100, opacity: 0 }}
             transition={{ type: 'spring', damping: 20, stiffness: 260 }}
-            className="fixed bottom-4 left-4 right-4 max-w-lg mx-auto bg-slate-900 rounded-2xl px-4 py-3 flex items-center gap-2 shadow-2xl z-40"
+            className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-4 right-4 max-w-lg mx-auto bg-slate-900 dark:bg-zinc-800 rounded-2xl px-4 py-3 flex items-center gap-2 shadow-2xl z-40"
           >
             <span className="text-white text-sm font-medium flex-1">{selected.size} vendor card{selected.size !== 1 ? 's' : ''} selected</span>
             {batchNotifiableVendors.length > 0 && (
@@ -483,12 +539,21 @@ export default function OrdersPage() {
               <button
                 onClick={() => sameLocation ? handleMerge() : setShowMergePicker(true)}
                 disabled={mergeOrders.isPending}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white text-slate-900 text-xs font-medium hover:bg-slate-100 disabled:opacity-50 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 text-xs font-medium hover:bg-slate-100 dark:hover:bg-zinc-800 disabled:opacity-50 transition-colors"
               >
                 <GitMerge size={13} /> Merge
               </button>
             )}
-            <button onClick={clearSelection} className="p-1.5 rounded-xl text-slate-400 hover:text-white transition-colors">
+            {vendorMergeOrder && (
+              <button
+                onClick={() => setShowVendorMergePicker(true)}
+                disabled={mergeVendorCards.isPending}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 text-xs font-medium hover:bg-slate-100 dark:hover:bg-zinc-800 disabled:opacity-50 transition-colors"
+              >
+                <GitMerge size={13} /> Merge
+              </button>
+            )}
+            <button onClick={clearSelection} className="p-1.5 rounded-xl text-slate-400 dark:text-zinc-500 hover:text-white transition-colors">
               <X size={16} />
             </button>
           </motion.div>
@@ -500,26 +565,26 @@ export default function OrdersPage() {
         {trashLoading ? (
           <div className="flex justify-center py-8"><Spinner size={24} /></div>
         ) : trashError ? (
-          <p className="text-sm text-red-600">{trashError instanceof Error ? trashError.message : 'Kunde inte hämta borttagna ordrar'}</p>
+          <p className="text-sm text-red-600 dark:text-red-400">{trashError instanceof Error ? trashError.message : 'Kunde inte hämta borttagna ordrar'}</p>
         ) : !deletedOrders?.length ? (
-          <p className="text-sm text-slate-400 py-4 text-center">Inga borttagna ordrar.</p>
+          <p className="text-sm text-slate-400 dark:text-zinc-500 py-4 text-center">Inga borttagna ordrar.</p>
         ) : (
           <div className="space-y-2 max-h-[60vh] overflow-y-auto -mx-1 px-1">
             {deletedOrders.map(o => (
-              <div key={o.id} className="flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-2.5">
+              <div key={o.id} className="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-2.5">
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-slate-800 truncate">
+                  <p className="text-sm font-medium text-slate-800 dark:text-zinc-200 truncate">
                     {o.location?.name ?? 'Okänd butik'}
-                    <span className="text-slate-400 font-normal"> · {o.employee?.name ?? 'Okänd'}</span>
+                    <span className="text-slate-400 dark:text-zinc-500 font-normal"> · {o.employee?.name ?? 'Okänd'}</span>
                   </p>
-                  <p className="text-xs text-slate-400 tabular-nums">
+                  <p className="text-xs text-slate-400 dark:text-zinc-500 tabular-nums">
                     {o.no_order_vendor ? `Ingen ${o.no_order_vendor}-beställning` : `${o.items.length} varor`} · lagd {formatStamp(o.created_at)} · borttagen {formatStamp(o.deleted_at)}
                   </p>
                 </div>
                 <button
                   onClick={() => handleRestore(o.id)}
                   disabled={restoreOrder.isPending}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 text-white text-xs font-medium hover:bg-slate-700 disabled:opacity-50 transition-colors shrink-0"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 dark:bg-zinc-800 text-white text-xs font-medium hover:bg-slate-700 dark:hover:bg-zinc-700 disabled:opacity-50 transition-colors shrink-0"
                 >
                   <Undo2 size={12} />
                   Återställ
@@ -544,13 +609,13 @@ export default function OrdersPage() {
               initial={{ scale: 0.95, y: 10 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 10 }}
-              className="bg-white rounded-2xl shadow-xl p-5 w-80"
+              className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl p-5 w-80"
               onClick={e => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-slate-900 text-sm">Vem ska få den nya ordern?</h3>
-                <button onClick={() => setShowMergePicker(false)} className="p-1 rounded-lg hover:bg-slate-100">
-                  <X size={15} className="text-slate-400" />
+                <h3 className="font-semibold text-slate-900 dark:text-zinc-100 text-sm">Vem ska få den nya ordern?</h3>
+                <button onClick={() => setShowMergePicker(false)} className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800">
+                  <X size={15} className="text-slate-400 dark:text-zinc-500" />
                 </button>
               </div>
               <div className="space-y-1.5">
@@ -559,10 +624,52 @@ export default function OrdersPage() {
                     key={loc.id}
                     onClick={() => handleMerge(loc.id)}
                     disabled={mergeOrders.isPending}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-slate-200 text-sm font-medium text-slate-700 hover:border-indigo-300 hover:bg-indigo-50 disabled:opacity-50 transition-colors text-left"
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 text-sm font-medium text-slate-700 dark:text-zinc-200 hover:border-indigo-300 dark:hover:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950 disabled:opacity-50 transition-colors text-left"
                   >
-                    <GitMerge size={14} className="text-indigo-500 shrink-0" />
+                    <GitMerge size={14} className="text-indigo-500 dark:text-indigo-400 shrink-0" />
                     {loc.name}
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Vendor-card merge picker — choose which vendor card keeps the items */}
+      <AnimatePresence>
+        {showVendorMergePicker && vendorMergeOrder && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+            onClick={() => setShowVendorMergePicker(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 10 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 10 }}
+              className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl p-5 w-80"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="font-semibold text-slate-900 dark:text-zinc-100 text-sm">Vilket kort ska behålla varorna?</h3>
+                <button onClick={() => setShowVendorMergePicker(false)} className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800">
+                  <X size={15} className="text-slate-400 dark:text-zinc-500" />
+                </button>
+              </div>
+              <p className="text-xs text-slate-400 dark:text-zinc-500 mb-3">Övriga valda kort flyttas till den leverantören.</p>
+              <div className="space-y-1.5">
+                {vendorMergeVendors.map(v => (
+                  <button
+                    key={v}
+                    onClick={() => handleVendorMerge(v)}
+                    disabled={mergeVendorCards.isPending}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 text-sm font-medium text-slate-700 dark:text-zinc-200 hover:border-indigo-300 dark:hover:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950 disabled:opacity-50 transition-colors text-left"
+                  >
+                    <GitMerge size={14} className="text-indigo-500 dark:text-indigo-400 shrink-0" />
+                    {v}
                   </button>
                 ))}
               </div>
@@ -586,24 +693,24 @@ export default function OrdersPage() {
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 60, opacity: 0 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="bg-white rounded-2xl p-5 w-full max-w-sm shadow-2xl space-y-3 max-h-[80vh] overflow-y-auto"
+              className="bg-white dark:bg-zinc-900 rounded-2xl p-5 w-full max-w-sm shadow-2xl space-y-3 max-h-[80vh] overflow-y-auto"
               onClick={e => e.stopPropagation()}
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-semibold text-slate-900">Express order</p>
-                  <p className="text-xs text-slate-400 mt-0.5">Alla väntande varor</p>
+                  <p className="font-semibold text-slate-900 dark:text-zinc-100">Express order</p>
+                  <p className="text-xs text-slate-400 dark:text-zinc-500 mt-0.5">Alla väntande varor</p>
                 </div>
-                <button onClick={() => setExpressModalVendor(null)} className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors">
-                  <X size={16} className="text-slate-400" />
+                <button onClick={() => setExpressModalVendor(null)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors">
+                  <X size={16} className="text-slate-400 dark:text-zinc-500" />
                 </button>
               </div>
-              <div className="border border-slate-100 rounded-xl p-3 space-y-2">
-                <p className="text-sm font-medium text-slate-800">{expressModal.name}</p>
-                <div className="text-xs text-slate-400 space-y-2">
+              <div className="border border-slate-100 dark:border-zinc-800 rounded-xl p-3 space-y-2">
+                <p className="text-sm font-medium text-slate-800 dark:text-zinc-200">{expressModal.name}</p>
+                <div className="text-xs text-slate-400 dark:text-zinc-500 space-y-2">
                   {expressModal.locations.map(({ loc, items }) => (
                     <div key={loc}>
-                      <p className="font-medium text-slate-500">{loc}</p>
+                      <p className="font-medium text-slate-500 dark:text-zinc-400">{loc}</p>
                       {items.map(i => (
                         <p key={i.product}>{i.product}: {i.quantity} {i.unit}</p>
                       ))}
@@ -611,9 +718,9 @@ export default function OrdersPage() {
                   ))}
                 </div>
                 {expressModal.noOrderLocations.length > 0 && (
-                  <div className="flex items-start gap-1.5 rounded-lg bg-slate-50 px-2.5 py-2 text-xs text-slate-500">
+                  <div className="flex items-start gap-1.5 rounded-lg bg-slate-50 dark:bg-zinc-800 px-2.5 py-2 text-xs text-slate-500 dark:text-zinc-400">
                     <Ban size={12} className="mt-0.5 shrink-0" />
-                    <span>Ingen beställning idag: <span className="font-medium text-slate-700">{expressModal.noOrderLocations.join(', ')}</span></span>
+                    <span>Ingen beställning idag: <span className="font-medium text-slate-700 dark:text-zinc-200">{expressModal.noOrderLocations.join(', ')}</span></span>
                   </div>
                 )}
                 <div className="flex gap-2 pt-1">
@@ -621,7 +728,7 @@ export default function OrdersPage() {
                     <button
                       disabled={expressSending === expressModal.name}
                       onClick={() => handleExpress(expressModal)}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-medium hover:bg-indigo-100 disabled:opacity-50 transition-colors"
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-xs font-medium hover:bg-indigo-100 dark:hover:bg-indigo-900 disabled:opacity-50 transition-colors"
                     >
                       {expressSending === expressModal.name
                         ? <Loader2 size={11} className="animate-spin" />
@@ -640,7 +747,7 @@ export default function OrdersPage() {
                         )
                         setExpressModalVendor(null)
                       }}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 transition-colors"
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-xs font-medium hover:bg-emerald-100 dark:hover:bg-emerald-900 transition-colors"
                     />
                   )}
                 </div>
@@ -665,26 +772,26 @@ export default function OrdersPage() {
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 60, opacity: 0 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="bg-white rounded-2xl p-5 w-full max-w-sm shadow-2xl space-y-3"
+              className="bg-white dark:bg-zinc-900 rounded-2xl p-5 w-full max-w-sm shadow-2xl space-y-3"
               onClick={e => e.stopPropagation()}
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-semibold text-slate-900">Notify vendors</p>
-                  <p className="text-xs text-slate-400 mt-0.5">{selected.size} orders combined</p>
+                  <p className="font-semibold text-slate-900 dark:text-zinc-100">Notify vendors</p>
+                  <p className="text-xs text-slate-400 dark:text-zinc-500 mt-0.5">{selected.size} orders combined</p>
                 </div>
-                <button onClick={() => setShowBatchNotify(false)} className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors">
-                  <X size={16} className="text-slate-400" />
+                <button onClick={() => setShowBatchNotify(false)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors">
+                  <X size={16} className="text-slate-400 dark:text-zinc-500" />
                 </button>
               </div>
               <div className="space-y-2">
                 {batchNotifiableVendors.map(v => (
-                  <div key={v.name} className="border border-slate-100 rounded-xl p-3 space-y-2">
-                    <p className="text-sm font-medium text-slate-800">{v.name}</p>
-                    <div className="text-xs text-slate-400 space-y-2">
+                  <div key={v.name} className="border border-slate-100 dark:border-zinc-800 rounded-xl p-3 space-y-2">
+                    <p className="text-sm font-medium text-slate-800 dark:text-zinc-200">{v.name}</p>
+                    <div className="text-xs text-slate-400 dark:text-zinc-500 space-y-2">
                       {v.locations.map(({ loc, items }) => (
                         <div key={loc}>
-                          <p className="font-medium text-slate-500">{loc}</p>
+                          <p className="font-medium text-slate-500 dark:text-zinc-400">{loc}</p>
                           {items.map(i => (
                             <p key={i.product}>{i.product}: {i.quantity} {i.unit}</p>
                           ))}
@@ -709,7 +816,7 @@ export default function OrdersPage() {
                               setBatchSending(null)
                             }
                           }}
-                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-medium hover:bg-indigo-100 disabled:opacity-50 transition-colors"
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-xs font-medium hover:bg-indigo-100 dark:hover:bg-indigo-900 disabled:opacity-50 transition-colors"
                         >
                           {batchSending === v.name
                             ? <Loader2 size={11} className="animate-spin" />
@@ -722,7 +829,7 @@ export default function OrdersPage() {
                           phone={v.phone}
                           body={buildBatchBody(v)}
                           onSent={() => { markVendorDoneAcrossOrders(v.name); setShowBatchNotify(false); clearSelection() }}
-                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 transition-colors"
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-xs font-medium hover:bg-emerald-100 dark:hover:bg-emerald-900 transition-colors"
                         />
                       )}
                     </div>

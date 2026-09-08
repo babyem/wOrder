@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CheckCircle, RotateCcw, Trash2, User, FileText, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag, AlertTriangle, AlertCircle, Copy, Ban } from 'lucide-react'
+import { CheckCircle, RotateCcw, Trash2, FileText, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag, AlertTriangle, AlertCircle, Copy, Ban, MoreHorizontal } from 'lucide-react'
 import type { Order, OrderWithDetails } from '../../types'
 import { useUpdateOrderStatus, useDeleteOrder, useRestoreOrder, useUpdateOrderItem, useMarkVendorDone, useUpdateAdminNote } from '../../hooks/useOrders'
 import { useVendors, useUnits } from '../../hooks/useMetadata'
@@ -14,9 +14,10 @@ interface Props {
   order: OrderWithDetails
   selectedVendors?: Set<string>   // which vendor cards of this order are selected
   onToggle?: (vendor: string) => void
+  showLocation?: boolean          // false when the surrounding column is already the location
 }
 
-export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
+export default function OrderCard({ order, selectedVendors, onToggle, showLocation = true }: Props) {
   const updateStatus = useUpdateOrderStatus()
   const deleteOrder = useDeleteOrder()
   const restoreOrder = useRestoreOrder()
@@ -25,6 +26,8 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
   const updateOrderItem = useUpdateOrderItem()
   const markVendorDoneMutation = useMarkVendorDone()
   const [showNotifyVendor, setShowNotifyVendor] = useState<string | null>(null)
+  const [hovered, setHovered] = useState(false)
+  const [actionsPinned, setActionsPinned] = useState(false)
   const toggleNotify = (vendor: string) => setShowNotifyVendor(prev => prev === vendor ? null : vendor)
   const [editingNote, setEditingNote] = useState(false)
   const [noteVal, setNoteVal] = useState(order.admin_note ?? '')
@@ -83,6 +86,10 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
   const [unitOverrides, setUnitOverrides] = useState<Record<string, string>>(
     () => Object.fromEntries(order.items.filter(i => i.unit_override).map(i => [i.id, i.unit_override!]))
   )
+  // Sync local override state when the server row changes (e.g. after a vendor-card merge from OrdersPage)
+  useEffect(() => {
+    setVendorOverrides(Object.fromEntries(order.items.filter(i => i.vendor_override).map(i => [i.id, i.vendor_override!])))
+  }, [order.items])
   const [editingUnitItem, setEditingUnitItem] = useState<string | null>(null)
   const [unitDropPos, setUnitDropPos] = useState<Record<string, { top?: number; bottom?: number; left: number }>>({})
   const [vendorDropPos, setVendorDropPos] = useState<Record<string, { top?: number; bottom?: number; left: number }>>({})
@@ -165,7 +172,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
               await updateStatus.mutateAsync({ id: order.id, status: 'pending' })
               markVendorDoneMutation.mutate({ id: order.id, done_vendors: prevDoneVendors })
             }}
-            className="px-2 py-0.5 rounded-lg bg-slate-800 text-white text-xs font-medium hover:bg-slate-700"
+            className="px-2 py-0.5 rounded-lg bg-slate-800 dark:bg-zinc-800 text-white text-xs font-medium hover:bg-slate-700 dark:hover:bg-zinc-700"
           >
             Ångra
           </button>
@@ -193,7 +200,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
               toast.dismiss(t.id)
               await updateStatus.mutateAsync({ id: order.id, status: 'pending' })
             }}
-            className="px-2 py-0.5 rounded-lg bg-slate-800 text-white text-xs font-medium hover:bg-slate-700"
+            className="px-2 py-0.5 rounded-lg bg-slate-800 dark:bg-zinc-800 text-white text-xs font-medium hover:bg-slate-700 dark:hover:bg-zinc-700"
           >
             Ångra
           </button>
@@ -225,7 +232,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
               toast.dismiss(t.id)
               restoreOrder.mutate(order.id)
             }}
-            className="px-2 py-0.5 rounded-lg bg-slate-800 text-white text-xs font-medium hover:bg-slate-700"
+            className="px-2 py-0.5 rounded-lg bg-slate-800 dark:bg-zinc-800 text-white text-xs font-medium hover:bg-slate-700 dark:hover:bg-zinc-700"
           >
             Ångra
           </button>
@@ -355,10 +362,18 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
   const isPending = order.status === 'pending'
   const isStopped = order.status === 'stopped'
 
-  const time = new Date(order.created_at).toLocaleString([], {
-    month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit', hour12: false,
-  })
+  // Relative, in Swedish time: "13:06" today, "igår 09:34", otherwise "6 sep."
+  const TZ = 'Europe/Stockholm'
+  const dayKey = (d: Date) => new Intl.DateTimeFormat('sv-SE', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d)
+  const createdAt = new Date(order.created_at)
+  const clock = createdAt.toLocaleTimeString('sv-SE', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false })
+  const createdKey = dayKey(createdAt)
+  const time = createdKey === dayKey(new Date()) ? clock
+    : createdKey === dayKey(new Date(Date.now() - 86_400_000)) ? `igår ${clock}`
+    : createdAt.toLocaleDateString('sv-SE', { timeZone: TZ, day: 'numeric', month: 'short' })
+  const locationName = order.location?.name ?? 'Unknown location'
+  // Vendor label is noise when the vendor *is* the location and the column already names it
+  const showVendorLabel = (vendor: string) => showLocation || vendor.trim().toLowerCase() !== locationName.trim().toLowerCase()
 
   const byVendor = new Map<string, typeof order.items>()
   for (const item of stableItems) {
@@ -369,6 +384,13 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
 
   const vendorEntries = Array.from(byVendor.entries())
   const allVendorNames = vendorEntries.map(([v]) => v)
+
+  const copyButton = (vendor: string) => (
+    <button onClick={e => { e.stopPropagation(); copyVendor(vendor) }} title="Kopiera beställningen" aria-label="Kopiera beställningen"
+      className="p-1 rounded-lg text-slate-300 dark:text-zinc-600 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950 transition-colors [@media(hover:none)]:p-2.5 [@media(hover:none)]:-my-1.5 [@media(hover:none)]:text-indigo-500 dark:[@media(hover:none)]:text-indigo-400 [@media(hover:none)]:bg-indigo-50 dark:[@media(hover:none)]:bg-indigo-950">
+      <Copy size={13} />
+    </button>
+  )
 
   const renderItems = (items: typeof order.items) => (
     <div className="space-y-0.5">
@@ -382,11 +404,11 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
             onDoubleClick={() => toggleExclude(item)}
             title="Double-click to exclude from notification"
           >
-            <span className={excluded_ ? 'line-through text-red-400' : 'text-slate-700'}>
+            <span className={excluded_ ? 'line-through text-red-400' : 'text-slate-700 dark:text-zinc-200'}>
               {item.product?.name ?? 'Deleted product'}
             </span>
             <div className="flex items-center gap-1 shrink-0">
-              <div className={`flex items-center rounded-lg px-1.5 py-0.5 gap-1 ${excluded_ ? 'bg-red-50' : 'bg-white'}`}>
+              <div className="flex items-center justify-end gap-1 min-w-[4.5rem]">
                 {editingQtyItem === item.id ? (
                   <input
                     type="number" min={1} value={qtyDraft}
@@ -403,12 +425,12 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
                     }}
                     onClick={e => e.stopPropagation()}
                     onDoubleClick={e => e.stopPropagation()}
-                    className="w-10 text-xs tabular-nums text-right focus:outline-none bg-transparent font-medium text-slate-700"
+                    className="w-10 text-sm tabular-nums text-right focus:outline-none bg-transparent font-semibold text-slate-800 dark:text-zinc-100"
                     autoFocus
                   />
                 ) : (
                   <span
-                    className={`text-xs tabular-nums font-medium cursor-pointer ${excluded_ ? 'line-through text-red-400' : 'text-slate-600 hover:text-indigo-600'}`}
+                    className={`text-sm tabular-nums font-semibold cursor-pointer ${excluded_ ? 'line-through text-red-400' : 'text-slate-800 dark:text-zinc-100 hover:text-indigo-600 dark:hover:text-indigo-400'}`}
                     onDoubleClick={e => { e.stopPropagation(); setQtyDraft(String(item.quantity)); setEditingQtyItem(item.id) }}
                     title="Double-click to edit"
                   >{item.quantity}</span>
@@ -416,19 +438,19 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
                 <div className="relative">
                   <button
                     onClick={e => { e.stopPropagation(); if (editingUnitItem === item.id) { setEditingUnitItem(null) } else { const rect = e.currentTarget.getBoundingClientRect(); const goUp = rect.bottom + 180 > window.innerHeight; const left = Math.max(4, Math.min(rect.right - 88, window.innerWidth - 92)); setUnitDropPos(prev => ({ ...prev, [item.id]: goUp ? { bottom: window.innerHeight - rect.top + 4, left } : { top: rect.bottom + 4, left } })); setEditingUnitItem(item.id) } }}
-                    className={`text-xs transition-colors ${unitOverrides[item.id] ? 'text-indigo-500 font-medium' : excluded_ ? 'line-through text-red-300' : 'text-slate-400 hover:text-slate-600'}`}
+                    className={`text-xs transition-colors ${unitOverrides[item.id] ? 'text-indigo-500 dark:text-indigo-400 font-medium' : excluded_ ? 'line-through text-red-300 dark:text-red-700' : 'text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300'}`}
                   >{effectiveUnit(item)}</button>
                   {editingUnitItem === item.id && createPortal(
                     <>
                       <div className="fixed inset-0 z-[9998]" onClick={() => setEditingUnitItem(null)} />
-                      <div className="fixed z-[9999] bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 flex flex-col gap-0.5 min-w-[88px]" style={unitDropPos[item.id]}>
+                      <div className="fixed z-[9999] bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl shadow-lg p-1.5 flex flex-col gap-0.5 min-w-[88px]" style={unitDropPos[item.id]}>
                         {(unitList ?? []).map(u => (
                           <button key={u.id} onClick={() => {
                             const override = u.name === item.product?.unit ? null : u.name
                             setUnitOverrides(prev => { const next = { ...prev }; if (override === null) delete next[item.id]; else next[item.id] = u.name; return next })
                             updateOrderItem.mutate({ id: item.id, unit_override: override })
                             setEditingUnitItem(null)
-                          }} className={`px-2.5 py-1 rounded-lg text-xs text-left transition-colors ${effectiveUnit(item) === u.name ? 'bg-indigo-600 text-white' : 'hover:bg-slate-50 text-slate-700'}`}>{u.name}</button>
+                          }} className={`px-2.5 py-1 rounded-lg text-xs text-left transition-colors ${effectiveUnit(item) === u.name ? 'bg-indigo-600 text-white' : 'hover:bg-slate-50 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-200'}`}>{u.name}</button>
                         ))}
                       </div>
                     </>,
@@ -440,14 +462,14 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
                 <button
                   onClick={e => { e.stopPropagation(); if (editingVendorItem === item.id) { setEditingVendorItem(null) } else { const rect = e.currentTarget.getBoundingClientRect(); const goUp = rect.bottom + 220 > window.innerHeight; const left = Math.max(4, Math.min(rect.right - 138, window.innerWidth - 142)); setVendorDropPos(prev => ({ ...prev, [item.id]: goUp ? { bottom: window.innerHeight - rect.top + 4, left } : { top: rect.bottom + 4, left } })); setEditingVendorItem(item.id) } }}
                   title="Change vendor"
-                  className={`p-0.5 rounded transition-all ${isOverridden ? 'text-amber-500 opacity-100' : 'text-slate-300 opacity-0 group-hover:opacity-100 hover:text-slate-500'}`}
+                  className={`p-0.5 [@media(hover:none)]:p-1.5 [@media(hover:none)]:-my-1 rounded transition-all ${isOverridden ? 'text-amber-500 opacity-100' : 'text-slate-300 dark:text-zinc-600 opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 hover:text-slate-500 dark:hover:text-zinc-400'}`}
                 ><Tag size={10} /></button>
                 {editingVendorItem === item.id && createPortal(
                   <>
                     <div className="fixed inset-0 z-[9998]" onClick={() => setEditingVendorItem(null)} />
-                    <div className="fixed z-[9999] bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 flex flex-col gap-0.5 min-w-[138px]" style={vendorDropPos[item.id]}>
+                    <div className="fixed z-[9999] bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl shadow-lg p-1.5 flex flex-col gap-0.5 min-w-[138px]" style={vendorDropPos[item.id]}>
                       {(vendorList ?? []).map(v => (
-                        <button key={v.id} onClick={() => setItemVendor(item, v.name)} className={`px-2.5 py-1 rounded-lg text-xs text-left transition-colors ${effectiveVendor(item) === v.name ? 'bg-indigo-600 text-white' : 'hover:bg-slate-50 text-slate-700'}`}>{v.name}</button>
+                        <button key={v.id} onClick={() => setItemVendor(item, v.name)} className={`px-2.5 py-1 rounded-lg text-xs text-left transition-colors ${effectiveVendor(item) === v.name ? 'bg-indigo-600 text-white' : 'hover:bg-slate-50 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-200'}`}>{v.name}</button>
                       ))}
                     </div>
                   </>,
@@ -470,7 +492,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
         <button
           onClick={handleSendToTingstad}
           disabled={sendingTingstad}
-          className="flex w-full items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium disabled:opacity-50 transition-colors bg-orange-50 text-orange-600 hover:bg-orange-100"
+          className="flex w-full items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium disabled:opacity-50 transition-colors bg-orange-50 dark:bg-orange-950 text-orange-600 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900"
         >
           {sendingTingstad ? <Loader2 size={12} className="animate-spin" /> : <><ShoppingBag size={12} /> Skicka till Tingstad</>}
         </button>
@@ -485,7 +507,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
         <button
           onClick={handleSendToChefs}
           disabled={sendingChefs}
-          className={`flex w-full items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium disabled:opacity-50 transition-colors ${chefsStatus === 'failed' ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}
+          className={`flex w-full items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium disabled:opacity-50 transition-colors ${chefsStatus === 'failed' ? 'bg-red-100 dark:bg-red-900 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900' : 'bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900'}`}
         >
           {sendingChefs
             ? <Loader2 size={12} className="animate-spin" />
@@ -495,30 +517,30 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
         </button>
       )}
       {chefsStatus === 'pending' && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-700 space-y-2">
+        <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-900 rounded-xl px-3 py-2 text-xs text-amber-700 dark:text-amber-300 space-y-2">
           <div className="flex items-center gap-2">
             <AlertTriangle size={13} className="shrink-0" />
             <span className="font-medium">Skickat — verifiera på ChefsCulinar</span>
           </div>
           <div className="flex items-center gap-1">
             <a href="https://www.chefsculinar.se/sv-se/checkout" target="_blank" rel="noreferrer"
-              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 font-medium transition-colors">
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-100 dark:bg-amber-900 hover:bg-amber-200 dark:hover:bg-amber-900 font-medium transition-colors">
               Öppna
             </a>
             <button
               onClick={() => { setChefsState(null); if (chefsVendorName) markVendorDone(chefsVendorName, true, allVendorNames) }}
-              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 hover:bg-emerald-200 font-medium transition-colors">
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-900 font-medium transition-colors">
               <CheckCircle size={11} /> OK
             </button>
             <button onClick={() => setChefsState('failed')}
-              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 font-medium transition-colors">
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-red-100 dark:bg-red-900 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900 font-medium transition-colors">
               <X size={11} /> Fel
             </button>
           </div>
         </div>
       )}
       {chefsStatus === 'failed' && (
-        <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2 text-xs text-red-600">
+        <div className="flex items-center gap-2 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-900 rounded-xl px-3 py-2 text-xs text-red-600 dark:text-red-400">
           <AlertTriangle size={13} className="shrink-0" />
           <span className="font-medium flex-1">Ordern är inte lagd!</span>
         </div>
@@ -543,7 +565,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
             } catch (err) {
               toast.error(`${v.name}: ${err instanceof Error ? err.message : 'Misslyckades'}`)
             } finally { setSending(null) }
-          }} className="flex-1 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-medium hover:bg-indigo-100 disabled:opacity-50 transition-colors text-center">
+          }} className="flex-1 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-xs font-medium hover:bg-indigo-100 dark:hover:bg-indigo-900 disabled:opacity-50 transition-colors text-center">
             {sending === v.name ? <Loader2 size={11} className="animate-spin inline" /> : 'Email'}
           </button>
         )}
@@ -553,17 +575,13 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
             body={buildBody(v.name)}
             showIcon={false}
             onSent={() => { markVendorDone(v.name, true, allVendorNames); setShowNotifyVendor(null) }}
-            className="flex-1 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 transition-colors text-center"
+            className="flex-1 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-xs font-medium hover:bg-emerald-100 dark:hover:bg-emerald-900 transition-colors text-center"
           />
         )}
-        {!v.email && !v.phone && <span className="text-[10px] text-slate-300 italic px-2 py-1">Ingen kontaktinfo</span>}
+        {!v.email && !v.phone && <span className="text-[10px] text-slate-300 dark:text-zinc-600 italic px-2 py-1">Ingen kontaktinfo</span>}
       </>
     )
   }
-
-  const renderNotifyPanel = (vendorName: string) => (
-    <div className="px-3 py-2 flex gap-1.5">{renderNotifyActions(vendorName)}</div>
-  )
 
   // "Ingen beställning" — inga items, bara ett besked från butiken. Egen kompakt
   // kortvy; resten av komponenten förutsätter minst en leverantör.
@@ -578,25 +596,25 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
     }
     return (
       <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="relative">
-        <div className={`transition-opacity duration-200 ${!isPending ? 'opacity-60 hover:opacity-100' : ''}`}>
-          <div className={`rounded-2xl border shadow-sm ${isPending ? 'bg-slate-100 border-dashed border-slate-300' : 'bg-[#e2f6ec] border-transparent'}`}>
-            <div className="px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 text-slate-500">
+        <div className={`transition-opacity duration-200 ${!isPending ? 'opacity-60 dark:opacity-75 hover:opacity-100' : ''}`}>
+          <div className={`rounded-2xl border shadow-sm ${isPending ? 'bg-slate-100 dark:bg-zinc-800 border-dashed border-slate-300 dark:border-zinc-700' : 'bg-[#e2f6ec] dark:bg-zinc-900 dark:shadow-[inset_3px_0_0_0_#059669] border-transparent dark:border-zinc-800'}`}>
+            <div className="px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 text-slate-500 dark:text-zinc-400">
               <span className="font-normal tabular-nums opacity-60">{time}</span>
               <button onClick={handleDelete} disabled={deleteOrder.isPending} title="Ta bort"
-                className="ml-auto p-1 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-100/60 disabled:opacity-50 transition-colors">
+                className="ml-auto p-1 rounded-lg text-red-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-100/60 dark:hover:bg-red-900 disabled:opacity-50 transition-colors">
                 <Trash2 size={13} />
               </button>
             </div>
             <div className="px-3 pb-3 flex items-center gap-2.5">
-              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${isPending ? 'bg-slate-200' : 'bg-emerald-100'}`}>
-                {isPending ? <Ban size={16} className="text-slate-500" /> : <CheckCircle size={16} className="text-emerald-600" />}
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${isPending ? 'bg-slate-200 dark:bg-zinc-800' : 'bg-emerald-100 dark:bg-emerald-900'}`}>
+                {isPending ? <Ban size={16} className="text-slate-500 dark:text-zinc-400" /> : <CheckCircle size={16} className="text-emerald-600 dark:text-emerald-400" />}
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-slate-800 truncate">Ingen beställning · {vendor}</p>
-                <p className="text-xs text-slate-400 truncate">{order.employee?.name ?? 'Unknown'} · {order.location?.name ?? 'Unknown location'}</p>
+                <p className="text-sm font-semibold text-slate-800 dark:text-zinc-200 truncate">Ingen beställning · {vendor}</p>
+                <p className="text-xs text-slate-400 dark:text-zinc-500 truncate">{order.employee?.name ?? 'Unknown'} · {order.location?.name ?? 'Unknown location'}</p>
               </div>
             </div>
-            <div className="border-t border-black/5">
+            <div className="border-t border-black/5 dark:border-zinc-800">
               {isPending ? (
                 <button
                   onClick={markSeen}
@@ -609,7 +627,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
                 <button
                   onClick={handleReopen}
                   disabled={updateStatus.isPending}
-                  className="w-full flex items-center justify-center py-2 rounded-b-2xl text-xs font-medium text-slate-500 hover:bg-slate-100 disabled:opacity-30 transition-colors"
+                  className="w-full flex items-center justify-center py-2 rounded-b-2xl text-xs font-medium text-slate-500 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 disabled:opacity-30 transition-colors"
                 >
                   Ångra
                 </button>
@@ -627,18 +645,15 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
 
   const isStale = isPending && Date.now() - new Date(order.created_at).getTime() > 24 * 60 * 60 * 1000
 
+  // Card-level ring only for single-vendor selection; multi-vendor highlights the section instead
   const cardBorder = chefsOrderFailed
-    ? 'border-red-400 ring-2 ring-red-100'
-    : firstSelected ? 'border-indigo-400 ring-2 ring-indigo-100'
-    : isMerged ? 'border-orange-400 ring-2 ring-orange-100'
-    : isStale ? 'border-red-300'
-    : isMultiVendor && isPending && doneVendors.has(firstVendor) ? 'border-emerald-400'
-    : isMultiVendor && isPending ? 'border-amber-200'
-    : isMultiVendor ? 'border-emerald-200'
-    : 'border-transparent'
-  const statusBarClass = isPending ? 'text-amber-700' : isStopped ? 'text-slate-500' : 'text-emerald-700'
-  const cardBg = isPending ? 'bg-[#fffaeb]' : isStopped ? 'bg-slate-100' : 'bg-[#e2f6ec]'
-  const subCardBg = isPending ? 'bg-[#fffaeb]' : isStopped ? 'bg-slate-100' : 'bg-[#e2f6ec]'
+    ? 'border-red-400 ring-2 ring-red-100 dark:ring-red-900'
+    : !isMultiVendor && firstSelected ? 'border-indigo-400 ring-2 ring-indigo-100 dark:ring-indigo-900'
+    : isMerged ? 'border-orange-400 dark:border-orange-800 ring-2 ring-orange-100 dark:ring-orange-900'
+    : isStale ? 'border-red-300 dark:border-red-800'
+    : 'border-transparent dark:border-zinc-800'
+  const statusBarClass = isPending ? 'text-amber-700 dark:text-amber-300' : isStopped ? 'text-slate-500 dark:text-zinc-400' : 'text-emerald-700 dark:text-emerald-300'
+  const cardBg = isPending ? 'bg-[#fffaeb] dark:bg-zinc-900 dark:shadow-[inset_3px_0_0_0_#f59e0b]' : isStopped ? 'bg-slate-100 dark:bg-zinc-900 dark:shadow-[inset_3px_0_0_0_#52525b]' : 'bg-[#e2f6ec] dark:bg-zinc-900 dark:shadow-[inset_3px_0_0_0_#059669]'
 
   // Toggle selection when clicking the card itself — ignore clicks on interactive elements
   const cardClick = (vendor: string) => (e: React.MouseEvent) => {
@@ -648,131 +663,174 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
     onToggle(vendor)
   }
 
+  const selectIcon = (selected: boolean) =>
+    selected ? <CheckSquare size={13} className="text-indigo-600 dark:text-indigo-400" /> : <Square size={13} className="text-slate-400 dark:text-zinc-500" />
+
+  const vendorLabel = (vendor: string) => (
+    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-zinc-500 truncate">{vendor}</p>
+  )
+
+  // One section per vendor inside a single card. Multi-vendor sections carry their own
+  // select box, notify bell and "Mark done"; single-vendor cards keep those at card level.
+  const renderVendorSection = ([vendor, items]: [string, typeof order.items], i: number) => {
+    const isVendorDone = doneVendors.has(vendor)
+    const isVendorSelected = selectedVendors?.has(vendor) ?? false
+    const canNotify = !!orderVendors.find(v => v.name === vendor && (v.email || v.phone))
+    const labelShown = showVendorLabel(vendor)
+    return (
+      <div
+        key={vendor}
+        onClick={isMultiVendor ? cardClick(vendor) : undefined}
+        className={`${i > 0 ? 'border-t border-black/5 dark:border-zinc-800 pt-2 mt-2' : ''} ${isMultiVendor && isVendorSelected ? '-mx-1.5 px-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950 ring-2 ring-indigo-200 dark:ring-indigo-900' : ''}`}
+      >
+        {isMultiVendor ? (
+          <div className="flex items-center justify-between gap-2 mb-1 -mr-1">
+            <div className="flex items-center gap-1.5 min-w-0">
+              {onToggle && (
+                <button onClick={e => { e.stopPropagation(); onToggle(vendor) }} className="shrink-0 [@media(hover:none)]:p-1.5 [@media(hover:none)]:-m-1.5">{selectIcon(isVendorSelected)}</button>
+              )}
+              {vendorLabel(vendor)}
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              {copyButton(vendor)}
+              {canNotify && (
+                <button onClick={() => toggleNotify(vendor)} title="Notify vendor"
+                  className={`p-1.5 rounded-lg transition-colors ${showNotifyVendor === vendor ? 'bg-indigo-600 text-white' : 'bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-900'}`}>
+                  <Bell size={13} />
+                </button>
+              )}
+              <button
+                onClick={() => markVendorDone(vendor, !isVendorDone, allVendorNames)}
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium transition-colors ${isVendorDone ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-500 hover:bg-emerald-50 dark:hover:bg-emerald-950 hover:text-emerald-600 dark:hover:text-emerald-400'}`}
+              >
+                <CheckCircle size={10} /> {isVendorDone ? 'Done' : 'Mark done'}
+              </button>
+            </div>
+          </div>
+        ) : labelShown ? (
+          <div className="flex items-center justify-between mb-0.5 -mr-1">
+            {vendorLabel(vendor)}
+            {copyButton(vendor)}
+          </div>
+        ) : null}
+        {isMultiVendor && (
+          <AnimatePresence>
+            {showNotifyVendor === vendor && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+                <div className="flex gap-1.5 pb-2">{renderNotifyActions(vendor)}</div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        )}
+        <div className={isVendorDone ? 'opacity-40' : ''}>
+          {renderItems(items)}
+        </div>
+        {vendor === chefsVendorName && renderChefsControls()}
+        {vendor === tingstadVendorName && renderTingstadControls()}
+      </div>
+    )
+  }
+
   return (
     <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="relative">
-    <div className={`transition-opacity duration-200 ${!isPending ? 'opacity-60 hover:opacity-100' : ''}`}>
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className={`transition-opacity duration-200 ${!isPending ? 'opacity-60 dark:opacity-75 hover:opacity-100' : ''}`}
+    >
 
-      {/* Green connecting line — centered, visible in the gaps between vendor cards */}
-      {isMultiVendor && (
-        <div className="absolute left-1/2 -translate-x-1/2 top-3 bottom-3 w-2.5 bg-emerald-400 rounded-full z-0" />
-      )}
-
-      {/* Main card — order header + first vendor */}
-      <div onClick={cardClick(firstVendor)} className={`relative z-10 rounded-2xl border shadow-sm transition-shadow ${onToggle ? 'cursor-pointer' : ''} ${cardBg} ${cardBorder}`}>
-        <div className={`px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 rounded-t-2xl ${statusBarClass}`}>
+      <div onClick={isMultiVendor ? undefined : cardClick(firstVendor)} className={`relative z-10 rounded-2xl border shadow-sm transition-shadow ${onToggle ? 'cursor-pointer' : ''} ${cardBg} ${cardBorder}`}>
+        <div className="px-3 pt-2 pb-1 flex items-center gap-1.5 rounded-t-2xl min-w-0">
           {onToggle && !isMultiVendor && (
-            <button onClick={e => { e.stopPropagation(); onToggle(firstVendor) }} className="shrink-0 mr-0.5">
-              {firstSelected ? <CheckSquare size={13} className="text-indigo-600" /> : <Square size={13} className="text-slate-400" />}
-            </button>
+            <button onClick={e => { e.stopPropagation(); onToggle(firstVendor) }} className="shrink-0 mr-0.5 [@media(hover:none)]:p-1.5 [@media(hover:none)]:-m-1.5 [@media(hover:none)]:mr-0">{selectIcon(firstSelected)}</button>
           )}
-          <span className={`font-normal tabular-nums ${isStale ? 'text-red-600 font-semibold opacity-100' : 'opacity-60'}`}>{time}</span>
+          <span className="text-sm font-semibold text-slate-900 dark:text-zinc-100 truncate">{order.employee?.name ?? 'Unknown'}</span>
+          {showLocation && <span className="text-xs text-slate-400 dark:text-zinc-500 truncate">· {locationName}</span>}
+          {isStopped && <Ban size={12} className="text-slate-400 dark:text-zinc-500 shrink-0" aria-label="Stoppad — ingen beställning" />}
+          <span className={`ml-auto text-xs tabular-nums shrink-0 ${isStale ? 'text-red-600 dark:text-red-400 font-semibold' : `${statusBarClass} opacity-70`}`}>{time}</span>
           {isStale && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" title="Väntat över 24h" />}
-          {isStopped && (
-            <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-slate-500">
-              <Ban size={10} /> Ingen beställning
-            </span>
-          )}
+          {/* Single vendor without a label row: copy lives up here instead of on an otherwise empty row */}
+          {!isMultiVendor && !showVendorLabel(firstVendor) && copyButton(firstVendor)}
           {isPending && (
             <button onClick={handleStop} disabled={updateStatus.isPending} title="Stoppa — ingen beställning"
-              className="ml-auto p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 disabled:opacity-50 transition-colors">
+              className="p-1 [@media(hover:none)]:p-2 [@media(hover:none)]:-my-1 rounded-lg text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-200/60 dark:hover:bg-zinc-700 disabled:opacity-50 transition-colors">
               <Ban size={13} />
             </button>
           )}
           <button onClick={handleDelete} disabled={deleteOrder.isPending} title="Ta bort order"
-            className={`p-1 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-100/60 disabled:opacity-50 transition-colors ${isPending ? '' : 'ml-auto'}`}>
+            className="p-1 [@media(hover:none)]:p-2 [@media(hover:none)]:-my-1 rounded-lg text-red-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-100/60 dark:hover:bg-red-900 disabled:opacity-50 transition-colors">
             <Trash2 size={13} />
           </button>
         </div>
 
-        <div className="p-3 space-y-2">
-          <div className="flex items-start justify-between gap-2">
-            <div className="space-y-1 min-w-0">
-              <div className="flex items-center gap-1.5 text-sm text-slate-600">
-                <User size={13} className="text-slate-400 shrink-0" />
-                <span className="font-medium text-slate-900 truncate">{order.employee?.name ?? 'Unknown'}</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                <span className="truncate">{order.location?.name ?? 'Unknown location'}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="border-t border-slate-50 pt-2">
-            {isMultiVendor && (
-              <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-1.5">
-                  {onToggle && (
-                    <button onClick={e => { e.stopPropagation(); onToggle(firstVendor) }} className="shrink-0">
-                      {firstSelected ? <CheckSquare size={13} className="text-indigo-600" /> : <Square size={13} className="text-slate-400" />}
-                    </button>
-                  )}
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{vendorEntries[0][0]}</p>
-                </div>
-                <div className="flex items-center gap-1">
-                  {orderVendors.find(v => v.name === firstVendor && (v.email || v.phone)) && (
-                    <button onClick={() => toggleNotify(firstVendor)} title="Notify vendor"
-                      className={`p-1.5 rounded-lg transition-colors ${showNotifyVendor === firstVendor ? 'bg-indigo-600 text-white' : 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200'}`}>
-                      <Bell size={13} />
-                    </button>
-                  )}
-                  <button
-                    onClick={() => markVendorDone(vendorEntries[0][0], !doneVendors.has(vendorEntries[0][0]), allVendorNames)}
-                    className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium transition-colors ${doneVendors.has(vendorEntries[0][0]) ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600'}`}
-                  >
-                    <CheckCircle size={10} /> {doneVendors.has(vendorEntries[0][0]) ? 'Done' : 'Mark done'}
-                  </button>
-                </div>
-              </div>
-            )}
-            {!isMultiVendor && <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">{vendorEntries[0][0]}</p>}
-            <div className={doneVendors.has(vendorEntries[0][0]) ? 'opacity-40' : ''}>
-              {renderItems(vendorEntries[0][1])}
-            </div>
-            {firstVendor === chefsVendorName && renderChefsControls()}
-            {firstVendor === tingstadVendorName && renderTingstadControls()}
-            <div className="flex justify-end -mb-1.5 -mr-1.5">
-              <button onClick={() => copyVendor(firstVendor)} title="Kopiera beställningen"
-                className="p-1.5 rounded-lg text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
-                <Copy size={13} />
-              </button>
-            </div>
-          </div>
-
+        <div className="px-3 pb-3 pt-1 space-y-2">
           {order.note && (
-            <div className="flex items-start gap-2 bg-white rounded-xl p-2.5 text-xs text-slate-600">
-              <FileText size={12} className="text-slate-400 mt-0.5 shrink-0" />
+            <div className="flex items-start gap-2 bg-slate-50 dark:bg-zinc-800 rounded-xl p-2.5 text-xs text-slate-600 dark:text-zinc-300">
+              <FileText size={12} className="text-slate-400 dark:text-zinc-500 mt-0.5 shrink-0" />
               {order.note}
             </div>
           )}
-
+          <div>{vendorEntries.map(renderVendorSection)}</div>
         </div>
 
-        {/* Integrated action bar — part of the card background */}
-        <div className="border-t border-black/5">
-          <div className="grid grid-cols-4 divide-x divide-black/5 text-xs font-medium">
+        {/* Integrated action bar. Finished cards: Order always visible, Note/Ångra slide in on hover or via ⋯ */}
+        <div className="border-t border-black/5 dark:border-zinc-800">
+          <div className="flex divide-x divide-black/5 dark:divide-zinc-800 text-xs font-medium">
             <button
               onClick={() => toggleNotify(firstVendor)}
               disabled={orderVendors.length === 0}
-              className={`col-span-2 flex items-center justify-center py-2 transition-colors disabled:opacity-30 ${!isPending ? 'rounded-bl-2xl' : ''} ${showNotifyVendor === firstVendor ? 'bg-indigo-600 text-white' : 'text-indigo-600 hover:bg-indigo-50'}`}
+              className={`flex-1 flex items-center justify-center py-2 transition-colors disabled:opacity-30 ${!isPending ? 'rounded-bl-2xl' : ''} ${showNotifyVendor === firstVendor ? 'bg-indigo-600 text-white' : 'text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950'}`}
             >
               Order
             </button>
-            <button
-              onClick={() => { setEditingNote(v => !v); setNoteVal(order.admin_note ?? '') }}
-              className={`flex items-center justify-center py-2 transition-colors ${order.admin_note || editingNote ? 'text-red-600 bg-red-50' : 'text-slate-500 hover:bg-red-50 hover:text-red-500'}`}
-            >
-              Note
-            </button>
-            <button
-              onClick={handleReopen}
-              disabled={isPending || updateStatus.isPending}
-              className={`flex items-center justify-center py-2 text-slate-500 hover:bg-slate-100 disabled:opacity-30 transition-colors ${!isPending ? 'rounded-br-2xl' : ''}`}
-            >
-              Ångra
-            </button>
+            {isPending ? (
+              <button
+                onClick={() => { setEditingNote(v => !v); setNoteVal(order.admin_note ?? '') }}
+                className={`flex-1 flex items-center justify-center py-2 transition-colors ${order.admin_note || editingNote ? 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950' : 'text-slate-500 dark:text-zinc-400 hover:bg-red-50 dark:hover:bg-red-950 hover:text-red-500 dark:hover:text-red-400'}`}
+              >
+                Note
+              </button>
+            ) : (
+              <>
+                <AnimatePresence initial={false}>
+                  {(hovered || actionsPinned || editingNote) && (
+                    <motion.div
+                      key="more-actions"
+                      initial={{ width: 0, opacity: 0 }}
+                      animate={{ width: 'auto', opacity: 1 }}
+                      exit={{ width: 0, opacity: 0 }}
+                      transition={{ duration: 0.18, ease: 'easeOut' }}
+                      className="flex overflow-hidden divide-x divide-black/5 dark:divide-zinc-800 shrink-0"
+                    >
+                      <button
+                        onClick={() => { setEditingNote(v => !v); setNoteVal(order.admin_note ?? '') }}
+                        className={`px-4 py-2 whitespace-nowrap transition-colors ${order.admin_note || editingNote ? 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950' : 'text-slate-500 dark:text-zinc-400 hover:bg-red-50 dark:hover:bg-red-950 hover:text-red-500 dark:hover:text-red-400'}`}
+                      >
+                        Note
+                      </button>
+                      <button
+                        onClick={handleReopen}
+                        disabled={updateStatus.isPending}
+                        className="px-4 py-2 whitespace-nowrap text-slate-500 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 disabled:opacity-30 transition-colors"
+                      >
+                        Ångra
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                <button
+                  onClick={() => setActionsPinned(v => !v)}
+                  title="Fler åtgärder"
+                  aria-expanded={hovered || actionsPinned}
+                  className={`px-2.5 [@media(hover:none)]:px-4 py-2 rounded-br-2xl transition-colors ${actionsPinned ? 'text-slate-700 dark:text-zinc-200 bg-slate-100 dark:bg-zinc-800' : 'text-slate-400 dark:text-zinc-500 hover:bg-slate-100 dark:hover:bg-zinc-800'}`}
+                >
+                  <MoreHorizontal size={14} />
+                </button>
+              </>
+            )}
           </div>
           <AnimatePresence>
-            {showNotifyVendor === firstVendor && (
+            {!isMultiVendor && showNotifyVendor === firstVendor && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
                 <div className="flex gap-1.5 px-2 py-1.5">{renderNotifyActions(firstVendor)}</div>
               </motion.div>
@@ -782,7 +840,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
             <button
               onClick={() => { markAllVendorsDone(allVendorNames); handleComplete(); triggerCelebrate() }}
               disabled={updateStatus.isPending}
-              className="w-full flex items-center justify-center py-2 rounded-b-2xl bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-colors border-t border-black/5"
+              className="w-full flex items-center justify-center py-2 rounded-b-2xl bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-colors border-t border-black/5 dark:border-transparent"
             >
               Done
             </button>
@@ -813,65 +871,6 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
           )}
         </AnimatePresence>
       </div>
-
-      {/* Additional vendor cards — one per extra vendor, connected by the green line */}
-      {isMultiVendor && vendorEntries.slice(1).map(([vendor, items]) => {
-        const isVendorDone = doneVendors.has(vendor)
-        const isVendorSelected = selectedVendors?.has(vendor) ?? false
-        const subBorder = isVendorSelected
-          ? 'border-indigo-400 ring-2 ring-indigo-100'
-          : isMerged ? 'border-orange-300'
-          : isPending && isVendorDone ? 'border-emerald-400'
-          : isPending ? 'border-amber-200'
-          : isStopped ? 'border-slate-200'
-          : 'border-emerald-200'
-        return (
-          <div key={vendor} onClick={cardClick(vendor)} className={`relative z-10 mt-2 rounded-2xl border shadow-sm ${onToggle ? 'cursor-pointer' : ''} ${subCardBg} ${subBorder}`}>
-            <div className="px-3 py-2 border-b border-slate-50 flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                {onToggle && (
-                  <button onClick={e => { e.stopPropagation(); onToggle(vendor) }} className="shrink-0">
-                    {isVendorSelected ? <CheckSquare size={13} className="text-indigo-600" /> : <Square size={13} className="text-slate-400" />}
-                  </button>
-                )}
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{vendor}</p>
-              </div>
-              <div className="flex items-center gap-1">
-                {orderVendors.find(v => v.name === vendor && (v.email || v.phone)) && (
-                  <button onClick={() => toggleNotify(vendor)} title="Notify vendor"
-                    className={`p-1.5 rounded-lg transition-colors ${showNotifyVendor === vendor ? 'bg-indigo-600 text-white' : 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200'}`}>
-                    <Bell size={13} />
-                  </button>
-                )}
-                <button
-                  onClick={() => markVendorDone(vendor, !doneVendors.has(vendor), allVendorNames)}
-                  className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium transition-colors ${isVendorDone ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600'}`}
-                >
-                  <CheckCircle size={10} /> {isVendorDone ? 'Done' : 'Mark done'}
-                </button>
-              </div>
-            </div>
-            <AnimatePresence>
-              {showNotifyVendor === vendor && (
-                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden border-b border-slate-50">
-                  {renderNotifyPanel(vendor)}
-                </motion.div>
-              )}
-            </AnimatePresence>
-            <div className={`p-3 ${isVendorDone ? 'opacity-40' : ''}`}>
-              {renderItems(items)}
-              {vendor === chefsVendorName && renderChefsControls()}
-              {vendor === tingstadVendorName && renderTingstadControls()}
-            </div>
-            <div className="flex justify-end px-1.5 pb-1.5 -mt-2">
-              <button onClick={() => copyVendor(vendor)} title="Kopiera beställningen"
-                className="p-1.5 rounded-lg text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
-                <Copy size={13} />
-              </button>
-            </div>
-          </div>
-        )
-      })}
     </div>
 
     {/* Admin note — edit or display */}
@@ -884,7 +883,7 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
           className="overflow-hidden mt-1.5 relative z-10"
         >
           {editingNote ? (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-2.5 flex gap-2">
+            <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-900 rounded-xl p-2.5 flex gap-2">
               <AlertCircle size={13} className="text-red-400 mt-0.5 shrink-0" />
               <textarea
                 autoFocus
@@ -894,14 +893,14 @@ export default function OrderCard({ order, selectedVendors, onToggle }: Props) {
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveNote() } if (e.key === 'Escape') { setEditingNote(false); setNoteVal(order.admin_note ?? '') } }}
                 placeholder="Anteckning… (Enter för att spara, Esc för att avbryta)"
                 rows={2}
-                className="flex-1 text-xs text-red-800 bg-transparent resize-none focus:outline-none placeholder:text-red-300"
+                className="flex-1 text-xs text-red-800 dark:text-red-300 bg-transparent resize-none focus:outline-none placeholder:text-red-300 dark:placeholder:text-red-700"
               />
             </div>
           ) : order.admin_note ? (
             <button onClick={() => { setEditingNote(true); setNoteVal(order.admin_note ?? '') }}
-              className="w-full text-left bg-red-50 border border-red-200 rounded-xl p-2.5 flex items-start gap-2 hover:bg-red-100 transition-colors">
+              className="w-full text-left bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-900 rounded-xl p-2.5 flex items-start gap-2 hover:bg-red-100 dark:hover:bg-red-900 transition-colors">
               <AlertCircle size={13} className="text-red-400 mt-0.5 shrink-0" />
-              <span className="text-xs text-red-800">{order.admin_note}</span>
+              <span className="text-xs text-red-800 dark:text-red-300">{order.admin_note}</span>
             </button>
           ) : null}
         </motion.div>

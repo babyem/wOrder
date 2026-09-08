@@ -10,8 +10,12 @@ html {
   font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
 }
 
+.dark {
+  color-scheme: dark;
+}
+
 body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+  @apply bg-slate-50 text-slate-900 antialiased dark:bg-zinc-950 dark:text-zinc-100;
 }
 
 .no-scrollbar::-webkit-scrollbar {
@@ -32,5 +36,5 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-slate-300 rounded-full;
+  @apply bg-slate-300 dark:bg-zinc-700 rounded-full;
 }

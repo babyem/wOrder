@@ -113,14 +113,14 @@ function AlarmModal({ locationId }: { locationId: string }) {
 
           {/* Modal */}
           <motion.div
-            className="relative bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl text-center space-y-6"
+            className="relative bg-white dark:bg-zinc-900 rounded-3xl p-8 w-full max-w-sm shadow-2xl text-center space-y-6"
             initial={{ opacity: 0, scale: 0.8, y: 32 }}
             animate={{ opacity: 1, scale: 1, y: 0, transition: { type: 'spring', damping: 18, stiffness: 280 } }}
             exit={{ opacity: 0, scale: 0.9, y: 16, transition: { duration: 0.2 } }}
           >
             <button
               onClick={dismiss}
-              className="absolute top-4 right-4 p-1.5 rounded-xl text-slate-300 hover:text-slate-500 hover:bg-slate-100 transition-colors"
+              className="absolute top-4 right-4 p-1.5 rounded-xl text-slate-300 dark:text-zinc-600 hover:text-slate-500 dark:hover:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
             >
               <X size={16} />
             </button>
@@ -131,12 +131,12 @@ function AlarmModal({ locationId }: { locationId: string }) {
               {[0, 1, 2].map(i => (
                 <motion.div
                   key={i}
-                  className="absolute inset-0 rounded-full bg-amber-300/40"
+                  className="absolute inset-0 rounded-full bg-amber-300/40 dark:bg-amber-900"
                   animate={{ scale: [1, 1.8], opacity: [0.6, 0] }}
                   transition={{ duration: 1.4, repeat: Infinity, delay: i * 0.45, ease: 'easeOut' }}
                 />
               ))}
-              <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center relative z-10">
+              <div className="w-20 h-20 bg-amber-100 dark:bg-amber-900 rounded-full flex items-center justify-center relative z-10">
                 <motion.div
                   animate={{ rotate: [0, -18, 18, -14, 14, -8, 8, 0] }}
                   transition={{ duration: 0.7, repeat: Infinity, repeatDelay: 0.8 }}
@@ -148,14 +148,14 @@ function AlarmModal({ locationId }: { locationId: string }) {
 
             <div>
               <motion.h2
-                className="text-2xl font-bold text-slate-900"
+                className="text-2xl font-bold text-slate-900 dark:text-zinc-100"
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0, transition: { delay: 0.15 } }}
               >
                 {active.label}
               </motion.h2>
               <motion.p
-                className="text-slate-400 text-sm mt-1.5"
+                className="text-slate-400 dark:text-zinc-500 text-sm mt-1.5"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1, transition: { delay: 0.25 } }}
               >
@@ -170,7 +170,7 @@ function AlarmModal({ locationId }: { locationId: string }) {
             >
               <button
                 onClick={dismiss}
-                className="flex-1 py-3.5 rounded-2xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 active:scale-95 transition-all"
+                className="flex-1 py-3.5 rounded-2xl border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-zinc-800 active:scale-95 transition-all"
               >
                 No order today
               </button>
@@ -231,35 +231,35 @@ export default function OrderPage() {
   const ready = locationId && employeeId
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 dark:bg-zinc-950">
       {locationId && <AlarmModal locationId={locationId} />}
 
       {/* Scroll gradient fades */}
-      <div className="fixed top-[69px] left-0 right-0 h-10 bg-gradient-to-b from-slate-50 to-transparent pointer-events-none z-20" />
-      <div className="fixed bottom-0 left-0 right-0 h-28 bg-gradient-to-t from-slate-50 to-transparent pointer-events-none z-20" />
+      <div className="fixed top-[69px] left-0 right-0 h-10 bg-gradient-to-b from-slate-50 dark:from-zinc-950 to-transparent pointer-events-none z-20" />
+      <div className="fixed bottom-0 left-0 right-0 h-28 bg-gradient-to-t from-slate-50 dark:from-zinc-950 to-transparent pointer-events-none z-20" />
 
-      <header className="bg-white border-b border-slate-100 sticky top-0 z-30">
+      <header className="bg-white dark:bg-zinc-900 border-b border-slate-100 dark:border-zinc-800 sticky top-0 z-30">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center gap-3">
           <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center shrink-0">
             <ChefHat size={20} className="text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <h1 className="font-bold text-slate-900 leading-tight">Staff Orders</h1>
+            <h1 className="font-bold text-slate-900 dark:text-zinc-100 leading-tight">Staff Orders</h1>
             {locationId && locationName ? (
               <button
                 onClick={() => setShowLocationPicker(true)}
-                className="text-xs text-indigo-500 flex items-center gap-1 hover:text-indigo-700 transition-colors"
+                className="text-xs text-indigo-500 dark:text-indigo-400 flex items-center gap-1 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
               >
                 <MapPin size={10} /> {locationName} <ChevronDown size={10} />
               </button>
             ) : (
-              <p className="text-xs text-slate-400">Internal supply ordering</p>
+              <p className="text-xs text-slate-400 dark:text-zinc-500">Internal supply ordering</p>
             )}
           </div>
           <Link
             to="/admin"
             title="Backoffice"
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-500 hover:text-indigo-700 hover:bg-indigo-50 transition-colors shrink-0"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-500 dark:text-zinc-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950 transition-colors shrink-0"
           >
             <LayoutDashboard size={14} />
             <span className="hidden sm:inline">Backoffice</span>
@@ -280,7 +280,7 @@ export default function OrderPage() {
           )}
         </AnimatePresence>
 
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-5">
+        <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-sm p-5 space-y-5">
           {!fixedLocation && (
             <LocationSelector selected={locationId} onSelect={handleLocationChange} />
           )}
@@ -292,7 +292,7 @@ export default function OrderPage() {
                 exit={{ opacity: 0, height: 0 }}
                 className="overflow-hidden"
               >
-                <div className={fixedLocation ? '' : 'border-t border-slate-100 pt-5'}>
+                <div className={fixedLocation ? '' : 'border-t border-slate-100 dark:border-zinc-800 pt-5'}>
                   <EmployeeSelector
                     locationId={locationId}
                     selected={employeeId}
@@ -321,7 +321,7 @@ export default function OrderPage() {
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="text-center py-16 text-slate-400 text-sm"
+              className="text-center py-16 text-slate-400 dark:text-zinc-500 text-sm"
             >
               {!locationId ? 'Select your location to get started' : 'Select your name to continue'}
             </motion.div>
@@ -355,15 +355,15 @@ export default function OrderPage() {
               onClick={() => setShowLocationPicker(false)}
             />
             <motion.div
-              className="relative bg-white rounded-t-3xl p-6 w-full max-w-lg shadow-2xl"
+              className="relative bg-white dark:bg-zinc-900 rounded-t-3xl p-6 w-full max-w-lg shadow-2xl"
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 28, stiffness: 300 }}
             >
               <div className="flex items-center justify-between mb-5">
-                <h2 className="font-semibold text-slate-900">Change Location</h2>
-                <button onClick={() => setShowLocationPicker(false)} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
+                <h2 className="font-semibold text-slate-900 dark:text-zinc-100">Change Location</h2>
+                <button onClick={() => setShowLocationPicker(false)} className="p-1.5 rounded-xl text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors">
                   <X size={16} />
                 </button>
               </div>

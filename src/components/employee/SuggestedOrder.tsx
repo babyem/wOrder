@@ -42,14 +42,14 @@ export default function SuggestedOrder({ locationId }: { locationId: string }) {
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-indigo-100 shadow-sm overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-2.5 bg-indigo-50/60 border-b border-indigo-50">
-        <Sparkles size={14} className="text-indigo-500" />
-        <h3 className="text-xs font-semibold text-indigo-700 uppercase tracking-wider">Vanlig beställning</h3>
+    <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-indigo-100 dark:border-indigo-900 shadow-sm overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-2.5 bg-indigo-50/60 dark:bg-indigo-950 border-b border-indigo-50 dark:border-indigo-900">
+        <Sparkles size={14} className="text-indigo-500 dark:text-indigo-400" />
+        <h3 className="text-xs font-semibold text-indigo-700 dark:text-indigo-300 uppercase tracking-wider">Vanlig beställning</h3>
         <span className="ml-auto text-[10px] text-indigo-400">baserat på 90 dagar</span>
       </div>
 
-      <div className="divide-y divide-slate-50">
+      <div className="divide-y divide-slate-50 dark:divide-zinc-800">
         {suggestions.map(s => {
           const done = allInCart(s)
           const open = expanded === s.vendor
@@ -61,10 +61,10 @@ export default function SuggestedOrder({ locationId }: { locationId: string }) {
                   className="flex-1 min-w-0 text-left"
                 >
                   <div className="flex items-center gap-1.5">
-                    <span className="font-semibold text-slate-900 text-sm truncate">{s.vendor}</span>
-                    <ChevronDown size={12} className={`text-slate-300 transition-transform ${open ? 'rotate-180' : ''}`} />
+                    <span className="font-semibold text-slate-900 dark:text-zinc-100 text-sm truncate">{s.vendor}</span>
+                    <ChevronDown size={12} className={`text-slate-300 dark:text-zinc-600 transition-transform ${open ? 'rotate-180' : ''}`} />
                   </div>
-                  <p className="text-xs text-slate-400 truncate">
+                  <p className="text-xs text-slate-400 dark:text-zinc-500 truncate">
                     {s.items.map(i => `${productById.get(i.product_id)!.name} ${i.quantity}`).join(' · ')}
                   </p>
                 </button>
@@ -73,7 +73,7 @@ export default function SuggestedOrder({ locationId }: { locationId: string }) {
                   disabled={done}
                   className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all active:scale-95 ${
                     done
-                      ? 'bg-emerald-50 text-emerald-600'
+                      ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400'
                       : 'bg-indigo-600 text-white hover:bg-indigo-700'
                   }`}
                 >
@@ -95,15 +95,15 @@ export default function SuggestedOrder({ locationId }: { locationId: string }) {
                         const qty = inCart(i.product_id)
                         return (
                           <div key={i.product_id} className="flex items-center gap-2 text-xs">
-                            <span className="flex-1 min-w-0 truncate text-slate-700">{p.name}</span>
-                            <span className="text-slate-400 tabular-nums shrink-0">
+                            <span className="flex-1 min-w-0 truncate text-slate-700 dark:text-zinc-200">{p.name}</span>
+                            <span className="text-slate-400 dark:text-zinc-500 tabular-nums shrink-0">
                               {i.quantity} {i.unit ?? p.unit} · {i.orders} av {i.vendorOrders}
                             </span>
                             <button
                               onClick={() => setItem(p, i.quantity)}
                               disabled={qty > 0}
                               className={`shrink-0 w-6 h-6 rounded-md flex items-center justify-center transition-colors ${
-                                qty > 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-600 hover:bg-indigo-100 hover:text-indigo-700'
+                                qty > 0 ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400' : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-indigo-100 dark:hover:bg-indigo-900 hover:text-indigo-700 dark:hover:text-indigo-300'
                               }`}
                               title={qty > 0 ? `${qty} i korgen` : 'Lägg till'}
                             >
@@ -112,7 +112,7 @@ export default function SuggestedOrder({ locationId }: { locationId: string }) {
                           </div>
                         )
                       })}
-                      <p className="text-[10px] text-slate-400 pt-1">
+                      <p className="text-[10px] text-slate-400 dark:text-zinc-500 pt-1">
                         Senast {new Date(s.lastOrdered).toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' })} · {s.basedOn} beställningar
                       </p>
                     </div>

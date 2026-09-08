@@ -6,6 +6,7 @@ import { Toaster } from 'react-hot-toast'
 import App from './App'
 import { queryClient } from './lib/queryClient'
 import './index.css'
+import './store/themeStore'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

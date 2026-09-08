@@ -19,7 +19,7 @@ export default function CartBar({ onOpen }: Props) {
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 100, opacity: 0 }}
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          className="fixed bottom-0 left-0 right-0 z-40 px-4 pb-6 pt-2"
+          className="fixed bottom-0 left-0 right-0 z-40 px-4 pt-2 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
         >
           <div className="w-full max-w-2xl mx-auto flex items-center gap-3">
             <button
@@ -36,7 +36,7 @@ export default function CartBar({ onOpen }: Props) {
             <div className="flex items-center gap-3">
               <div className="relative">
                 <ShoppingCart size={22} />
-                <span className="absolute -top-2 -right-2 w-5 h-5 bg-white text-indigo-600 rounded-full text-xs font-bold flex items-center justify-center">
+                <span className="absolute -top-2 -right-2 w-5 h-5 bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 rounded-full text-xs font-bold flex items-center justify-center">
                   {total}
                 </span>
               </div>

@@ -24,7 +24,7 @@ function TagBtn({ label, active, onClick }: { label: string; active: boolean; on
     <button
       onClick={onClick}
       className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${
-        active ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+        active ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-700'
       }`}
     >
       {label}
@@ -81,7 +81,7 @@ function ImageUploadThumb({ product, size = 10 }: { product: Product; size?: num
   return (
     <label
       htmlFor={inputId}
-      className={`${dim} rounded-xl bg-slate-100 overflow-hidden shrink-0 cursor-pointer group relative block transition-colors ${dragOver ? 'ring-2 ring-indigo-400 bg-indigo-50' : ''}`}
+      className={`${dim} rounded-xl bg-slate-100 dark:bg-zinc-800 overflow-hidden shrink-0 cursor-pointer group relative block transition-colors ${dragOver ? 'ring-2 ring-indigo-400 bg-indigo-50 dark:bg-indigo-950' : ''}`}
       onDragOver={e => { e.preventDefault(); setDragOver(true) }}
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
@@ -102,7 +102,7 @@ function ImageUploadThumb({ product, size = 10 }: { product: Product; size?: num
           </button>
         </>
       ) : (
-        <div className={`w-full h-full flex flex-col items-center justify-center gap-0.5 transition-colors ${dragOver ? 'text-indigo-500' : 'text-slate-400 group-hover:bg-slate-200'}`}>
+        <div className={`w-full h-full flex flex-col items-center justify-center gap-0.5 transition-colors ${dragOver ? 'text-indigo-500 dark:text-indigo-400' : 'text-slate-400 dark:text-zinc-500 group-hover:bg-slate-200 dark:group-hover:bg-zinc-700'}`}>
           <Upload size={13} />
         </div>
       )}
@@ -139,7 +139,7 @@ function FieldDropdown({ label, open, onToggle, onClose, children }: {
         className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs border transition-all whitespace-nowrap ${
           open
             ? 'bg-indigo-600 text-white border-indigo-600'
-            : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-indigo-300 hover:text-indigo-600'
+            : 'bg-slate-50 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 border-slate-200 dark:border-zinc-800 hover:border-indigo-300 dark:hover:border-indigo-800 hover:text-indigo-600 dark:hover:text-indigo-400'
         }`}
       >
         {label}
@@ -148,7 +148,7 @@ function FieldDropdown({ label, open, onToggle, onClose, children }: {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={onClose} />
-          <div style={dropStyle} className="bg-white border border-slate-200 rounded-xl shadow-lg p-2 flex flex-wrap gap-1.5 min-w-[160px] max-w-[260px]">
+          <div style={dropStyle} className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl shadow-lg p-2 flex flex-wrap gap-1.5 min-w-[160px] max-w-[260px]">
             {children}
           </div>
         </>
@@ -263,45 +263,45 @@ function InlineEditRow({ product: p, onDelete, onDuplicate, showVendorHeader, ve
 
   const optionClass = (active: boolean) =>
     `px-2 py-0.5 rounded-lg text-xs font-medium transition-all border cursor-pointer ${
-      active ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+      active ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-300 border-slate-200 dark:border-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-800'
     }`
 
   if (isDragging) {
     return (
       <div ref={setNodeRef} style={style}>
         {showVendorHeader && <div className="h-9" />}
-        <div className="h-11 mx-2 my-0.5 rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/30" />
+        <div className="h-11 mx-2 my-0.5 rounded-xl border-2 border-dashed border-indigo-200 dark:border-indigo-900 bg-indigo-50/30 dark:bg-indigo-950" />
       </div>
     )
   }
 
   const vendorHeader = showVendorHeader && (
-    <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
-      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">{p.vendor || 'No Vendor'}</span>
-      {vendorCount !== undefined && <span className="text-xs text-slate-400">{vendorCount}</span>}
+    <div className="px-4 py-2 bg-slate-50 dark:bg-zinc-800 border-b border-slate-100 dark:border-zinc-800 flex items-center gap-2">
+      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400">{p.vendor || 'No Vendor'}</span>
+      {vendorCount !== undefined && <span className="text-xs text-slate-400 dark:text-zinc-500">{vendorCount}</span>}
     </div>
   )
 
   return (
     <div ref={setNodeRef} style={style}>
       {vendorHeader}
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-white border-b border-slate-100 last:border-0">
+      <div className="flex flex-wrap md:flex-nowrap items-center gap-x-2 gap-y-1.5 px-3 py-2 md:py-1.5 bg-white dark:bg-zinc-900 border-b border-slate-100 dark:border-zinc-800 last:border-0">
       {/* Drag handle */}
       <button {...attributes} {...listeners}
-        className="text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing touch-none p-0.5 shrink-0">
+        className="text-slate-300 dark:text-zinc-600 hover:text-slate-500 dark:hover:text-zinc-400 cursor-grab active:cursor-grabbing touch-none p-0.5 shrink-0">
         <GripVertical size={14} />
       </button>
 
       <ImageUploadThumb product={p} size={8} />
 
       {/* Names */}
-      <div className="flex flex-col shrink-0 w-32">
+      <div className="flex flex-col min-w-0 flex-1 md:flex-none md:w-32">
         {editingName ? (
           <input value={name} onChange={e => setName(e.target.value)} onBlur={saveName}
             onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') { setName(p.name); setEditingName(false) } }}
-            className="w-full px-1.5 py-0.5 rounded border border-indigo-300 text-sm font-medium focus:outline-none bg-white" autoFocus />
+            className="w-full px-1.5 py-0.5 rounded border border-indigo-300 dark:border-indigo-800 text-sm font-medium focus:outline-none bg-white dark:bg-zinc-900" autoFocus />
         ) : (
-          <button onClick={() => setEditingName(true)} className="text-sm font-medium text-slate-900 hover:text-indigo-600 truncate text-left">
+          <button onClick={() => setEditingName(true)} className="text-sm font-medium text-slate-900 dark:text-zinc-100 hover:text-indigo-600 dark:hover:text-indigo-400 truncate text-left">
             {p.name}
           </button>
         )}
@@ -309,25 +309,25 @@ function InlineEditRow({ product: p, onDelete, onDuplicate, showVendorHeader, ve
           <input value={vendorName} onChange={e => setVendorName(e.target.value)} onBlur={saveVendorName}
             onKeyDown={e => { if (e.key === 'Enter') saveVendorName(); if (e.key === 'Escape') { setVendorName(p.vendor_name ?? ''); setEditingVendorName(false) } }}
             placeholder="Vendor name…"
-            className="w-full px-1.5 py-0.5 rounded border border-amber-300 text-xs focus:outline-none bg-white" autoFocus />
+            className="w-full px-1.5 py-0.5 rounded border border-amber-300 dark:border-amber-800 text-xs focus:outline-none bg-white dark:bg-zinc-900" autoFocus />
         ) : (
           <button onClick={() => setEditingVendorName(true)}
-            className={`text-xs truncate text-left leading-tight ${p.vendor_name ? 'text-amber-600 hover:text-amber-700' : 'text-slate-300 hover:text-slate-400'}`}>
+            className={`text-xs truncate text-left leading-tight ${p.vendor_name ? 'text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300' : 'text-slate-300 dark:text-zinc-600 hover:text-slate-400 dark:hover:text-zinc-500'}`}>
             {p.vendor_name ?? '+ vendor name'}
           </button>
         )}
       </div>
 
       {/* ChefsCulinar article ID + unit */}
-      <div className="flex flex-col shrink-0 w-20">
+      <div className="flex flex-col shrink-0 w-20 order-3 md:order-none">
         {editingChefsId ? (
           <input value={chefsId} onChange={e => setChefsId(e.target.value)} onBlur={saveChefsId}
             onKeyDown={e => { if (e.key === 'Enter') saveChefsId(); if (e.key === 'Escape') { setChefsId(p.chefsculinar_id ?? ''); setEditingChefsId(false) } }}
             placeholder="Art.nr…"
-            className="w-full px-1.5 py-0.5 rounded border border-blue-300 text-xs focus:outline-none bg-white" autoFocus />
+            className="w-full px-1.5 py-0.5 rounded border border-blue-300 dark:border-blue-800 text-xs focus:outline-none bg-white dark:bg-zinc-900" autoFocus />
         ) : (
           <button onClick={() => setEditingChefsId(true)}
-            className={`text-xs truncate text-left leading-tight ${p.chefsculinar_id ? 'text-blue-600 hover:text-blue-700' : 'text-slate-300 hover:text-slate-400'}`}>
+            className={`text-xs truncate text-left leading-tight ${p.chefsculinar_id ? 'text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-400' : 'text-slate-300 dark:text-zinc-600 hover:text-slate-400 dark:hover:text-zinc-500'}`}>
             {p.chefsculinar_id ?? '+ art.nr'}
           </button>
         )}
@@ -336,10 +336,10 @@ function InlineEditRow({ product: p, onDelete, onDuplicate, showVendorHeader, ve
             <input value={chefsUnit} onChange={e => setChefsUnit(e.target.value)} onBlur={saveChefsUnit}
               onKeyDown={e => { if (e.key === 'Enter') saveChefsUnit(); if (e.key === 'Escape') { setChefsUnit(p.chefsculinar_unit ?? ''); setEditingChefsUnit(false) } }}
               placeholder="Enhet…"
-              className="w-10 px-1.5 py-0.5 rounded border border-blue-300 text-xs focus:outline-none bg-white" autoFocus />
+              className="w-10 px-1.5 py-0.5 rounded border border-blue-300 dark:border-blue-800 text-xs focus:outline-none bg-white dark:bg-zinc-900" autoFocus />
           ) : (
             <button onClick={() => setEditingChefsUnit(true)}
-              className={`text-xs truncate text-left leading-tight ${p.chefsculinar_unit ? 'text-blue-400 hover:text-blue-600' : 'text-slate-300 hover:text-slate-400'}`}>
+              className={`text-xs truncate text-left leading-tight ${p.chefsculinar_unit ? 'text-blue-400 hover:text-blue-600 dark:hover:text-blue-400' : 'text-slate-300 dark:text-zinc-600 hover:text-slate-400 dark:hover:text-zinc-500'}`}>
               {p.chefsculinar_unit ?? '+ enhet'}
             </button>
           )}
@@ -347,28 +347,28 @@ function InlineEditRow({ product: p, onDelete, onDuplicate, showVendorHeader, ve
             <input value={chefsQty} onChange={e => setChefsQty(e.target.value)} onBlur={saveChefsQty}
               onKeyDown={e => { if (e.key === 'Enter') saveChefsQty(); if (e.key === 'Escape') { setChefsQty(String(p.chefsculinar_unit_qty ?? '')); setEditingChefsQty(false) } }}
               placeholder="1"
-              className="w-8 px-1.5 py-0.5 rounded border border-blue-300 text-xs focus:outline-none bg-white" autoFocus />
+              className="w-8 px-1.5 py-0.5 rounded border border-blue-300 dark:border-blue-800 text-xs focus:outline-none bg-white dark:bg-zinc-900" autoFocus />
           ) : (p.chefsculinar_unit_qty && p.chefsculinar_unit_qty !== 1) ? (
             <button onClick={() => setEditingChefsQty(true)}
-              className="text-xs text-blue-300 hover:text-blue-500 leading-tight">
+              className="text-xs text-blue-300 dark:text-blue-700 hover:text-blue-500 dark:hover:text-blue-400 leading-tight">
               ×{p.chefsculinar_unit_qty}
             </button>
           ) : (
-            <button onClick={() => setEditingChefsQty(true)} className="text-xs text-slate-200 hover:text-slate-400 leading-tight">×1</button>
+            <button onClick={() => setEditingChefsQty(true)} className="text-xs text-slate-200 dark:text-zinc-700 hover:text-slate-400 dark:hover:text-zinc-500 leading-tight">×1</button>
           )}
         </div>
       </div>
 
       {/* Tingstad article ID + alternative (fallback if primary is out of stock) */}
-      <div className="flex flex-col shrink-0 w-20">
+      <div className="flex flex-col shrink-0 w-20 order-3 md:order-none">
         {editingTingstadId ? (
           <input value={tingstadId} onChange={e => setTingstadId(e.target.value)} onBlur={saveTingstadId}
             onKeyDown={e => { if (e.key === 'Enter') saveTingstadId(); if (e.key === 'Escape') { setTingstadId(p.tingstad_id ?? ''); setEditingTingstadId(false) } }}
             placeholder="Tingstad nr…"
-            className="w-full px-1.5 py-0.5 rounded border border-teal-300 text-xs focus:outline-none bg-white" autoFocus />
+            className="w-full px-1.5 py-0.5 rounded border border-teal-300 dark:border-teal-800 text-xs focus:outline-none bg-white dark:bg-zinc-900" autoFocus />
         ) : (
           <button onClick={() => setEditingTingstadId(true)}
-            className={`text-xs truncate text-left leading-tight ${p.tingstad_id ? 'text-teal-600 hover:text-teal-700' : 'text-slate-300 hover:text-slate-400'}`}>
+            className={`text-xs truncate text-left leading-tight ${p.tingstad_id ? 'text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-400' : 'text-slate-300 dark:text-zinc-600 hover:text-slate-400 dark:hover:text-zinc-500'}`}>
             {p.tingstad_id ?? '+ tingstad'}
           </button>
         )}
@@ -376,30 +376,30 @@ function InlineEditRow({ product: p, onDelete, onDuplicate, showVendorHeader, ve
           <input value={tingstadAlt} onChange={e => setTingstadAlt(e.target.value)} onBlur={saveTingstadAlt}
             onKeyDown={e => { if (e.key === 'Enter') saveTingstadAlt(); if (e.key === 'Escape') { setTingstadAlt(p.tingstad_alt_id ?? ''); setEditingTingstadAlt(false) } }}
             placeholder="Alt nr…"
-            className="w-full px-1.5 py-0.5 rounded border border-teal-300 text-xs focus:outline-none bg-white" autoFocus />
+            className="w-full px-1.5 py-0.5 rounded border border-teal-300 dark:border-teal-800 text-xs focus:outline-none bg-white dark:bg-zinc-900" autoFocus />
         ) : (
           <button onClick={() => setEditingTingstadAlt(true)} title="Alternativ artikel om förstahandsvalet är slut"
-            className={`text-xs truncate text-left leading-tight ${p.tingstad_alt_id ? 'text-teal-400 hover:text-teal-600' : 'text-slate-300 hover:text-slate-400'}`}>
+            className={`text-xs truncate text-left leading-tight ${p.tingstad_alt_id ? 'text-teal-400 hover:text-teal-600 dark:hover:text-teal-400' : 'text-slate-300 dark:text-zinc-600 hover:text-slate-400 dark:hover:text-zinc-500'}`}>
             {p.tingstad_alt_id ? `alt: ${p.tingstad_alt_id}` : '+ alt'}
           </button>
         )}
       </div>
 
       {/* Field dropdowns: vendor, category, unit */}
-      <div className="flex items-center gap-1 flex-wrap">
-        <FieldDropdown open={openField === 'vendor'} label={p.vendor || <span className="text-slate-400">Vendor</span>}
+      <div className="flex items-center gap-1 flex-wrap order-3 md:order-none">
+        <FieldDropdown open={openField === 'vendor'} label={p.vendor || <span className="text-slate-400 dark:text-zinc-500">Vendor</span>}
           onToggle={() => toggleField('vendor')} onClose={() => setOpenField(null)}>
           {vendors?.map(v => (
             <button key={v.id} onClick={() => { save({ vendor: p.vendor === v.name ? '' : v.name }); setOpenField(null) }} className={optionClass(p.vendor === v.name)}>{v.name}</button>
           ))}
         </FieldDropdown>
-        <FieldDropdown open={openField === 'category'} label={p.category || <span className="text-slate-400">Cat</span>}
+        <FieldDropdown open={openField === 'category'} label={p.category || <span className="text-slate-400 dark:text-zinc-500">Cat</span>}
           onToggle={() => toggleField('category')} onClose={() => setOpenField(null)}>
           {categories?.map(c => (
             <button key={c.id} onClick={() => { save({ category: p.category === c.name ? '' : c.name }); setOpenField(null) }} className={optionClass(p.category === c.name)}>{c.name}</button>
           ))}
         </FieldDropdown>
-        <FieldDropdown open={openField === 'unit'} label={p.unit || <span className="text-slate-400">Unit</span>}
+        <FieldDropdown open={openField === 'unit'} label={p.unit || <span className="text-slate-400 dark:text-zinc-500">Unit</span>}
           onToggle={() => toggleField('unit')} onClose={() => setOpenField(null)}>
           {units?.map(u => (
             <button key={u.id} onClick={() => { save({ unit: p.unit === u.name ? '' : u.name }); setOpenField(null) }} className={optionClass(p.unit === u.name)}>{u.name}</button>
@@ -407,15 +407,18 @@ function InlineEditRow({ product: p, onDelete, onDuplicate, showVendorHeader, ve
         </FieldDropdown>
       </div>
 
+      {/* Mobile: line break so ids/dropdowns get their own row, chips a third */}
+      <div className="basis-full order-2 md:hidden" />
       {/* Location hide chips — click to toggle hidden */}
-      <div className="flex items-center gap-1 flex-wrap flex-1">
+      <div className="basis-full order-4 md:hidden" />
+      <div className="flex items-center gap-1 flex-wrap flex-1 order-5 md:order-none">
         {allLocations?.map(loc => {
           const hidden = locIds.includes(loc.id)
           return (
             <button key={loc.id} onClick={() => toggleLoc(loc.id)}
               title={hidden ? `Unhide at ${loc.name}` : `Hide at ${loc.name}`}
               className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
-                hidden ? 'bg-red-100 text-red-600 line-through' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'
+                hidden ? 'bg-red-100 dark:bg-red-900 text-red-600 dark:text-red-400 line-through' : 'bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-500 hover:bg-slate-200 dark:hover:bg-zinc-700 hover:text-slate-600 dark:hover:text-zinc-300'
               }`}>
               {loc.name}
             </button>
@@ -423,16 +426,16 @@ function InlineEditRow({ product: p, onDelete, onDuplicate, showVendorHeader, ve
         })}
       </div>
 
-      {/* Actions */}
-      <div className="flex items-center gap-0.5 shrink-0">
+      {/* Actions — on mobile they sit on the first row next to the name */}
+      <div className="flex items-center gap-0.5 shrink-0 order-1 md:order-none ml-auto md:ml-0">
         <button onClick={() => save({ active: !p.active })}
-          className={`p-1 rounded-lg transition-colors ${p.active ? 'text-emerald-500 hover:bg-emerald-50' : 'text-slate-300 hover:bg-slate-100'}`}>
+          className={`p-1 rounded-lg transition-colors ${p.active ? 'text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950' : 'text-slate-300 dark:text-zinc-600 hover:bg-slate-100 dark:hover:bg-zinc-800'}`}>
           {p.active ? <Eye size={14} /> : <EyeOff size={14} />}
         </button>
-        <button onClick={() => onDuplicate(p)} className="p-1 rounded-lg text-slate-300 hover:text-indigo-500 hover:bg-indigo-50 transition-colors">
+        <button onClick={() => onDuplicate(p)} className="p-1 rounded-lg text-slate-300 dark:text-zinc-600 hover:text-indigo-500 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950 transition-colors">
           <Copy size={14} />
         </button>
-        <button onClick={() => onDelete(p)} className="p-1 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors">
+        <button onClick={() => onDelete(p)} className="p-1 rounded-lg text-slate-300 dark:text-zinc-600 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 transition-colors">
           <Trash2 size={14} />
         </button>
       </div>
@@ -468,7 +471,7 @@ function BatchAddModal({ open, onClose, onSaved }: { open: boolean; onClose: () 
     setSelectedLocIds(prev => prev.includes(id) ? prev.filter(l => l !== id) : [...prev, id])
 
   const tagClass = (active: boolean) =>
-    `px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${active ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`
+    `px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${active ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-700'}`
 
   const handleSave = async () => {
     if (!names.length) { toast.error('Enter at least one product name'); return }
@@ -491,50 +494,50 @@ function BatchAddModal({ open, onClose, onSaved }: { open: boolean; onClose: () 
     <Modal open={open} onClose={onClose} title="Batch Add Products" maxWidth="max-w-lg">
       <div className="space-y-4">
         <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1.5">Product names (comma-separated) *</label>
+          <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1.5">Product names (comma-separated) *</label>
           <textarea
             value={text}
             onChange={e => setText(e.target.value)}
             rows={3}
             placeholder="Coffee Beans, Sugar, Milk, Oat Milk"
-            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
             autoFocus
           />
           {names.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">
               {names.map((n, i) => (
-                <span key={i} className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-lg text-xs">{n}</span>
+                <span key={i} className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 rounded-lg text-xs">{n}</span>
               ))}
             </div>
           )}
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-slate-500 mb-2 flex items-center gap-1"><Tag size={11} /> Vendor</label>
+          <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-2 flex items-center gap-1"><Tag size={11} /> Vendor</label>
           <div className="flex flex-wrap gap-2">
             {vendors?.map(v => (
               <button key={v.id} onClick={() => setVendor(vendor === v.name ? '' : v.name)} className={tagClass(vendor === v.name)}>
                 {v.name}
               </button>
             ))}
-            {!vendors?.length && <p className="text-xs text-slate-400">No vendors — add in Settings.</p>}
+            {!vendors?.length && <p className="text-xs text-slate-400 dark:text-zinc-500">No vendors — add in Settings.</p>}
           </div>
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-slate-500 mb-2 flex items-center gap-1"><Layers size={11} /> Category</label>
+          <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-2 flex items-center gap-1"><Layers size={11} /> Category</label>
           <div className="flex flex-wrap gap-2">
             {categories?.map(c => (
               <button key={c.id} onClick={() => setCategory(category === c.name ? '' : c.name)} className={tagClass(category === c.name)}>
                 {c.name}
               </button>
             ))}
-            {!categories?.length && <p className="text-xs text-slate-400">No categories — add in Settings.</p>}
+            {!categories?.length && <p className="text-xs text-slate-400 dark:text-zinc-500">No categories — add in Settings.</p>}
           </div>
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-slate-500 mb-2">Unit</label>
+          <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-2">Unit</label>
           <div className="flex flex-wrap gap-2">
             {units?.map(u => (
               <button key={u.id} onClick={() => setUnit(unit === u.name ? '' : u.name)} className={tagClass(unit === u.name)}>
@@ -545,8 +548,8 @@ function BatchAddModal({ open, onClose, onSaved }: { open: boolean; onClose: () 
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1.5">Hide at locations</label>
-          <p className="text-xs text-slate-400 mb-2">Selected locations will NOT see this product</p>
+          <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1.5">Hide at locations</label>
+          <p className="text-xs text-slate-400 dark:text-zinc-500 mb-2">Selected locations will NOT see this product</p>
           <div className="flex flex-wrap gap-2">
             {allLocations?.map(loc => (
               <button key={loc.id} onClick={() => toggleLoc(loc.id)} className={tagClass(selectedLocIds.includes(loc.id))}>
@@ -623,50 +626,50 @@ function ProductFormModal({ open, onClose, onSaved }: FormModalProps) {
     <Modal open={open} onClose={onClose} title="Add Product" maxWidth="max-w-lg">
       <div className="space-y-4">
         <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1.5">Display Name *</label>
+          <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1.5">Display Name *</label>
           <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
             onKeyDown={e => e.key === 'Enter' && handleSave()}
-            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="e.g. Coffee Beans" autoFocus />
+            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="e.g. Coffee Beans" autoFocus />
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1.5">Vendor Name <span className="font-normal text-slate-400">(used in order notifications)</span></label>
+          <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1.5">Vendor Name <span className="font-normal text-slate-400 dark:text-zinc-500">(used in order notifications)</span></label>
           <input value={form.vendor_name} onChange={e => setForm(f => ({ ...f, vendor_name: e.target.value }))}
-            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" placeholder="e.g. Kaffe Bönor (leave blank to use display name)" />
+            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" placeholder="e.g. Kaffe Bönor (leave blank to use display name)" />
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-slate-500 mb-2 flex items-center gap-1"><Tag size={11} /> Vendor</label>
+          <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-2 flex items-center gap-1"><Tag size={11} /> Vendor</label>
           <div className="flex flex-wrap gap-2">
             {vendors?.map(v => (
               <button key={v.id} onClick={() => setForm(f => ({ ...f, vendor: f.vendor === v.name ? '' : v.name }))}
-                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${form.vendor === v.name ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${form.vendor === v.name ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-700'}`}>
                 {v.name}
               </button>
             ))}
-            {!vendors?.length && <p className="text-xs text-slate-400">No vendors yet — add them in Settings.</p>}
+            {!vendors?.length && <p className="text-xs text-slate-400 dark:text-zinc-500">No vendors yet — add them in Settings.</p>}
           </div>
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-slate-500 mb-2 flex items-center gap-1"><Layers size={11} /> Category</label>
+          <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-2 flex items-center gap-1"><Layers size={11} /> Category</label>
           <div className="flex flex-wrap gap-2">
             {categories?.map(c => (
               <button key={c.id} onClick={() => setForm(f => ({ ...f, category: f.category === c.name ? '' : c.name }))}
-                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${form.category === c.name ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${form.category === c.name ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-700'}`}>
                 {c.name}
               </button>
             ))}
-            {!categories?.length && <p className="text-xs text-slate-400">No categories yet — add them in Settings.</p>}
+            {!categories?.length && <p className="text-xs text-slate-400 dark:text-zinc-500">No categories yet — add them in Settings.</p>}
           </div>
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-slate-500 mb-2">Unit</label>
+          <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-2">Unit</label>
           <div className="flex flex-wrap gap-2">
             {units?.map(u => (
               <button key={u.id} onClick={() => setForm(f => ({ ...f, unit: f.unit === u.name ? '' : u.name }))}
-                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${form.unit === u.name ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${form.unit === u.name ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-700'}`}>
                 {u.name}
               </button>
             ))}
@@ -674,12 +677,12 @@ function ProductFormModal({ open, onClose, onSaved }: FormModalProps) {
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1.5">Hide at locations</label>
-          <p className="text-xs text-slate-400 mb-2">Selected locations will NOT see this product</p>
+          <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1.5">Hide at locations</label>
+          <p className="text-xs text-slate-400 dark:text-zinc-500 mb-2">Selected locations will NOT see this product</p>
           <div className="flex flex-wrap gap-2">
             {allLocations?.map(loc => (
               <button key={loc.id} onClick={() => toggleLoc(loc.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${selectedLocIds.includes(loc.id) ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${selectedLocIds.includes(loc.id) ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-700'}`}>
                 {loc.name}
               </button>
             ))}
@@ -687,19 +690,19 @@ function ProductFormModal({ open, onClose, onSaved }: FormModalProps) {
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1.5">Image</label>
+          <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1.5">Image</label>
           {form.image_url ? (
-            <div className="relative w-20 h-20 rounded-xl overflow-hidden border border-slate-200">
+            <div className="relative w-20 h-20 rounded-xl overflow-hidden border border-slate-200 dark:border-zinc-800">
               <img src={form.image_url} alt="" className="w-full h-full object-cover" />
               <button onClick={() => setForm(f => ({ ...f, image_url: '' }))}
-                className="absolute top-1 right-1 w-5 h-5 bg-white rounded-full flex items-center justify-center shadow">
-                <X size={11} className="text-slate-500" />
+                className="absolute top-1 right-1 w-5 h-5 bg-white dark:bg-zinc-900 rounded-full flex items-center justify-center shadow">
+                <X size={11} className="text-slate-500 dark:text-zinc-400" />
               </button>
             </div>
           ) : (
-            <label className="flex items-center gap-2 px-4 py-3 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-indigo-300 transition-colors">
-              {uploading ? <Spinner size={16} /> : <Upload size={16} className="text-slate-400" />}
-              <span className="text-sm text-slate-400">{uploading ? 'Uploading...' : 'Upload image'}</span>
+            <label className="flex items-center gap-2 px-4 py-3 border-2 border-dashed border-slate-200 dark:border-zinc-800 rounded-xl cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-800 transition-colors">
+              {uploading ? <Spinner size={16} /> : <Upload size={16} className="text-slate-400 dark:text-zinc-500" />}
+              <span className="text-sm text-slate-400 dark:text-zinc-500">{uploading ? 'Uploading...' : 'Upload image'}</span>
               <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploading} />
             </label>
           )}
@@ -707,10 +710,10 @@ function ProductFormModal({ open, onClose, onSaved }: FormModalProps) {
 
         <div className="flex items-center gap-2">
           <button onClick={() => setForm(f => ({ ...f, active: !f.active }))}
-            className={`relative w-10 h-6 rounded-full transition-colors ${form.active ? 'bg-indigo-600' : 'bg-slate-200'}`}>
-            <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${form.active ? 'translate-x-5' : 'translate-x-1'}`} />
+            className={`relative w-10 h-6 rounded-full transition-colors ${form.active ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-zinc-800'}`}>
+            <span className={`absolute top-1 w-4 h-4 bg-white dark:bg-zinc-900 rounded-full shadow transition-transform ${form.active ? 'translate-x-5' : 'translate-x-1'}`} />
           </button>
-          <span className="text-sm text-slate-600">Active (visible to staff)</span>
+          <span className="text-sm text-slate-600 dark:text-zinc-300">Active (visible to staff)</span>
         </div>
 
         <button onClick={handleSave} disabled={createProduct.isPending}
@@ -957,23 +960,23 @@ export default function ProductsPage() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Products</h1>
-          <p className="text-slate-400 text-sm mt-0.5">{products.length} products · drag to reorder</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-zinc-100">Products</h1>
+          <p className="text-slate-400 dark:text-zinc-500 text-sm mt-0.5">{products.length} products · drag to reorder</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={openExportModal} title="Export to Excel"
-            className="p-2.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 transition-colors">
+            className="p-2.5 rounded-xl bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-emerald-50 dark:hover:bg-emerald-950 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors">
             <Download size={17} />
           </button>
           <button onClick={() => importRef.current?.click()} disabled={importing} title="Import from Excel"
-            className="p-2.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-amber-50 hover:text-amber-700 disabled:opacity-50 transition-colors">
+            className="p-2.5 rounded-xl bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-amber-50 dark:hover:bg-amber-950 hover:text-amber-700 dark:hover:text-amber-300 disabled:opacity-50 transition-colors">
             {importing ? <Spinner size={17} /> : <FileUp size={17} />}
           </button>
           <input ref={importRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImport} />
           <button onClick={() => setBatchModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-sm font-medium hover:bg-slate-200 transition-colors">
+            className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 rounded-xl text-sm font-medium hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors">
             <List size={17} /> Batch
           </button>
           <button onClick={() => setModalOpen(true)}
@@ -984,44 +987,44 @@ export default function ProductsPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
+      <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-sm p-4 space-y-3">
         <div className="relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-zinc-500" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search by name or vendor name…"
-            className="w-full pl-8 pr-4 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+            className="w-full pl-8 pr-4 py-2 rounded-xl border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-zinc-900"
           />
           {search && (
-            <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+            <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300">
               <X size={14} />
             </button>
           )}
         </div>
         {vendors && vendors.length > 0 && (
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-medium text-slate-400 shrink-0">Vendor</span>
+            <span className="text-xs font-medium text-slate-400 dark:text-zinc-500 shrink-0">Vendor</span>
             <TagBtn label="All" active={!filterVendor} onClick={() => setFilterVendor('')} />
             {vendors.map(v => <TagBtn key={v.id} label={v.name} active={filterVendor === v.name} onClick={() => setFilterVendor(filterVendor === v.name ? '' : v.name)} />)}
           </div>
         )}
         {categories && categories.length > 0 && (
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-medium text-slate-400 shrink-0">Category</span>
+            <span className="text-xs font-medium text-slate-400 dark:text-zinc-500 shrink-0">Category</span>
             <TagBtn label="All" active={!filterCategory} onClick={() => setFilterCategory('')} />
             {categories.map(c => <TagBtn key={c.id} label={c.name} active={filterCategory === c.name} onClick={() => setFilterCategory(filterCategory === c.name ? '' : c.name)} />)}
           </div>
         )}
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-medium text-slate-400 shrink-0">Status</span>
+          <span className="text-xs font-medium text-slate-400 dark:text-zinc-500 shrink-0">Status</span>
           {(['all', 'active', 'inactive'] as const).map(s => (
             <TagBtn key={s} label={s.charAt(0).toUpperCase() + s.slice(1)} active={filterStatus === s} onClick={() => setFilterStatus(s)} />
           ))}
         </div>
         {hasFilters && (
           <button onClick={() => { setSearch(''); setFilterVendor(''); setFilterCategory(''); setFilterStatus('all') }}
-            className="text-xs text-indigo-600 hover:underline">Clear filters</button>
+            className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline">Clear filters</button>
         )}
       </div>
 
@@ -1040,7 +1043,7 @@ export default function ProductsPage() {
           return (
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
               <SortableContext items={flatProducts.map(p => p.id)} strategy={verticalListSortingStrategy}>
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-sm overflow-hidden">
                   {flatProducts.map((p, idx) => {
                     const prevVendor = idx > 0 ? (flatProducts[idx - 1].vendor || 'No Vendor') : null
                     const thisVendor = p.vendor || 'No Vendor'
@@ -1063,15 +1066,15 @@ export default function ProductsPage() {
                   const p = flatProducts.find(x => x.id === draggingId)
                   if (!p) return null
                   return (
-                    <div className="bg-white border border-indigo-200 rounded-xl shadow-2xl px-4 py-3 flex items-center gap-3 opacity-95">
-                      <div className="w-8 h-8 rounded-lg bg-slate-100 overflow-hidden shrink-0">
+                    <div className="bg-white dark:bg-zinc-900 border border-indigo-200 dark:border-indigo-900 rounded-xl shadow-2xl px-4 py-3 flex items-center gap-3 opacity-95">
+                      <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-zinc-800 overflow-hidden shrink-0">
                         {p.image_url
                           ? <img src={thumbUrl(p.image_url)} alt={p.name} className="w-full h-full object-cover" />
-                          : <div className="w-full h-full flex items-center justify-center"><Package size={14} className="text-slate-300" /></div>}
+                          : <div className="w-full h-full flex items-center justify-center"><Package size={14} className="text-slate-300 dark:text-zinc-600" /></div>}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-slate-900 truncate">{p.name}</p>
-                        <p className="text-xs text-slate-400 truncate">{p.vendor}</p>
+                        <p className="text-sm font-medium text-slate-900 dark:text-zinc-100 truncate">{p.name}</p>
+                        <p className="text-xs text-slate-400 dark:text-zinc-500 truncate">{p.vendor}</p>
                       </div>
                     </div>
                   )
@@ -1084,23 +1087,23 @@ export default function ProductsPage() {
       {/* Export vendor picker */}
       {exportModalOpen && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setExportModalOpen(false)}>
-          <div className="bg-white rounded-2xl shadow-xl p-5 w-80 max-h-[80vh] flex flex-col gap-4" onClick={e => e.stopPropagation()}>
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl p-5 w-80 max-h-[80vh] flex flex-col gap-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-slate-900">Export — välj leverantörer</h3>
-              <button onClick={() => setExportModalOpen(false)} className="p-1 rounded-lg hover:bg-slate-100">
-                <X size={16} className="text-slate-400" />
+              <h3 className="font-semibold text-slate-900 dark:text-zinc-100">Export — välj leverantörer</h3>
+              <button onClick={() => setExportModalOpen(false)} className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800">
+                <X size={16} className="text-slate-400 dark:text-zinc-500" />
               </button>
             </div>
             <div className="flex gap-2 text-xs">
               <button onClick={() => setExportVendors(new Set(allExportVendors))}
-                className="text-indigo-600 hover:underline">Välj alla</button>
-              <span className="text-slate-300">·</span>
+                className="text-indigo-600 dark:text-indigo-400 hover:underline">Välj alla</button>
+              <span className="text-slate-300 dark:text-zinc-600">·</span>
               <button onClick={() => setExportVendors(new Set())}
-                className="text-slate-500 hover:underline">Rensa</button>
+                className="text-slate-500 dark:text-zinc-400 hover:underline">Rensa</button>
             </div>
             <div className="overflow-y-auto flex flex-col gap-1.5">
               {allExportVendors.map(v => (
-                <label key={v} className="flex items-center gap-2.5 px-2 py-1.5 rounded-xl hover:bg-slate-50 cursor-pointer">
+                <label key={v} className="flex items-center gap-2.5 px-2 py-1.5 rounded-xl hover:bg-slate-50 dark:hover:bg-zinc-800 cursor-pointer">
                   <input type="checkbox" checked={exportVendors.has(v)}
                     onChange={e => setExportVendors(prev => {
                       const next = new Set(prev)
@@ -1108,7 +1111,7 @@ export default function ProductsPage() {
                       return next
                     })}
                     className="rounded" />
-                  <span className="text-sm text-slate-700">{v}</span>
+                  <span className="text-sm text-slate-700 dark:text-zinc-200">{v}</span>
                 </label>
               ))}
             </div>

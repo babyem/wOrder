@@ -39,7 +39,7 @@ function AlarmRow({ alarm, locationId }: { alarm: LocationAlarm; locationId: str
         value={time}
         onChange={e => setTime(e.target.value)}
         onBlur={() => { if (time !== alarm.time) save({ time }) }}
-        className="px-2.5 py-1.5 rounded-xl border border-slate-200 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+        className="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-800 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-zinc-900"
       />
 
       {/* Day toggles */}
@@ -52,7 +52,7 @@ function AlarmRow({ alarm, locationId }: { alarm: LocationAlarm; locationId: str
             className={`w-7 h-7 rounded-lg text-xs font-semibold transition-all ${
               alarm.days.includes(i)
                 ? 'bg-indigo-600 text-white'
-                : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                : 'bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-500 hover:bg-slate-200 dark:hover:bg-zinc-700'
             }`}
           >
             {d}
@@ -67,15 +67,15 @@ function AlarmRow({ alarm, locationId }: { alarm: LocationAlarm; locationId: str
         onBlur={() => { const v = label.trim(); if (v !== alarm.label) save({ label: v || 'Alarm' }) }}
         onKeyDown={e => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
         placeholder="Label"
-        className="flex-1 min-w-[120px] px-3 py-1.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+        className="flex-1 min-w-[120px] px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-zinc-900"
       />
 
       {/* Active toggle */}
       <button
         onClick={() => save({ active: !alarm.active })}
-        className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${alarm.active ? 'bg-indigo-600' : 'bg-slate-200'}`}
+        className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${alarm.active ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-zinc-800'}`}
       >
-        <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${alarm.active ? 'translate-x-4' : 'translate-x-0.5'}`} />
+        <span className={`absolute top-0.5 w-4 h-4 bg-white dark:bg-zinc-900 rounded-full shadow transition-transform ${alarm.active ? 'translate-x-4' : 'translate-x-0.5'}`} />
       </button>
 
       {/* Delete */}
@@ -84,7 +84,7 @@ function AlarmRow({ alarm, locationId }: { alarm: LocationAlarm; locationId: str
           try { await deleteAlarm.mutateAsync({ id: alarm.id, locationId }) }
           catch { toast.error('Delete failed') }
         }}
-        className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
+        className="p-1.5 rounded-lg text-slate-300 dark:text-zinc-600 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 transition-colors shrink-0"
       >
         <Trash2 size={15} />
       </button>
@@ -119,21 +119,21 @@ export default function LocationPage() {
       <div className="flex items-center gap-3">
         <button
           onClick={() => navigate('/admin/settings')}
-          className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-white transition-all"
+          className="p-2 rounded-xl text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-white dark:hover:bg-zinc-800 transition-all"
         >
           <ArrowLeft size={18} />
         </button>
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{location?.name ?? '…'}</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Alarms &amp; schedules</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-zinc-100">{location?.name ?? '…'}</h1>
+          <p className="text-slate-400 dark:text-zinc-500 text-sm mt-0.5">Alarms &amp; schedules</p>
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-50">
+      <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-sm">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-50 dark:border-zinc-800">
           <div className="flex items-center gap-2">
-            <Bell size={18} className="text-slate-400" />
-            <h2 className="font-semibold text-slate-900">Alarms</h2>
+            <Bell size={18} className="text-slate-400 dark:text-zinc-500" />
+            <h2 className="font-semibold text-slate-900 dark:text-zinc-100">Alarms</h2>
           </div>
           <button
             onClick={handleAdd}
@@ -147,11 +147,11 @@ export default function LocationPage() {
         {isLoading ? (
           <div className="flex justify-center py-10"><Spinner /></div>
         ) : !alarms?.length ? (
-          <p className="px-5 py-10 text-center text-slate-400 text-sm">
+          <p className="px-5 py-10 text-center text-slate-400 dark:text-zinc-500 text-sm">
             No alarms yet — click Add Alarm to get started.
           </p>
         ) : (
-          <div className="divide-y divide-slate-50">
+          <div className="divide-y divide-slate-50 dark:divide-zinc-800">
             {alarms.map(alarm => (
               <AlarmRow key={alarm.id} alarm={alarm} locationId={locationId!} />
             ))}
@@ -159,9 +159,9 @@ export default function LocationPage() {
         )}
       </div>
 
-      <div className="bg-amber-50 border border-amber-100 rounded-2xl px-5 py-4 text-sm text-amber-700">
+      <div className="bg-amber-50 dark:bg-amber-950 border border-amber-100 dark:border-amber-900 rounded-2xl px-5 py-4 text-sm text-amber-700 dark:text-amber-300">
         <p className="font-medium mb-1">How alarms work</p>
-        <p className="text-amber-600 text-xs">Alarms fire as a notification banner while the admin panel is open. Set the time in 24h format and pick which days it should repeat.</p>
+        <p className="text-amber-600 dark:text-amber-400 text-xs">Alarms fire as a notification banner while the admin panel is open. Set the time in 24h format and pick which days it should repeat.</p>
       </div>
     </div>
   )

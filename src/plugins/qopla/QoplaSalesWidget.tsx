@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { useQoplaSales } from './useQoplaSales'
@@ -11,7 +11,27 @@ function stockholmDate(daysAgo: number): string {
   return new Intl.DateTimeFormat('sv-SE', { timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(Date.UTC(y, m - 1, d - daysAgo)))
 }
 
+function stockholmTime(): string {
+  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Stockholm', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date())
+}
+
+// Svensk tid oavsett datorns tidszon — uppdateras vid varje hel minut.
+function useStockholmClock(): string {
+  const [time, setTime] = useState(stockholmTime)
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | undefined
+    const msToNextMinute = 60_000 - (Date.now() % 60_000)
+    const timeout = setTimeout(() => {
+      setTime(stockholmTime())
+      interval = setInterval(() => setTime(stockholmTime()), 60_000)
+    }, msToNextMinute)
+    return () => { clearTimeout(timeout); if (interval) clearInterval(interval) }
+  }, [])
+  return time
+}
+
 export function QoplaSalesWidget() {
+  const clock = useStockholmClock()
   const [daysAgo, setDaysAgo] = useState(0)
   const { data, isLoading, isError } = useQoplaSales(daysAgo)
   const { data: posSales = [] } = usePosDailySales()
@@ -98,14 +118,17 @@ export function QoplaSalesWidget() {
   }
 
   return (
-    <div className="mx-1 mt-6 mb-2 rounded-xl bg-slate-50 border border-slate-100 p-3">
+    <div className="mx-1 mt-6 mb-2 rounded-xl bg-slate-50 dark:bg-zinc-800 border border-slate-100 dark:border-zinc-800 p-3">
+      <div className="text-lg font-bold text-slate-700 dark:text-zinc-200 tabular-nums leading-none mb-1.5" title="Svensk tid (Europe/Stockholm)">
+        {clock}
+      </div>
       <div className="flex items-center justify-between mb-2.5">
         <div className="flex items-center gap-1.5">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: '#6366f1' }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-indigo-500 dark:text-indigo-400">
             <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
             <polyline points="17 6 23 6 23 12" />
           </svg>
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+          <span className="text-xs font-semibold text-slate-500 dark:text-zinc-400 uppercase tracking-wide">
             {daysAgo === 0 ? 'Idag' : 'Igår'}
           </span>
         </div>
@@ -113,13 +136,13 @@ export function QoplaSalesWidget() {
         <div className="flex gap-1">
           <button
             onClick={() => setDaysAgo(0)}
-            className={`text-[10px] px-1.5 py-0.5 rounded font-medium transition-colors ${daysAgo === 0 ? 'bg-indigo-100 text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+            className={`text-[10px] px-1.5 py-0.5 rounded font-medium transition-colors ${daysAgo === 0 ? 'bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300'}`}
           >
             Idag
           </button>
           <button
             onClick={() => setDaysAgo(1)}
-            className={`text-[10px] px-1.5 py-0.5 rounded font-medium transition-colors ${daysAgo === 1 ? 'bg-indigo-100 text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+            className={`text-[10px] px-1.5 py-0.5 rounded font-medium transition-colors ${daysAgo === 1 ? 'bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300'}`}
           >
             Igår
           </button>
@@ -128,7 +151,7 @@ export function QoplaSalesWidget() {
             disabled={refreshing > 0}
             title="Uppdatera försäljningssiffror"
             aria-label="Uppdatera försäljningssiffror"
-            className="p-0.5 rounded text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 transition-colors"
+            className="p-0.5 rounded text-slate-400 dark:text-zinc-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950 disabled:opacity-50 transition-colors"
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={refreshing > 0 ? 'animate-spin' : ''}>
               <polyline points="23 4 23 10 17 10" />
@@ -142,7 +165,7 @@ export function QoplaSalesWidget() {
       {isLoading && (
         <div className="space-y-1.5">
           {[1, 2, 3].map(i => (
-            <div key={i} className="h-3 bg-slate-200 rounded animate-pulse" style={{ width: `${60 + i * 10}%` }} />
+            <div key={i} className="h-3 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse" style={{ width: `${60 + i * 10}%` }} />
           ))}
         </div>
       )}
@@ -153,13 +176,13 @@ export function QoplaSalesWidget() {
         <div className="space-y-1.5">
           {rows.map(r => (
             <div key={r.id} className="flex justify-between items-baseline gap-1">
-              <span className="text-xs text-slate-500 truncate">{r.name}</span>
+              <span className="text-xs text-slate-500 dark:text-zinc-400 truncate">{r.name}</span>
               <div className="flex items-center gap-1 shrink-0">
                 {r.pending
-                  ? <span className="h-3 w-12 bg-slate-200 rounded animate-pulse" />
+                  ? <span className="h-3 w-12 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse" />
                   : r.sales === null
-                    ? <span className="text-xs text-slate-400">—</span>
-                    : <span className="text-xs font-semibold text-slate-700">
+                    ? <span className="text-xs text-slate-400 dark:text-zinc-500">—</span>
+                    : <span className="text-xs font-semibold text-slate-700 dark:text-zinc-200">
                         {r.sales.toLocaleString('sv-SE')} kr
                       </span>}
                 {r.shop && (
@@ -167,7 +190,7 @@ export function QoplaSalesWidget() {
                     onClick={() => syncShop(r.shop!)}
                     disabled={syncingId === r.id}
                     title={`Hämta ${r.name} manuellt`}
-                    className="p-0.5 rounded text-indigo-500 hover:bg-indigo-50 disabled:opacity-50 transition-colors"
+                    className="p-0.5 rounded text-indigo-500 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950 disabled:opacity-50 transition-colors"
                   >
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={syncingId === r.id ? 'animate-spin' : ''}>
                       <polyline points="23 4 23 10 17 10" />
@@ -179,9 +202,9 @@ export function QoplaSalesWidget() {
               </div>
             </div>
           ))}
-          <div className="border-t border-slate-200 pt-1.5 mt-1.5 flex justify-between items-baseline">
-            <span className="text-xs font-semibold text-slate-600">Totalt</span>
-            <span className="text-xs font-bold" style={{ color: '#4f46e5' }}>
+          <div className="border-t border-slate-200 dark:border-zinc-800 pt-1.5 mt-1.5 flex justify-between items-baseline">
+            <span className="text-xs font-semibold text-slate-600 dark:text-zinc-300">Totalt</span>
+            <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
               {total.toLocaleString('sv-SE')} kr
             </span>
           </div>
@@ -190,23 +213,23 @@ export function QoplaSalesWidget() {
 
       {/* Synced (non-live) shops: Chao (dinkassa). Woso Emporia ligger i listan ovan. */}
       {manualShops.length > 0 && (
-        <div className="border-t border-slate-200 mt-2 pt-2 space-y-1">
+        <div className="border-t border-slate-200 dark:border-zinc-800 mt-2 pt-2 space-y-1">
           {manualShops.map(shop => (
             <div key={shop.id}>
               <div className="flex justify-between items-center gap-1">
-                <span className="text-xs text-slate-500 truncate flex items-center gap-1">
+                <span className="text-xs text-slate-500 dark:text-zinc-400 truncate flex items-center gap-1">
                   {shop.name}
-                  <span className="text-[9px] text-amber-600 bg-amber-50 px-1 rounded">synk</span>
+                  <span className="text-[9px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950 px-1 rounded">synk</span>
                 </span>
                 <div className="flex items-center gap-1 shrink-0">
                   {hasFor(shop.id)
-                    ? <span className="text-xs font-semibold text-slate-700">{salesFor(shop.id).toLocaleString('sv-SE')} kr</span>
-                    : <span className="text-xs text-slate-400">—</span>}
+                    ? <span className="text-xs font-semibold text-slate-700 dark:text-zinc-200">{salesFor(shop.id).toLocaleString('sv-SE')} kr</span>
+                    : <span className="text-xs text-slate-400 dark:text-zinc-500">—</span>}
                   <button
                     onClick={() => syncShop(shop)}
                     disabled={syncingId === shop.id}
                     title={`Synka ${shop.name}`}
-                    className="p-0.5 rounded text-indigo-500 hover:bg-indigo-50 disabled:opacity-50 transition-colors"
+                    className="p-0.5 rounded text-indigo-500 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950 disabled:opacity-50 transition-colors"
                   >
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={syncingId === shop.id ? 'animate-spin' : ''}>
                       <polyline points="23 4 23 10 17 10" />
@@ -217,7 +240,7 @@ export function QoplaSalesWidget() {
                 </div>
               </div>
               {!hasFor(shop.id) && latestFor(shop.id) && (
-                <div className="text-[9px] text-slate-400">
+                <div className="text-[9px] text-slate-400 dark:text-zinc-500">
                   Senast: {latestFor(shop.id).business_date} · {Number(latestFor(shop.id).sales).toLocaleString('sv-SE')} kr
                 </div>
               )}

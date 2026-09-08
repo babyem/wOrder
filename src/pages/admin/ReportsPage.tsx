@@ -110,12 +110,12 @@ export default function ReportsPage() {
     <div className="flex flex-col gap-4 h-full pb-20">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Rapporter</h1>
-          <p className="text-sm text-slate-500">Alla perioder · alla restauranger</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-zinc-100">Rapporter</h1>
+          <p className="text-sm text-slate-500 dark:text-zinc-400">Alla perioder · alla restauranger</p>
         </div>
         <button
           onClick={handleSync}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 bg-white text-slate-700 hover:border-indigo-300 hover:text-indigo-600 transition-colors"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-200 hover:border-indigo-300 dark:hover:border-indigo-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
           title="Hämta senaste siffrorna"
         >
           <RefreshCw size={13} />
@@ -223,15 +223,15 @@ function PeriodColumn({ period, canonicalOrder, expandedKeys, onToggleExpand, po
     <div className="flex flex-col gap-2 min-w-0">
       <div className="px-2 flex items-baseline justify-between">
         <div className="flex items-center gap-1.5">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{period.label}</h2>
-          {isFetching && !isLoading && <span className="text-[10px] text-indigo-500">…</span>}
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">{period.label}</h2>
+          {isFetching && !isLoading && <span className="text-[10px] text-indigo-500 dark:text-indigo-400">…</span>}
         </div>
-        <span className="text-[10px] text-slate-400">
+        <span className="text-[10px] text-slate-400 dark:text-zinc-500">
           {formatDateShort(period.start)}–{formatDateShort(period.end)}
         </span>
       </div>
 
-      <div className="relative z-10 bg-white rounded-2xl border border-slate-200 shadow-sm p-2">
+      <div className="relative z-10 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm p-2">
         {isLoading && (
           <div className="flex justify-center py-4">
             <Spinner size={18} />
@@ -242,7 +242,7 @@ function PeriodColumn({ period, canonicalOrder, expandedKeys, onToggleExpand, po
         {data && (
           <div className="flex flex-col gap-0.5">
             {ordered.length === 0 ? (
-              <p className="text-xs text-slate-400 py-2 px-2">Ingen data</p>
+              <p className="text-xs text-slate-400 dark:text-zinc-500 py-2 px-2">Ingen data</p>
             ) : (
               ordered.map(s => (
                 <ShopRowWithExpand
@@ -257,29 +257,29 @@ function PeriodColumn({ period, canonicalOrder, expandedKeys, onToggleExpand, po
             )}
             {syncedShops.map(sh => (
               <div key={sh.id} className="flex items-center gap-1.5 py-1 px-1.5 whitespace-nowrap">
-                <span className="flex-1 truncate text-xs text-slate-700 flex items-center gap-1">
-                  {sh.name} <span className="text-[9px] text-amber-600 bg-amber-50 px-1 rounded">synk</span>
+                <span className="flex-1 truncate text-xs text-slate-700 dark:text-zinc-200 flex items-center gap-1">
+                  {sh.name} <span className="text-[9px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950 px-1 rounded">synk</span>
                 </span>
-                <span className="tabular-nums text-xs font-semibold text-slate-800 shrink-0">
+                <span className="tabular-nums text-xs font-semibold text-slate-800 dark:text-zinc-200 shrink-0">
                   {sh.synced ? formatKrCompact(sh.sales) : '—'}
                 </span>
-                <span className="tabular-nums text-[10px] text-slate-500 shrink-0 w-8 text-right">{sh.orders || ''}</span>
+                <span className="tabular-nums text-[10px] text-slate-500 dark:text-zinc-400 shrink-0 w-8 text-right">{sh.orders || ''}</span>
                 <button
                   onClick={() => syncShop(sh)}
                   disabled={syncingId === sh.id}
                   title={`Synka ${sh.name} för perioden`}
-                  className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-indigo-500 hover:bg-indigo-50 disabled:opacity-50 transition-colors"
+                  className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-indigo-500 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950 disabled:opacity-50 transition-colors"
                 >
                   <RefreshCw size={11} className={syncingId === sh.id ? 'animate-spin' : ''} />
                 </button>
               </div>
             ))}
-            <div className="flex items-center gap-1.5 mt-1 pt-1.5 border-t border-slate-100 px-1.5 whitespace-nowrap">
-              <span className="flex-1 text-[11px] font-semibold text-slate-600">Totalt</span>
-              <span className="tabular-nums text-xs font-bold text-indigo-600 shrink-0">
+            <div className="flex items-center gap-1.5 mt-1 pt-1.5 border-t border-slate-100 dark:border-zinc-800 px-1.5 whitespace-nowrap">
+              <span className="flex-1 text-[11px] font-semibold text-slate-600 dark:text-zinc-300">Totalt</span>
+              <span className="tabular-nums text-xs font-bold text-indigo-600 dark:text-indigo-400 shrink-0">
                 {formatKrCompact(totals.sales + chaoTotal.sales)} kr
               </span>
-              <span className="tabular-nums text-[10px] text-slate-500 shrink-0 w-8 text-right">
+              <span className="tabular-nums text-[10px] text-slate-500 dark:text-zinc-400 shrink-0 w-8 text-right">
                 {totals.orders + chaoTotal.orders}
               </span>
               <span className="shrink-0 w-5" />
@@ -335,29 +335,29 @@ function ShopRowWithExpand({ shop, period, isExpanded, canExpand, onToggle }: Sh
     <div className="flex flex-col">
       <div
         className={`flex items-center gap-1.5 py-1 px-1.5 rounded-lg whitespace-nowrap ${
-          canExpand ? 'hover:bg-slate-50 cursor-pointer' : ''
-        } ${isExpanded ? 'bg-slate-50' : ''}`}
+          canExpand ? 'hover:bg-slate-50 dark:hover:bg-zinc-800 cursor-pointer' : ''
+        } ${isExpanded ? 'bg-slate-50 dark:bg-zinc-800' : ''}`}
         onClick={canExpand ? onToggle : undefined}
       >
         {canExpand && (
           <ChevronDown
             size={11}
-            className={`shrink-0 text-slate-400 transition-transform ${isExpanded ? '' : '-rotate-90'}`}
+            className={`shrink-0 text-slate-400 dark:text-zinc-500 transition-transform ${isExpanded ? '' : '-rotate-90'}`}
           />
         )}
-        <span className={`flex-1 truncate text-xs text-slate-700 ${canExpand ? 'select-none' : ''}`}>
+        <span className={`flex-1 truncate text-xs text-slate-700 dark:text-zinc-200 ${canExpand ? 'select-none' : ''}`}>
           {shop.shopName}
         </span>
-        <span className="tabular-nums text-xs font-semibold text-slate-800 shrink-0">
+        <span className="tabular-nums text-xs font-semibold text-slate-800 dark:text-zinc-200 shrink-0">
           {formatKrCompact(shop.totalSales)}
         </span>
-        <span className="tabular-nums text-[10px] text-slate-500 shrink-0 w-8 text-right">
+        <span className="tabular-nums text-[10px] text-slate-500 dark:text-zinc-400 shrink-0 w-8 text-right">
           {shop.totalOrders}
         </span>
         <button
           onClick={handleSie}
           title={`Ladda ned SIE för ${period.label}`}
-          className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-indigo-500 hover:bg-indigo-50 transition-colors"
+          className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-indigo-500 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950 transition-colors"
         >
           <Download size={11} />
         </button>
@@ -394,23 +394,23 @@ function HourlyDetails({ shopId, period }: { shopId: string; period: PeriodDef }
   }
 
   if (!data || data.length === 0) {
-    return <div className="px-3 py-2 text-[10px] text-slate-400">Ingen timme-data</div>
+    return <div className="px-3 py-2 text-[10px] text-slate-400 dark:text-zinc-500">Ingen timme-data</div>
   }
 
   const max = Math.max(...data.map(b => b.sales), 1)
 
   return (
-    <div className="px-2 py-2 border-l-2 border-indigo-100 ml-1.5 mt-0.5 flex flex-col gap-0.5">
+    <div className="px-2 py-2 border-l-2 border-indigo-100 dark:border-indigo-900 ml-1.5 mt-0.5 flex flex-col gap-0.5">
       {data.map(b => (
         <div key={b.hour} className="flex items-center gap-1.5 text-[10px] whitespace-nowrap">
-          <span className="tabular-nums text-slate-400 shrink-0 w-7">{String(b.hour).padStart(2, '0')}:00</span>
-          <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+          <span className="tabular-nums text-slate-400 dark:text-zinc-500 shrink-0 w-7">{String(b.hour).padStart(2, '0')}:00</span>
+          <div className="flex-1 h-1.5 bg-slate-100 dark:bg-zinc-800 rounded-full overflow-hidden">
             <div
               className="h-full bg-indigo-400"
               style={{ width: `${(b.sales / max) * 100}%` }}
             />
           </div>
-          <span className="tabular-nums text-slate-700 font-medium shrink-0">
+          <span className="tabular-nums text-slate-700 dark:text-zinc-200 font-medium shrink-0">
             {formatKrCompact(b.sales)}
           </span>
         </div>

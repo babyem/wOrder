@@ -18,7 +18,7 @@ export default function SmsLink({ phone, body, onSent, className, showIcon = tru
   if (asking) {
     return (
       <span className="flex items-center gap-1 text-xs">
-        <span className="text-slate-500 px-1">Skickat?</span>
+        <span className="text-slate-500 dark:text-zinc-400 px-1">Skickat?</span>
         <button
           onClick={() => { setAsking(false); onSent() }}
           className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 transition-colors"
@@ -27,7 +27,7 @@ export default function SmsLink({ phone, body, onSent, className, showIcon = tru
         </button>
         <button
           onClick={() => setAsking(false)}
-          className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 font-medium hover:bg-slate-200 transition-colors"
+          className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 font-medium hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors"
         >
           Nej
         </button>

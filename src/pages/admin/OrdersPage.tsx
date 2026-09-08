@@ -46,7 +46,7 @@ function SortableColumn({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
       id={`order-col-${loc.id}`}
-      className="w-[calc(100vw-2rem)] snap-start md:w-64 flex-none flex flex-col gap-2"
+      className="w-[calc(100vw-2rem)] snap-start md:w-64 flex-none flex flex-col gap-2 max-md:h-full max-md:overflow-y-auto max-md:overscroll-y-contain no-scrollbar"
     >
       <div className="sticky top-0 z-30 bg-slate-50 dark:bg-zinc-800 flex items-center justify-between px-1 py-1 -my-1 mb-0">
         <div className="flex items-center gap-1.5">
@@ -458,7 +458,8 @@ export default function OrdersPage() {
           })}
         </div>
         <div
-          className="no-scrollbar overflow-x-auto overflow-y-auto -mx-4 md:-mx-6 px-4 md:px-6 snap-x snap-mandatory md:snap-none scroll-px-4"
+          /* Mobile: only horizontal here, each column scrolls vertically — separate scrollers let the browser lock the gesture to one axis */
+          className="no-scrollbar overflow-x-auto md:overflow-y-auto max-md:overflow-y-hidden max-md:h-[calc(100vh-190px)] max-md:overscroll-x-contain -mx-4 md:-mx-6 px-4 md:px-6 snap-x snap-mandatory md:snap-none scroll-px-4"
           style={{ zoom, maxHeight: `calc((100vh - 150px) / ${zoom})` }}
           onScroll={e => {
             if (window.innerWidth >= 768) return
@@ -469,7 +470,7 @@ export default function OrdersPage() {
         >
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleColumnDragEnd}>
             <SortableContext items={sortedLocations.map(l => l.id)} strategy={horizontalListSortingStrategy}>
-              <div className="flex gap-4 pb-4" style={{ minWidth: 'max-content' }}>
+              <div className="flex gap-4 pb-4 max-md:h-full max-md:pb-0" style={{ minWidth: 'max-content' }}>
                 {sortedLocations.map(loc => {
                   const colOrders = ordersByLocation[loc.id] ?? []
                   return (

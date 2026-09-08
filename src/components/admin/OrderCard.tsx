@@ -597,7 +597,7 @@ export default function OrderCard({ order, selectedVendors, onToggle, showLocati
     return (
       <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="relative">
         <div className={`transition-opacity duration-200 ${!isPending ? 'opacity-60 dark:opacity-75 hover:opacity-100' : ''}`}>
-          <div className={`rounded-2xl border shadow-sm ${isPending ? 'bg-slate-100 dark:bg-zinc-800 border-dashed border-slate-300 dark:border-zinc-700' : 'bg-[#e2f6ec] dark:bg-zinc-900 dark:shadow-[inset_3px_0_0_0_#059669] border-transparent dark:border-zinc-800'}`}>
+          <div className={`rounded-2xl border shadow-sm ${isPending ? 'bg-slate-100 dark:bg-zinc-800 border-dashed border-slate-300 dark:border-zinc-700' : 'bg-[#e2f6ec] dark:bg-emerald-950/40 dark:shadow-[inset_3px_0_0_0_#059669] border-transparent dark:border-zinc-800'}`}>
             <div className="px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 text-slate-500 dark:text-zinc-400">
               <span className="font-normal tabular-nums opacity-60">{time}</span>
               <button onClick={handleDelete} disabled={deleteOrder.isPending} title="Ta bort"
@@ -653,7 +653,7 @@ export default function OrderCard({ order, selectedVendors, onToggle, showLocati
     : isStale ? 'border-red-300 dark:border-red-800'
     : 'border-transparent dark:border-zinc-800'
   const statusBarClass = isPending ? 'text-amber-700 dark:text-amber-300' : isStopped ? 'text-slate-500 dark:text-zinc-400' : 'text-emerald-700 dark:text-emerald-300'
-  const cardBg = isPending ? 'bg-[#fffaeb] dark:bg-zinc-900 dark:shadow-[inset_3px_0_0_0_#f59e0b]' : isStopped ? 'bg-slate-100 dark:bg-zinc-900 dark:shadow-[inset_3px_0_0_0_#52525b]' : 'bg-[#e2f6ec] dark:bg-zinc-900 dark:shadow-[inset_3px_0_0_0_#059669]'
+  const cardBg = isPending ? 'bg-[#fffaeb] dark:bg-zinc-900 dark:shadow-[inset_3px_0_0_0_#f59e0b]' : isStopped ? 'bg-slate-100 dark:bg-zinc-900 dark:shadow-[inset_3px_0_0_0_#52525b]' : 'bg-[#e2f6ec] dark:bg-emerald-950/40 dark:shadow-[inset_3px_0_0_0_#059669]'
 
   // Toggle selection when clicking the card itself — ignore clicks on interactive elements
   const cardClick = (vendor: string) => (e: React.MouseEvent) => {
@@ -751,7 +751,8 @@ export default function OrderCard({ order, selectedVendors, onToggle, showLocati
           <span className="text-sm font-semibold text-slate-900 dark:text-zinc-100 truncate">{order.employee?.name ?? 'Unknown'}</span>
           {showLocation && <span className="text-xs text-slate-400 dark:text-zinc-500 truncate">· {locationName}</span>}
           {isStopped && <Ban size={12} className="text-slate-400 dark:text-zinc-500 shrink-0" aria-label="Stoppad — ingen beställning" />}
-          <span className={`ml-auto text-xs tabular-nums shrink-0 ${isStale ? 'text-red-600 dark:text-red-400 font-semibold' : `${statusBarClass} opacity-70`}`}>{time}</span>
+          {!isPending && !isStopped && <CheckCircle size={12} className="ml-auto text-emerald-600 dark:text-emerald-400 shrink-0" aria-label="Klar" />}
+          <span className={`${isPending || isStopped ? 'ml-auto' : ''} text-xs tabular-nums shrink-0 ${isStale ? 'text-red-600 dark:text-red-400 font-semibold' : `${statusBarClass} opacity-70`}`}>{time}</span>
           {isStale && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" title="Väntat över 24h" />}
           {/* Single vendor without a label row: copy lives up here instead of on an otherwise empty row */}
           {!isMultiVendor && !showVendorLabel(firstVendor) && copyButton(firstVendor)}

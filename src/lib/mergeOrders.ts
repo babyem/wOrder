@@ -30,3 +30,32 @@ export function planMergedOrder(orders: OrderWithDetails[], targetLocationId?: s
     items: [...merged.entries()].map(([product_id, quantity]) => ({ product_id, quantity })),
   }
 }
+
+export interface VendorCardMergeUpdate {
+  id: string
+  vendor_override: string | null
+}
+
+// Slår ihop flera leverantörskort inom samma order: alla rader från de valda
+// korten flyttas till målleverantören via vendor_override. Rader vars produkt
+// redan tillhör målleverantören får null (ingen override behövs).
+export function planVendorCardMerge(
+  order: OrderWithDetails,
+  vendors: string[],
+  targetVendor: string,
+): VendorCardMergeUpdate[] {
+  const sources = new Set(vendors)
+  if (!sources.has(targetVendor)) throw new Error('Målleverantören måste vara ett av de valda korten')
+  if (sources.size < 2) throw new Error('Välj minst två leverantörskort')
+
+  const updates: VendorCardMergeUpdate[] = []
+  for (const item of order.items) {
+    const current = item.vendor_override ?? item.product?.vendor ?? '—'
+    if (!sources.has(current) || current === targetVendor) continue
+    updates.push({
+      id: item.id,
+      vendor_override: item.product?.vendor === targetVendor ? null : targetVendor,
+    })
+  }
+  return updates
+}

@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tansta
 import { supabase } from '../lib/supabase'
 import toast from 'react-hot-toast'
 import type { OrderWithDetails, CartItem } from '../types'
-import { planMergedOrder } from '../lib/mergeOrders'
+import { planMergedOrder, planVendorCardMerge } from '../lib/mergeOrders'
 
 const MIGRATION_HINT = 'kolumnen deleted_at saknas — kör migration 027 i Supabase SQL editor'
 
@@ -264,6 +264,23 @@ export function useMergeOrders() {
         .update({ deleted_at: new Date().toISOString() })
         .in('id', ids)
       if (delErr) throw delErr
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['orders'] }),
+  })
+}
+
+// Slår ihop leverantörskort inom samma order — sätter vendor_override på raderna.
+export function useMergeVendorCards() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ order, vendors, targetVendor }: { order: OrderWithDetails; vendors: string[]; targetVendor: string }) => {
+      const updates = planVendorCardMerge(order, vendors, targetVendor)
+      for (const { id, vendor_override } of updates) {
+        const { data, error } = await supabase.from('order_items').update({ vendor_override }).eq('id', id).select('id')
+        if (error) throw error
+        if (!data?.length) throw new Error('RLS blocked the update — add an update policy for order_items')
+      }
+      return updates.length
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['orders'] }),
   })

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { planMergedOrder } from '../mergeOrders'
+import { planMergedOrder, planVendorCardMerge } from '../mergeOrders'
 import { order, item, product } from './fixtures'
 
 const tofu = product({ name: 'Tofu' })
@@ -45,5 +45,42 @@ describe('planMergedOrder', () => {
 
   it('kastar på tom lista', () => {
     expect(() => planMergedOrder([])).toThrow()
+  })
+})
+
+describe('planVendorCardMerge', () => {
+  it('flyttar rader från andra valda kort till målleverantören', () => {
+    const kho = product({ name: 'Bo yakiniku', vendor: 'Kho' })
+    const fdc = product({ name: 'Ca trang', vendor: 'FDC' })
+    const a = item({ product: kho, quantity: 2 })
+    const b = item({ product: fdc, quantity: 1 })
+    const o = order({ items: [a, b] })
+    expect(planVendorCardMerge(o, ['Kho', 'FDC'], 'Kho')).toEqual([
+      { id: b.id, vendor_override: 'Kho' },
+    ])
+  })
+
+  it('lämnar kort som inte är valda orörda', () => {
+    const kho = product({ vendor: 'Kho' })
+    const fdc = product({ vendor: 'FDC' })
+    const ting = product({ vendor: 'Tingstad' })
+    const c = item({ product: ting, quantity: 1 })
+    const o = order({ items: [item({ product: kho, quantity: 1 }), item({ product: fdc, quantity: 1 }), c] })
+    const ids = planVendorCardMerge(o, ['Kho', 'FDC'], 'FDC').map(u => u.id)
+    expect(ids).not.toContain(c.id)
+  })
+
+  it('nollar override när produkten redan tillhör målleverantören', () => {
+    const kho = product({ vendor: 'Kho' })
+    const moved = item({ product: kho, quantity: 1, vendor_override: 'FDC' })
+    const o = order({ items: [moved, item({ product: product({ vendor: 'Kho' }), quantity: 1 })] })
+    expect(planVendorCardMerge(o, ['Kho', 'FDC'], 'Kho')).toEqual([
+      { id: moved.id, vendor_override: null },
+    ])
+  })
+
+  it('kastar om målet inte är ett valt kort', () => {
+    const o = order({ items: [item({ product: product({ vendor: 'Kho' }), quantity: 1 })] })
+    expect(() => planVendorCardMerge(o, ['Kho', 'FDC'], 'Tingstad')).toThrow()
   })
 })

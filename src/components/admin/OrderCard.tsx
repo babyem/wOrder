@@ -681,7 +681,11 @@ export default function OrderCard({ order, selectedVendors, onToggle, showLocati
       <div
         key={vendor}
         onClick={isMultiVendor ? cardClick(vendor) : undefined}
-        className={`${i > 0 ? 'border-t border-black/5 dark:border-zinc-800 pt-2 mt-2' : ''} ${isMultiVendor && isVendorSelected ? '-mx-1.5 px-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950 ring-2 ring-indigo-200 dark:ring-indigo-900' : ''}`}
+        className={`${i > 0 ? 'border-t border-black/5 dark:border-zinc-800 pt-2 mt-2' : ''} ${
+          isMultiVendor && isVendorSelected ? '-mx-1.5 px-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950 ring-2 ring-indigo-200 dark:ring-indigo-900'
+          // Done section inside a pending order: same green as a finished card, bleeding to the card edges
+          : isMultiVendor && isPending && isVendorDone ? `-mx-3 px-3 pb-2 bg-[#e2f6ec] dark:bg-emerald-950/50 ${i === 0 ? '-mt-1 pt-1' : ''} ${i === vendorEntries.length - 1 ? '-mb-3 pb-3' : ''}`
+          : ''}`}
       >
         {isMultiVendor ? (
           <div className="flex items-center justify-between gap-2 mb-1 -mr-1">
@@ -722,7 +726,7 @@ export default function OrderCard({ order, selectedVendors, onToggle, showLocati
             )}
           </AnimatePresence>
         )}
-        <div className={isVendorDone ? 'opacity-40' : ''}>
+        <div className={isVendorDone ? 'opacity-60' : ''}>
           {renderItems(items)}
         </div>
         {vendor === chefsVendorName && renderChefsControls()}

@@ -74,6 +74,14 @@ function SortableColumn({
 export default function OrdersPage() {
   const [status, setStatus] = useState('all')
   const [mobileCol, setMobileCol] = useState(0)
+  // Zoom is a desktop tool; on phones it would also break fixed-position dropdowns anchored by rect
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 767px)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)')
+    const on = () => setIsMobile(mq.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
   const [search, setSearch] = useState('')
   const [daysBack, setDaysBack] = useState(8)
   // Selection key: "orderId::vendor"
@@ -97,6 +105,7 @@ export default function OrdersPage() {
     setZoom(clamped)
     localStorage.setItem('orders-zoom', String(clamped))
   }
+  const effectiveZoom = isMobile ? 1 : zoom
 
   const fromDate = useMemo(() => {
     const d = new Date()
@@ -460,7 +469,7 @@ export default function OrdersPage() {
         <div
           /* Mobile: only horizontal here, each column scrolls vertically — separate scrollers let the browser lock the gesture to one axis */
           className="no-scrollbar overflow-x-auto md:overflow-y-auto max-md:overflow-y-hidden max-md:h-[calc(100vh-190px)] max-md:overscroll-x-contain -mx-4 md:-mx-6 px-4 md:px-6 snap-x snap-mandatory md:snap-none scroll-px-4"
-          style={{ zoom, maxHeight: `calc((100vh - 150px) / ${zoom})` }}
+          style={{ zoom: effectiveZoom, maxHeight: `calc((100vh - 150px) / ${effectiveZoom})` }}
           onScroll={e => {
             if (window.innerWidth >= 768) return
             const el = e.currentTarget

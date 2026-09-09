@@ -123,9 +123,11 @@ function FieldDropdown({ label, open, onToggle, onClose, children }: {
     if (!open && btnRef.current) {
       const rect = btnRef.current.getBoundingClientRect()
       const openUp = rect.bottom + 220 > window.innerHeight
+      // Keep the 260px-wide panel inside the viewport on narrow screens
+      const left = Math.max(4, Math.min(rect.left, window.innerWidth - 268))
       setDropStyle(openUp
-        ? { position: 'fixed', bottom: window.innerHeight - rect.top + 4, left: rect.left, zIndex: 50 }
-        : { position: 'fixed', top: rect.bottom + 4, left: rect.left, zIndex: 50 }
+        ? { position: 'fixed', bottom: window.innerHeight - rect.top + 4, left, zIndex: 50 }
+        : { position: 'fixed', top: rect.bottom + 4, left, zIndex: 50 }
       )
     }
     onToggle()

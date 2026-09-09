@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CheckCircle, RotateCcw, Trash2, FileText, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag, AlertTriangle, AlertCircle, Copy, Ban, MoreHorizontal } from 'lucide-react'
@@ -15,6 +15,22 @@ interface Props {
   selectedVendors?: Set<string>   // which vendor cards of this order are selected
   onToggle?: (vendor: string) => void
   showLocation?: boolean          // false when the surrounding column is already the location
+}
+
+// Coarse pointer / no hover: phones and tablets. Double-click is unreliable there.
+const isTouch = typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches
+
+type DropPos = { top?: number; bottom?: number; left: number }
+// Anchor a fixed-position dropdown to where the user clicked/tapped. Pointer
+// coordinates are true viewport pixels even inside a CSS-zoomed container,
+// unlike getBoundingClientRect (Safari returns unzoomed values there).
+function dropPosFromEvent(e: React.MouseEvent, width: number, height: number): DropPos {
+  const rect = e.currentTarget.getBoundingClientRect()
+  const x = e.clientX || rect.right
+  const y = e.clientY || rect.bottom
+  const goUp = y + height + 8 > window.innerHeight
+  const left = Math.max(4, Math.min(x - width / 2, window.innerWidth - width - 4))
+  return goUp ? { bottom: window.innerHeight - y + 8, left } : { top: y + 8, left }
 }
 
 export default function OrderCard({ order, selectedVendors, onToggle, showLocation = true }: Props) {
@@ -91,8 +107,9 @@ export default function OrderCard({ order, selectedVendors, onToggle, showLocati
     setVendorOverrides(Object.fromEntries(order.items.filter(i => i.vendor_override).map(i => [i.id, i.vendor_override!])))
   }, [order.items])
   const [editingUnitItem, setEditingUnitItem] = useState<string | null>(null)
-  const [unitDropPos, setUnitDropPos] = useState<Record<string, { top?: number; bottom?: number; left: number }>>({})
-  const [vendorDropPos, setVendorDropPos] = useState<Record<string, { top?: number; bottom?: number; left: number }>>({})
+  const [unitDropPos, setUnitDropPos] = useState<Record<string, DropPos>>({})
+  const [vendorDropPos, setVendorDropPos] = useState<Record<string, DropPos>>({})
+  const longPress = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const { data: unitList } = useUnits()
   const vendorMap = Object.fromEntries((vendorList ?? []).map(v => [v.name, v]))
@@ -402,7 +419,10 @@ export default function OrderCard({ order, selectedVendors, onToggle, showLocati
             key={item.id}
             className="flex items-center justify-between text-sm group cursor-default select-none py-0.5"
             onDoubleClick={() => toggleExclude(item)}
-            title="Double-click to exclude from notification"
+            onTouchStart={() => { if (!isTouch) return; longPress.current = setTimeout(() => { longPress.current = null; toggleExclude(item) }, 550) }}
+            onTouchEnd={() => { if (longPress.current) { clearTimeout(longPress.current); longPress.current = null } }}
+            onTouchMove={() => { if (longPress.current) { clearTimeout(longPress.current); longPress.current = null } }}
+            title={isTouch ? 'Håll in för att exkludera från beställningen' : 'Double-click to exclude from notification'}
           >
             <span className={excluded_ ? 'line-through text-red-400' : 'text-slate-700 dark:text-zinc-200'}>
               {item.product?.name ?? 'Deleted product'}
@@ -411,7 +431,7 @@ export default function OrderCard({ order, selectedVendors, onToggle, showLocati
               <div className="flex items-center justify-end gap-1 min-w-[4.5rem]">
                 {editingQtyItem === item.id ? (
                   <input
-                    type="number" min={1} value={qtyDraft}
+                    type="number" inputMode="decimal" min={1} value={qtyDraft}
                     onChange={e => setQtyDraft(e.target.value)}
                     onBlur={() => {
                       const n = parseFloat(qtyDraft)
@@ -425,19 +445,20 @@ export default function OrderCard({ order, selectedVendors, onToggle, showLocati
                     }}
                     onClick={e => e.stopPropagation()}
                     onDoubleClick={e => e.stopPropagation()}
-                    className="w-10 text-sm tabular-nums text-right focus:outline-none bg-transparent font-semibold text-slate-800 dark:text-zinc-100"
+                    className="w-10 [@media(hover:none)]:w-14 [@media(hover:none)]:text-base text-sm tabular-nums text-right focus:outline-none bg-transparent font-semibold text-slate-800 dark:text-zinc-100 rounded border border-indigo-300 dark:border-indigo-700 px-1"
                     autoFocus
                   />
                 ) : (
                   <span
                     className={`text-sm tabular-nums font-semibold cursor-pointer ${excluded_ ? 'line-through text-red-400' : 'text-slate-800 dark:text-zinc-100 hover:text-indigo-600 dark:hover:text-indigo-400'}`}
                     onDoubleClick={e => { e.stopPropagation(); setQtyDraft(String(item.quantity)); setEditingQtyItem(item.id) }}
-                    title="Double-click to edit"
+                    onClick={e => { if (!isTouch) return; e.stopPropagation(); setQtyDraft(String(item.quantity)); setEditingQtyItem(item.id) }}
+                    title={isTouch ? 'Tryck för att ändra antal' : 'Double-click to edit'}
                   >{item.quantity}</span>
                 )}
                 <div className="relative">
                   <button
-                    onClick={e => { e.stopPropagation(); if (editingUnitItem === item.id) { setEditingUnitItem(null) } else { const rect = e.currentTarget.getBoundingClientRect(); const goUp = rect.bottom + 180 > window.innerHeight; const left = Math.max(4, Math.min(rect.right - 88, window.innerWidth - 92)); setUnitDropPos(prev => ({ ...prev, [item.id]: goUp ? { bottom: window.innerHeight - rect.top + 4, left } : { top: rect.bottom + 4, left } })); setEditingUnitItem(item.id) } }}
+                    onClick={e => { e.stopPropagation(); if (editingUnitItem === item.id) { setEditingUnitItem(null) } else { const pos = dropPosFromEvent(e, 88, 180); setUnitDropPos(prev => ({ ...prev, [item.id]: pos })); setEditingUnitItem(item.id) } }}
                     className={`text-xs transition-colors ${unitOverrides[item.id] ? 'text-indigo-500 dark:text-indigo-400 font-medium' : excluded_ ? 'line-through text-red-300 dark:text-red-700' : 'text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300'}`}
                   >{effectiveUnit(item)}</button>
                   {editingUnitItem === item.id && createPortal(
@@ -460,7 +481,7 @@ export default function OrderCard({ order, selectedVendors, onToggle, showLocati
               </div>
               <div className="relative">
                 <button
-                  onClick={e => { e.stopPropagation(); if (editingVendorItem === item.id) { setEditingVendorItem(null) } else { const rect = e.currentTarget.getBoundingClientRect(); const goUp = rect.bottom + 220 > window.innerHeight; const left = Math.max(4, Math.min(rect.right - 138, window.innerWidth - 142)); setVendorDropPos(prev => ({ ...prev, [item.id]: goUp ? { bottom: window.innerHeight - rect.top + 4, left } : { top: rect.bottom + 4, left } })); setEditingVendorItem(item.id) } }}
+                  onClick={e => { e.stopPropagation(); if (editingVendorItem === item.id) { setEditingVendorItem(null) } else { const pos = dropPosFromEvent(e, 138, 220); setVendorDropPos(prev => ({ ...prev, [item.id]: pos })); setEditingVendorItem(item.id) } }}
                   title="Change vendor"
                   className={`p-0.5 [@media(hover:none)]:p-1.5 [@media(hover:none)]:-my-1 rounded transition-all ${isOverridden ? 'text-amber-500 opacity-100' : 'text-slate-300 dark:text-zinc-600 opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 hover:text-slate-500 dark:hover:text-zinc-400'}`}
                 ><Tag size={10} /></button>

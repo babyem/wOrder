@@ -427,8 +427,8 @@ export default function OrderCard({ order, selectedVendors, onToggle, showLocati
             <span className={excluded_ ? 'line-through text-red-400' : 'text-slate-700 dark:text-zinc-200'}>
               {item.product?.name ?? 'Deleted product'}
             </span>
-            <div className="flex items-center gap-1 shrink-0">
-              <div className="flex items-center justify-end gap-1 min-w-[4.5rem]">
+            <div className="flex items-center gap-1 [@media(hover:none)]:gap-2 shrink-0">
+              <div className="flex items-center justify-end gap-1 [@media(hover:none)]:gap-3 min-w-[4.5rem]">
                 {editingQtyItem === item.id ? (
                   <input
                     type="number" inputMode="decimal" min={1} value={qtyDraft}
@@ -450,7 +450,7 @@ export default function OrderCard({ order, selectedVendors, onToggle, showLocati
                   />
                 ) : (
                   <span
-                    className={`text-sm tabular-nums font-semibold cursor-pointer ${excluded_ ? 'line-through text-red-400' : 'text-slate-800 dark:text-zinc-100 hover:text-indigo-600 dark:hover:text-indigo-400'}`}
+                    className={`text-sm tabular-nums font-semibold cursor-pointer [@media(hover:none)]:px-2 [@media(hover:none)]:py-1 [@media(hover:none)]:-my-1 [@media(hover:none)]:rounded-md [@media(hover:none)]:bg-slate-100 dark:[@media(hover:none)]:bg-zinc-800 ${excluded_ ? 'line-through text-red-400' : 'text-slate-800 dark:text-zinc-100 hover:text-indigo-600 dark:hover:text-indigo-400'}`}
                     onDoubleClick={e => { e.stopPropagation(); setQtyDraft(String(item.quantity)); setEditingQtyItem(item.id) }}
                     onClick={e => { if (!isTouch) return; e.stopPropagation(); setQtyDraft(String(item.quantity)); setEditingQtyItem(item.id) }}
                     title={isTouch ? 'Tryck för att ändra antal' : 'Double-click to edit'}
@@ -459,7 +459,7 @@ export default function OrderCard({ order, selectedVendors, onToggle, showLocati
                 <div className="relative">
                   <button
                     onClick={e => { e.stopPropagation(); if (editingUnitItem === item.id) { setEditingUnitItem(null) } else { const pos = dropPosFromEvent(e, 88, 180); setUnitDropPos(prev => ({ ...prev, [item.id]: pos })); setEditingUnitItem(item.id) } }}
-                    className={`text-xs transition-colors ${unitOverrides[item.id] ? 'text-indigo-500 dark:text-indigo-400 font-medium' : excluded_ ? 'line-through text-red-300 dark:text-red-700' : 'text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300'}`}
+                    className={`text-xs transition-colors [@media(hover:none)]:px-1.5 [@media(hover:none)]:py-1 [@media(hover:none)]:-my-1 ${unitOverrides[item.id] ? 'text-indigo-500 dark:text-indigo-400 font-medium' : excluded_ ? 'line-through text-red-300 dark:text-red-700' : 'text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300'}`}
                   >{effectiveUnit(item)}</button>
                   {editingUnitItem === item.id && createPortal(
                     <>
@@ -769,12 +769,13 @@ export default function OrderCard({ order, selectedVendors, onToggle, showLocati
           {onToggle && !isMultiVendor && (
             <button onClick={e => { e.stopPropagation(); onToggle(firstVendor) }} className="shrink-0 mr-0.5 [@media(hover:none)]:p-1.5 [@media(hover:none)]:-m-1.5 [@media(hover:none)]:mr-0">{selectIcon(firstSelected)}</button>
           )}
+          {!isPending && !isStopped && <CheckCircle size={12} className="text-emerald-600 dark:text-emerald-400 shrink-0" aria-label="Klar" />}
+          <span className={`text-xs tabular-nums shrink-0 ${isStale ? 'text-red-600 dark:text-red-400 font-semibold' : `${statusBarClass} opacity-70`}`}>{time}</span>
+          {isStale && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" title="Väntat över 24h" />}
           <span className="text-sm font-semibold text-slate-900 dark:text-zinc-100 truncate">{order.employee?.name ?? 'Unknown'}</span>
           {showLocation && <span className="text-xs text-slate-400 dark:text-zinc-500 truncate">· {locationName}</span>}
           {isStopped && <Ban size={12} className="text-slate-400 dark:text-zinc-500 shrink-0" aria-label="Stoppad — ingen beställning" />}
-          {!isPending && !isStopped && <CheckCircle size={12} className="ml-auto text-emerald-600 dark:text-emerald-400 shrink-0" aria-label="Klar" />}
-          <span className={`${isPending || isStopped ? 'ml-auto' : ''} text-xs tabular-nums shrink-0 ${isStale ? 'text-red-600 dark:text-red-400 font-semibold' : `${statusBarClass} opacity-70`}`}>{time}</span>
-          {isStale && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" title="Väntat över 24h" />}
+          <span className="ml-auto" />
           {/* Single vendor without a label row: copy lives up here instead of on an otherwise empty row */}
           {!isMultiVendor && !showVendorLabel(firstVendor) && copyButton(firstVendor)}
           {isPending && (

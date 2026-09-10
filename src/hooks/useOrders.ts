@@ -269,6 +269,21 @@ export function useMergeOrders() {
   })
 }
 
+// Tar bort rader ur en order (t.ex. hela leverantörens del). Hård radering —
+// order_items har ingen deleted_at. select() avslöjar om RLS tyst blockerade.
+export function useDeleteOrderItems() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { data, error } = await supabase.from('order_items').delete().in('id', ids).select('id')
+      if (error) throw error
+      if ((data?.length ?? 0) < ids.length) throw new Error('RLS blocked the delete — add a delete policy for order_items')
+      return data!.length
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['orders'] }),
+  })
+}
+
 // Slår ihop leverantörskort inom samma order — sätter vendor_override på raderna.
 export function useMergeVendorCards() {
   const qc = useQueryClient()

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CheckCircle, RotateCcw, Trash2, FileText, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag, AlertTriangle, AlertCircle, Copy, Ban, MoreHorizontal } from 'lucide-react'
 import type { Order, OrderWithDetails } from '../../types'
-import { useUpdateOrderStatus, useDeleteOrder, useRestoreOrder, useUpdateOrderItem, useMarkVendorDone, useUpdateAdminNote } from '../../hooks/useOrders'
+import { useUpdateOrderStatus, useDeleteOrder, useRestoreOrder, useUpdateOrderItem, useMarkVendorDone, useUpdateAdminNote, useDeleteOrderItems } from '../../hooks/useOrders'
 import { useVendors, useUnits } from '../../hooks/useMetadata'
 import { sendEmail } from '../../lib/sendEmail'
 import SmsLink from './SmsLink'
@@ -41,6 +41,7 @@ export default function OrderCard({ order, selectedVendors, onToggle, showLocati
   const { data: vendorList } = useVendors()
   const updateOrderItem = useUpdateOrderItem()
   const markVendorDoneMutation = useMarkVendorDone()
+  const deleteItems = useDeleteOrderItems()
   const [showNotifyVendor, setShowNotifyVendor] = useState<string | null>(null)
   const [hovered, setHovered] = useState(false)
   const [actionsPinned, setActionsPinned] = useState(false)
@@ -235,6 +236,17 @@ export default function OrderCard({ order, selectedVendors, onToggle, showLocati
       toast.success('Order reopened')
     } catch {
       toast.error('Failed to update order')
+    }
+  }
+
+  // Ta bort en hel leverantörs del av en order (bara i flerleverantörsordrar)
+  const removeVendor = async (vendor: string, items: typeof order.items) => {
+    if (!window.confirm(`Ta bort ${vendor} (${items.length} rader) från ordern?`)) return
+    try {
+      await deleteItems.mutateAsync(items.map(i => i.id))
+      toast.success(`${vendor} borttagen från ordern`)
+    } catch (e) {
+      toast.error((e as Error).message)
     }
   }
 
@@ -702,7 +714,7 @@ export default function OrderCard({ order, selectedVendors, onToggle, showLocati
       <div
         key={vendor}
         onClick={isMultiVendor ? cardClick(vendor) : undefined}
-        className={`${i > 0 ? 'border-t border-black/5 dark:border-zinc-800 pt-2 mt-2' : ''} ${
+        className={`${i > 0 ? 'border-t-2 border-dashed border-black/10 dark:border-zinc-700 pt-2.5 mt-2.5' : ''} ${
           isMultiVendor && isVendorSelected ? '-mx-1.5 px-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950 ring-2 ring-indigo-200 dark:ring-indigo-900'
           // Done section inside a pending order: same green as a finished card, bleeding to the card edges
           : isMultiVendor && isPending && isVendorDone ? `-mx-3 px-3 pb-2 bg-[#e2f6ec] dark:bg-emerald-950/50 ${i === 0 ? '-mt-1 pt-1' : ''} ${i === vendorEntries.length - 1 ? '-mb-3 pb-3' : ''}`
@@ -730,6 +742,17 @@ export default function OrderCard({ order, selectedVendors, onToggle, showLocati
               >
                 <CheckCircle size={10} /> {isVendorDone ? 'Done' : 'Mark done'}
               </button>
+              {isPending && (
+                <button
+                  onClick={() => removeVendor(vendor, items)}
+                  disabled={deleteItems.isPending}
+                  title={`Ta bort ${vendor} från ordern`}
+                  aria-label={`Ta bort ${vendor} från ordern`}
+                  className="p-1 [@media(hover:none)]:p-2 [@media(hover:none)]:-my-1 rounded-lg text-slate-300 dark:text-zinc-600 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50 transition-colors"
+                >
+                  <Trash2 size={12} />
+                </button>
+              )}
             </div>
           </div>
         ) : labelShown ? (

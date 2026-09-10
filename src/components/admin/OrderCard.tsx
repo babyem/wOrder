@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, forwardRef } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CheckCircle, RotateCcw, Trash2, FileText, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag, AlertTriangle, AlertCircle, Copy, Ban, MoreHorizontal } from 'lucide-react'
@@ -33,7 +33,9 @@ function dropPosFromEvent(e: React.MouseEvent, width: number, height: number): D
   return goUp ? { bottom: window.innerHeight - y + 8, left } : { top: y + 8, left }
 }
 
-export default function OrderCard({ order, selectedVendors, onToggle, showLocation = true }: Props) {
+// forwardRef: the column's <AnimatePresence mode="popLayout"> needs a DOM ref on each card
+// to pop it out of flow and run the exit animation. Without it a deleted card stayed on screen.
+const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, selectedVendors, onToggle, showLocation = true }, ref) {
   const updateStatus = useUpdateOrderStatus()
   const deleteOrder = useDeleteOrder()
   const restoreOrder = useRestoreOrder()
@@ -423,13 +425,19 @@ export default function OrderCard({ order, selectedVendors, onToggle, showLocati
 
   const renderItems = (items: typeof order.items) => (
     <div className="space-y-0.5">
+      <AnimatePresence initial={false}>
       {items.map(item => {
         const excluded_ = isExcluded(item.id)
         const isOverridden = !!vendorOverrides[item.id]
         return (
-          <div
+          <motion.div
             key={item.id}
-            className="flex items-center justify-between text-sm group cursor-default select-none py-0.5"
+            layout
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+            className="flex items-center justify-between text-sm group cursor-default select-none py-0.5 overflow-hidden"
             onDoubleClick={() => toggleExclude(item)}
             onTouchStart={() => { if (!isTouch) return; longPress.current = setTimeout(() => { longPress.current = null; toggleExclude(item) }, 550) }}
             onTouchEnd={() => { if (longPress.current) { clearTimeout(longPress.current); longPress.current = null } }}
@@ -510,9 +518,10 @@ export default function OrderCard({ order, selectedVendors, onToggle, showLocati
                 )}
               </div>
             </div>
-          </div>
+          </motion.div>
         )
       })}
+      </AnimatePresence>
     </div>
   )
 
@@ -628,7 +637,7 @@ export default function OrderCard({ order, selectedVendors, onToggle, showLocati
       }
     }
     return (
-      <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="relative">
+      <motion.div ref={ref} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.25 }} className="relative">
         <div className={`transition-opacity duration-200 ${!isPending ? 'opacity-60 dark:opacity-75 hover:opacity-100' : ''}`}>
           <div className={`rounded-2xl border shadow-sm ${isPending ? 'bg-slate-100 dark:bg-zinc-800 border-dashed border-slate-300 dark:border-zinc-700' : 'bg-[#e2f6ec] dark:bg-emerald-950/40 dark:shadow-[inset_3px_0_0_0_#059669] border-transparent dark:border-zinc-800'}`}>
             <div className="px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 text-slate-500 dark:text-zinc-400">
@@ -711,10 +720,15 @@ export default function OrderCard({ order, selectedVendors, onToggle, showLocati
     const canNotify = !!orderVendors.find(v => v.name === vendor && (v.email || v.phone))
     const labelShown = showVendorLabel(vendor)
     return (
-      <div
+      <motion.div
         key={vendor}
+        layout
+        initial={{ opacity: 0, height: 0 }}
+        animate={{ opacity: 1, height: 'auto' }}
+        exit={{ opacity: 0, height: 0 }}
+        transition={{ duration: 0.25 }}
         onClick={isMultiVendor ? cardClick(vendor) : undefined}
-        className={`${i > 0 ? 'border-t-2 border-dashed border-black/10 dark:border-zinc-700 pt-2.5 mt-2.5' : ''} ${
+        className={`transition-colors duration-300 ${i > 0 ? 'border-t-2 border-dashed border-black/10 dark:border-zinc-700 pt-2.5 mt-2.5' : ''} ${
           isMultiVendor && isVendorSelected ? '-mx-1.5 px-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950 ring-2 ring-indigo-200 dark:ring-indigo-900'
           // Done section inside a pending order: same green as a finished card, bleeding to the card edges
           : isMultiVendor && isPending && isVendorDone ? `-mx-3 px-3 pb-2 bg-[#e2f6ec] dark:bg-emerald-950/50 ${i === 0 ? '-mt-1 pt-1' : ''} ${i === vendorEntries.length - 1 ? '-mb-3 pb-3' : ''}`
@@ -770,24 +784,24 @@ export default function OrderCard({ order, selectedVendors, onToggle, showLocati
             )}
           </AnimatePresence>
         )}
-        <div className={isVendorDone ? 'opacity-60' : ''}>
+        <div className={`transition-opacity duration-300 ${isVendorDone ? 'opacity-60' : ''}`}>
           {renderItems(items)}
         </div>
         {vendor === chefsVendorName && renderChefsControls()}
         {vendor === tingstadVendorName && renderTingstadControls()}
-      </div>
+      </motion.div>
     )
   }
 
   return (
-    <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="relative">
+    <motion.div ref={ref} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.25 }} className="relative">
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       className={`transition-opacity duration-200 ${!isPending ? 'opacity-60 dark:opacity-75 hover:opacity-100' : ''}`}
     >
 
-      <div onClick={isMultiVendor ? undefined : cardClick(firstVendor)} className={`relative z-10 rounded-2xl border shadow-sm transition-shadow ${onToggle ? 'cursor-pointer' : ''} ${cardBg} ${cardBorder}`}>
+      <div onClick={isMultiVendor ? undefined : cardClick(firstVendor)} className={`relative z-10 rounded-2xl border shadow-sm transition-[background-color,border-color,box-shadow] duration-300 ${onToggle ? 'cursor-pointer' : ''} ${cardBg} ${cardBorder}`}>
         <div className="px-3 pt-2 pb-1 flex items-center gap-1.5 rounded-t-2xl min-w-0">
           {onToggle && !isMultiVendor && (
             <button onClick={e => { e.stopPropagation(); onToggle(firstVendor) }} className="shrink-0 mr-0.5 [@media(hover:none)]:p-1.5 [@media(hover:none)]:-m-1.5 [@media(hover:none)]:mr-0">{selectIcon(firstSelected)}</button>
@@ -820,7 +834,7 @@ export default function OrderCard({ order, selectedVendors, onToggle, showLocati
               {order.note}
             </div>
           )}
-          <div>{vendorEntries.map(renderVendorSection)}</div>
+          <div><AnimatePresence initial={false}>{vendorEntries.map(renderVendorSection)}</AnimatePresence></div>
         </div>
 
         {/* Integrated action bar. Finished cards: Order always visible, Note/Ångra slide in on hover or via ⋯ */}
@@ -958,4 +972,6 @@ export default function OrderCard({ order, selectedVendors, onToggle, showLocati
     </AnimatePresence>
     </motion.div>
   )
-}
+})
+
+export default OrderCard

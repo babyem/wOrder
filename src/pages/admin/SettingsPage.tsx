@@ -19,6 +19,7 @@ import {
 import Modal from '../../components/ui/Modal'
 import Spinner from '../../components/ui/Spinner'
 import toast from 'react-hot-toast'
+import { confirmDialog } from '../../store/confirmStore'
 import type { EmployeeWithLocations } from '../../types'
 
 // ── Reusable tag-list section ────────────────────────────────────────────────
@@ -450,7 +451,7 @@ export default function SettingsPage() {
                   >
                     <Link2 size={15} />
                   </button>
-                  <button onClick={async () => { if (!confirm(`Delete "${loc.name}"?`)) return; try { await deleteLocation.mutateAsync(loc.id); toast.success('Deleted') } catch { toast.error('Failed') } }}
+                  <button onClick={async () => { if (!await confirmDialog({ title: `Ta bort "${loc.name}"?`, confirmLabel: 'Ta bort', danger: true })) return; try { await deleteLocation.mutateAsync(loc.id); toast.success('Deleted') } catch { toast.error('Failed') } }}
                     className="p-1.5 rounded-lg text-slate-300 dark:text-zinc-600 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 transition-colors"><Trash2 size={15} /></button>
                 </div>
               </div>
@@ -478,7 +479,7 @@ export default function SettingsPage() {
                 </div>
                 <div className="flex items-center gap-1">
                   <button onClick={() => openEditEmployee(emp)} className="p-1.5 rounded-lg text-slate-400 dark:text-zinc-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950 transition-colors"><Pencil size={15} /></button>
-                  <button onClick={async () => { if (!confirm(`Remove ${emp.name}?`)) return; try { await deleteEmployee.mutateAsync(emp.id); toast.success('Removed') } catch { toast.error('Failed') } }}
+                  <button onClick={async () => { if (!await confirmDialog({ title: `Ta bort ${emp.name}?`, confirmLabel: 'Ta bort', danger: true })) return; try { await deleteEmployee.mutateAsync(emp.id); toast.success('Removed') } catch { toast.error('Failed') } }}
                     className="p-1.5 rounded-lg text-slate-300 dark:text-zinc-600 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 transition-colors"><Trash2 size={15} /></button>
                 </div>
               </div>

@@ -6,6 +6,7 @@ import { QoplaSalesWidget } from '../../plugins/qopla/QoplaSalesWidget'
 import { motion, AnimatePresence } from 'framer-motion'
 import PushSubscribeButton from './PushSubscribeButton'
 import ThemeToggle from '../ui/ThemeToggle'
+import ConfirmDialog from '../ui/ConfirmDialog'
 
 const navItems = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -186,6 +187,7 @@ export default function AdminLayout() {
 
         <main className="flex-1 p-4 md:p-6 pb-16 overflow-auto">
           <Outlet />
+          <ConfirmDialog />
         </main>
       </div>
     </div>

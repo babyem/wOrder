@@ -15,6 +15,7 @@ import Modal from '../../components/ui/Modal'
 import Spinner from '../../components/ui/Spinner'
 import EmptyState from '../../components/ui/EmptyState'
 import toast from 'react-hot-toast'
+import { confirmDialog } from '../../store/confirmStore'
 import type { Product } from '../../types'
 
 // ── Tag button helper ────────────────────────────────────────────────────────
@@ -805,7 +806,7 @@ export default function ProductsPage() {
   }
 
   const handleDelete = async (p: Product) => {
-    if (!confirm(`Delete "${p.name}"?`)) return
+    if (!await confirmDialog({ title: `Ta bort "${p.name}"?`, confirmLabel: 'Ta bort', danger: true })) return
     try { await deleteProduct.mutateAsync(p.id); setLocalOrder(o => o.filter(id => id !== p.id)); toast.success('Deleted') }
     catch { toast.error('Failed') }
   }

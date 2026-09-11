@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
+import { confirmDialog } from '../../store/confirmStore'
 import {
   ReceiptText, Plus, Trash2, Play, Building2, Pencil, Check, X,
   CheckCircle2, AlertCircle, MinusCircle, Info, Plug, Link2, RefreshCw, Ban, FileUp,
@@ -653,7 +654,7 @@ function CompanyRow({ company, connected }: { company: FortnoxCompany; connected
   }
 
   const handleDelete = async () => {
-    if (!confirm(`Ta bort bolaget "${company.name}"? Mappningar nollställs.`)) return
+    if (!await confirmDialog({ title: `Ta bort bolaget "${company.name}"?`, message: 'Mappningar nollställs.', confirmLabel: 'Ta bort', danger: true })) return
     try {
       await del.mutateAsync(company.id)
       toast.success('Bolag borttaget')

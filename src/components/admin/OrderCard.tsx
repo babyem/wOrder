@@ -9,6 +9,7 @@ import { sendEmail } from '../../lib/sendEmail'
 import SmsLink from './SmsLink'
 import { supabase } from '../../lib/supabase'
 import toast from 'react-hot-toast'
+import { confirmDialog } from '../../store/confirmStore'
 
 interface Props {
   order: OrderWithDetails
@@ -243,7 +244,13 @@ const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, 
 
   // Ta bort en hel leverantörs del av en order (bara i flerleverantörsordrar)
   const removeVendor = async (vendor: string, items: typeof order.items) => {
-    if (!window.confirm(`Ta bort ${vendor} (${items.length} rader) från ordern?`)) return
+    const ok = await confirmDialog({
+      title: `Ta bort ${vendor} från ordern?`,
+      message: `${items.length} rader försvinner. Går inte att ångra.`,
+      confirmLabel: 'Ta bort',
+      danger: true,
+    })
+    if (!ok) return
     try {
       await deleteItems.mutateAsync(items.map(i => i.id))
       toast.success(`${vendor} borttagen från ordern`)

@@ -1,7 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
+import { legacyContactFields, type VendorContact } from '../lib/vendorContacts'
 
-export interface MetaItem { id: string; name: string; sort_order?: number; email?: string; phone?: string; hide_unit?: boolean; use_chefsculinar?: boolean; created_at: string }
+export interface MetaItem { id: string; name: string; sort_order?: number; email?: string; phone?: string; contacts?: VendorContact[] | null; hide_unit?: boolean; use_chefsculinar?: boolean; created_at: string }
 type MetaTable = 'vendors' | 'categories' | 'units'
 
 function useMetaList(table: MetaTable) {
@@ -48,8 +49,10 @@ export function useDeleteVendor() { return useDeleteMeta('vendors') }
 export function useUpdateVendor() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ id, ...fields }: { id: string; email?: string | null; phone?: string | null; hide_unit?: boolean; use_chefsculinar?: boolean }) => {
-      const { error } = await supabase.from('vendors').update(fields).eq('id', id)
+    mutationFn: async ({ id, ...fields }: { id: string; contacts?: VendorContact[]; hide_unit?: boolean; use_chefsculinar?: boolean }) => {
+      // email/phone-kolumnerna speglar första kontakten av varje typ — telegram-boten läser dem
+      const payload = fields.contacts ? { ...fields, ...legacyContactFields(fields.contacts) } : fields
+      const { error } = await supabase.from('vendors').update(payload).eq('id', id)
       if (error) throw error
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['vendors'] }),

@@ -8,11 +8,14 @@ interface Props {
   onSent: () => void
   className: string
   showIcon?: boolean
+  /** Knapptext, default "SMS" — t.ex. "SMS · Anna" när leverantören har flera nummer */
+  label?: string
+  title?: string
 }
 
 // Öppnar SMS-appen och frågar sedan "Skickat?" — leverantören markeras inte
 // klar förrän användaren bekräftat, så ett avbrutet SMS lämnar inte tavlan grön.
-export default function SmsLink({ phone, body, onSent, className, showIcon = true }: Props) {
+export default function SmsLink({ phone, body, onSent, className, showIcon = true, label = 'SMS', title }: Props) {
   const [asking, setAsking] = useState(false)
 
   if (asking) {
@@ -40,8 +43,9 @@ export default function SmsLink({ phone, body, onSent, className, showIcon = tru
       href={`sms:${phone}?body=${encodeURIComponent(body)}`}
       onClick={() => setAsking(true)}
       className={className}
+      title={title}
     >
-      {showIcon && <Phone size={11} />} SMS
+      {showIcon && <Phone size={11} />} {label}
     </a>
   )
 }

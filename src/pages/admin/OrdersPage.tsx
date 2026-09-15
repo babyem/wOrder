@@ -1,18 +1,18 @@
 import { useState, useEffect, useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Search, RefreshCw, GitMerge, Bell, X, Mail, GripVertical, Loader2, ZoomIn, ZoomOut, Trash2, Undo2, Ban } from 'lucide-react'
+import { Search, RefreshCw, GitMerge, Bell, X, GripVertical, ZoomIn, ZoomOut, Trash2, Undo2, Ban } from 'lucide-react'
 import { useOrders, useMergeOrders, useMergeVendorCards, useDeletedOrders, useRestoreOrder } from '../../hooks/useOrders'
 import { useLocations, useReorderLocations } from '../../hooks/useLocations'
 import { useVendors } from '../../hooks/useMetadata'
 import OrderCard from '../../components/admin/OrderCard'
-import SmsLink from '../../components/admin/SmsLink'
+import VendorContactButtons from '../../components/admin/VendorContactButtons'
 import Spinner from '../../components/ui/Spinner'
 import Modal from '../../components/ui/Modal'
 import { supabase } from '../../lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import type { OrderWithDetails } from '../../types'
-import { sendEmail } from '../../lib/sendEmail'
+import { vendorContacts } from '../../lib/vendorContacts'
 import { buildExpressData, expressOrderCount, mergeExpressLocations, type VendorItem } from '../../lib/express'
 import type { Location } from '../../types/database'
 import {
@@ -90,7 +90,6 @@ export default function OrdersPage() {
   const [showMergePicker, setShowMergePicker] = useState(false)
   const [showVendorMergePicker, setShowVendorMergePicker] = useState(false)
   const [showTrash, setShowTrash] = useState(false)
-  const [batchSending, setBatchSending] = useState<string | null>(null)
   const [zoom, setZoom] = useState<number>(() => {
     const raw = parseFloat(localStorage.getItem('orders-zoom') ?? '1')
     return Number.isFinite(raw) && raw >= 0.5 && raw <= 1.5 ? raw : 1
@@ -258,19 +257,17 @@ export default function OrdersPage() {
 
   // ── Express: alla väntande varor per leverantör, över samtliga pending-orders ──
   // Logiken ligger i src/lib/express.ts (testad i src/lib/__tests__/express.test.ts)
-  const [expressSending, setExpressSending] = useState<string | null>(null)
   const expressData = useMemo(() => buildExpressData(orders ?? []), [orders])
 
   // Same restaurant order as the kanban columns
   const locationRank = Object.fromEntries(sortedLocations.map((l, i) => [l.name, i]))
   const expressVendors = [...expressData.itemsByVendor.entries()]
-    .filter(([name]) => vendorMap[name]?.email || vendorMap[name]?.phone)
+    .filter(([name]) => vendorContacts(vendorMap[name]).length > 0)
     .map(([name, rawLocMap]) => {
       const locMap = mergeExpressLocations(name, rawLocMap)
       return {
         name,
-        email: vendorMap[name]?.email ?? undefined,
-        phone: vendorMap[name]?.phone ?? undefined,
+        contacts: vendorContacts(vendorMap[name]),
         // Antal ordercard (inte artiklar) som går med i utskicket
         orderCount: expressOrderCount(expressData, name),
         locations: [...locMap.entries()]
@@ -288,29 +285,13 @@ export default function OrdersPage() {
   const [expressModalVendor, setExpressModalVendor] = useState<string | null>(null)
   const expressModal = expressVendors.find(v => v.name === expressModalVendor) ?? null
 
-  const handleExpress = async (vendor: typeof expressVendors[0]) => {
-    if (!vendor.email) return
-    setExpressSending(vendor.name)
-    try {
-      const body = buildBatchBody({ name: vendor.name, email: vendor.email, phone: vendor.phone, locations: vendor.locations })
-      await sendEmail(vendor.email, `Order – ${vendor.name}`, body)
-      toast.success(`Email skickat till ${vendor.name}`)
-      await markVendorDoneAcrossOrders(vendor.name, [...(expressData.orderIdsByVendor.get(vendor.name) ?? [])])
-      setExpressModalVendor(null)
-    } catch (err) {
-      toast.error(`${vendor.name}: ${err instanceof Error ? err.message : 'Failed to send'}`)
-    } finally {
-      setExpressSending(null)
-    }
-  }
-
   const batchNotifiableVendors = Array.from(vendorLocItems.entries())
     .map(([name, locMap]) => {
       const meta = vendorMap[name]
       const locations = Array.from(locMap.entries()).map(([loc, items]) => ({ loc, items }))
-      return { name, email: meta?.email, phone: meta?.phone, locations }
+      return { name, contacts: vendorContacts(meta), locations }
     })
-    .filter(v => v.email || v.phone)
+    .filter(v => v.contacts.length > 0)
 
   const buildBatchBody = (vendor: typeof batchNotifiableVendors[0]) => {
     const hideUnit = vendorMap[vendor.name]?.hide_unit ?? false
@@ -430,10 +411,9 @@ export default function OrdersPage() {
             <button
               key={v.name}
               onClick={() => setExpressModalVendor(v.name)}
-              disabled={expressSending !== null}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-medium text-slate-700 dark:text-zinc-200 hover:border-indigo-300 dark:hover:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950 hover:text-indigo-700 dark:hover:text-indigo-300 disabled:opacity-50 transition-colors"
             >
-              {expressSending === v.name ? <Loader2 size={12} className="animate-spin" /> : <span>⚡</span>}
+              <span>⚡</span>
               {v.name}
               <span className="text-slate-400 dark:text-zinc-500 tabular-nums">{v.orderCount}</span>
             </button>
@@ -733,33 +713,21 @@ export default function OrdersPage() {
                     <span>Ingen beställning idag: <span className="font-medium text-slate-700 dark:text-zinc-200">{expressModal.noOrderLocations.join(', ')}</span></span>
                   </div>
                 )}
-                <div className="flex gap-2 pt-1">
-                  {expressModal.email && (
-                    <button
-                      disabled={expressSending === expressModal.name}
-                      onClick={() => handleExpress(expressModal)}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-xs font-medium hover:bg-indigo-100 dark:hover:bg-indigo-900 disabled:opacity-50 transition-colors"
-                    >
-                      {expressSending === expressModal.name
-                        ? <Loader2 size={11} className="animate-spin" />
-                        : <Mail size={11} />}
-                      Email
-                    </button>
-                  )}
-                  {expressModal.phone && (
-                    <SmsLink
-                      phone={expressModal.phone}
-                      body={buildBatchBody(expressModal)}
-                      onSent={() => {
-                        markVendorDoneAcrossOrders(
-                          expressModal.name,
-                          [...(expressData.orderIdsByVendor.get(expressModal.name) ?? [])],
-                        )
-                        setExpressModalVendor(null)
-                      }}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-xs font-medium hover:bg-emerald-100 dark:hover:bg-emerald-900 transition-colors"
-                    />
-                  )}
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <VendorContactButtons
+                    variant="modal"
+                    vendorName={expressModal.name}
+                    contacts={expressModal.contacts}
+                    body={buildBatchBody(expressModal)}
+                    subject={`Order – ${expressModal.name}`}
+                    onSent={async () => {
+                      await markVendorDoneAcrossOrders(
+                        expressModal.name,
+                        [...(expressData.orderIdsByVendor.get(expressModal.name) ?? [])],
+                      )
+                      setExpressModalVendor(null)
+                    }}
+                  />
                 </div>
               </div>
             </motion.div>
@@ -808,40 +776,15 @@ export default function OrdersPage() {
                         </div>
                       ))}
                     </div>
-                    <div className="flex gap-2 pt-1">
-                      {v.email && (
-                        <button
-                          disabled={batchSending === v.name}
-                          onClick={async () => {
-                            setBatchSending(v.name)
-                            try {
-                              await sendEmail(v.email!, `Order – ${v.name}`, buildBatchBody(v))
-                              toast.success(`Email sent to ${v.name}`)
-                              await markVendorDoneAcrossOrders(v.name)
-                              setShowBatchNotify(false)
-                              clearSelection()
-                            } catch (err) {
-                              toast.error(`${v.name}: ${err instanceof Error ? err.message : 'Failed to send'}`)
-                            } finally {
-                              setBatchSending(null)
-                            }
-                          }}
-                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-xs font-medium hover:bg-indigo-100 dark:hover:bg-indigo-900 disabled:opacity-50 transition-colors"
-                        >
-                          {batchSending === v.name
-                            ? <Loader2 size={11} className="animate-spin" />
-                            : <Mail size={11} />}
-                          Email
-                        </button>
-                      )}
-                      {v.phone && (
-                        <SmsLink
-                          phone={v.phone}
-                          body={buildBatchBody(v)}
-                          onSent={() => { markVendorDoneAcrossOrders(v.name); setShowBatchNotify(false); clearSelection() }}
-                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-xs font-medium hover:bg-emerald-100 dark:hover:bg-emerald-900 transition-colors"
-                        />
-                      )}
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <VendorContactButtons
+                        variant="modal"
+                        vendorName={v.name}
+                        contacts={v.contacts}
+                        body={buildBatchBody(v)}
+                        subject={`Order – ${v.name}`}
+                        onSent={async () => { await markVendorDoneAcrossOrders(v.name); setShowBatchNotify(false); clearSelection() }}
+                      />
                     </div>
                   </div>
                 ))}

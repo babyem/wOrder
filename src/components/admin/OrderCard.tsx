@@ -5,8 +5,8 @@ import { CheckCircle, RotateCcw, Trash2, FileText, X, Bell, CheckSquare, Square,
 import type { Order, OrderWithDetails } from '../../types'
 import { useUpdateOrderStatus, useDeleteOrder, useRestoreOrder, useUpdateOrderItem, useMarkVendorDone, useUpdateAdminNote, useDeleteOrderItems } from '../../hooks/useOrders'
 import { useVendors, useUnits } from '../../hooks/useMetadata'
-import { sendEmail } from '../../lib/sendEmail'
-import SmsLink from './SmsLink'
+import VendorContactButtons from './VendorContactButtons'
+import { vendorContacts } from '../../lib/vendorContacts'
 import { supabase } from '../../lib/supabase'
 import toast from 'react-hot-toast'
 import { confirmDialog } from '../../store/confirmStore'
@@ -79,7 +79,6 @@ const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, 
       updateStatus.mutateAsync({ id: order.id, status: 'done' })
     }
   }
-  const [sending, setSending] = useState<string | null>(null)
   const [editingVendorItem, setEditingVendorItem] = useState<string | null>(null)
   const [editingQtyItem, setEditingQtyItem] = useState<string | null>(null)
   const [qtyDraft, setQtyDraft] = useState('')
@@ -130,7 +129,7 @@ const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, 
     ...new Set(order.items.map(i => effectiveVendor(i)).filter(v => v !== '—'))
   ].map(vName => {
     const meta = vendorMap[vName]
-    return { name: vName, email: meta?.email ?? null, phone: meta?.phone ?? null }
+    return { name: vName, contacts: vendorContacts(meta) }
   })
 
   const copyVendor = (vendorName: string) => {
@@ -597,38 +596,21 @@ const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, 
     </div>
   )
 
-  // Minimal Email/SMS actions — text only, no icons
+  // En knapp per kontaktväg (mail/SMS), smeknamnet syns i knappen
   const renderNotifyActions = (vendorName: string) => {
     const v = orderVendors.find(ov => ov.name === vendorName)
     if (!v) return null
     return (
-      <>
-        {v.email && (
-          <button disabled={sending === v.name} onClick={async () => {
-            setSending(v.name)
-            try {
-              await sendEmail(v.email!, `Order – ${order.location?.name ?? ''}`, buildBody(v.name), `Order ${v.name} – ${order.location?.name ?? ''}`)
-              toast.success(`Email skickat till ${v.name}`)
-              markVendorDone(v.name, true, allVendorNames)
-              setShowNotifyVendor(null)
-            } catch (err) {
-              toast.error(`${v.name}: ${err instanceof Error ? err.message : 'Misslyckades'}`)
-            } finally { setSending(null) }
-          }} className="flex-1 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-xs font-medium hover:bg-indigo-100 dark:hover:bg-indigo-900 disabled:opacity-50 transition-colors text-center">
-            {sending === v.name ? <Loader2 size={11} className="animate-spin inline" /> : 'Email'}
-          </button>
-        )}
-        {v.phone && (
-          <SmsLink
-            phone={v.phone}
-            body={buildBody(v.name)}
-            showIcon={false}
-            onSent={() => { markVendorDone(v.name, true, allVendorNames); setShowNotifyVendor(null) }}
-            className="flex-1 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-xs font-medium hover:bg-emerald-100 dark:hover:bg-emerald-900 transition-colors text-center"
-          />
-        )}
-        {!v.email && !v.phone && <span className="text-[10px] text-slate-300 dark:text-zinc-600 italic px-2 py-1">Ingen kontaktinfo</span>}
-      </>
+      <VendorContactButtons
+        variant="card"
+        vendorName={v.name}
+        contacts={v.contacts}
+        body={buildBody(v.name)}
+        subject={`Order – ${order.location?.name ?? ''}`}
+        bccSubject={`Order ${v.name} – ${order.location?.name ?? ''}`}
+        onSent={() => { markVendorDone(v.name, true, allVendorNames); setShowNotifyVendor(null) }}
+        emptyText="Ingen kontaktinfo"
+      />
     )
   }
 
@@ -724,7 +706,7 @@ const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, 
   const renderVendorSection = ([vendor, items]: [string, typeof order.items], i: number) => {
     const isVendorDone = doneVendors.has(vendor)
     const isVendorSelected = selectedVendors?.has(vendor) ?? false
-    const canNotify = !!orderVendors.find(v => v.name === vendor && (v.email || v.phone))
+    const canNotify = !!orderVendors.find(v => v.name === vendor && v.contacts.length > 0)
     const labelShown = showVendorLabel(vendor)
     return (
       <motion.div
@@ -786,7 +768,7 @@ const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, 
           <AnimatePresence>
             {showNotifyVendor === vendor && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-                <div className="flex gap-1.5 pb-2">{renderNotifyActions(vendor)}</div>
+                <div className="flex flex-wrap gap-1.5 pb-2">{renderNotifyActions(vendor)}</div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -903,7 +885,7 @@ const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, 
           <AnimatePresence>
             {!isMultiVendor && showNotifyVendor === firstVendor && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-                <div className="flex gap-1.5 px-2 py-1.5">{renderNotifyActions(firstVendor)}</div>
+                <div className="flex flex-wrap gap-1.5 px-2 py-1.5">{renderNotifyActions(firstVendor)}</div>
               </motion.div>
             )}
           </AnimatePresence>

@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Trash2, MapPin, Users, Pencil, Tag, Layers, Ruler, ChevronRight, Link2, GripVertical, Mail, Phone, X } from 'lucide-react'
+import { Plus, Trash2, MapPin, Users, Pencil, Tag, Layers, Ruler, ChevronRight, Link2, GripVertical, Mail, Phone, X, Check } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent,
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { toSlug } from '../../lib/slug'
+import { vendorContacts, newContactId, type VendorContact, type ContactType } from '../../lib/vendorContacts'
 import {
   useAdminLocations, useAdminEmployees,
   useCreateLocation, useCreateEmployee, useUpdateEmployee, useDeleteEmployee, useDeleteLocation,
@@ -142,8 +143,56 @@ function MetaSection({ icon, title, items, loading, onAdd, onDelete, onRename, p
 
 // ── Vendor section (with reorder support) ────────────────────────────────────
 
-function SortableVendorRow({ id, name, email, phone, hide_unit, onDelete }: {
-  id: string; name: string; email?: string; phone?: string; hide_unit?: boolean; onDelete: () => void
+// Inline-formulär för en kontaktväg: adress/nummer + valfritt smeknamn.
+// Enter sparar, Escape avbryter — inget spar-på-blur med två fält.
+function ContactForm({ type, initial, onSave, onCancel }: {
+  type: ContactType
+  initial?: VendorContact
+  onSave: (value: string, label: string) => void
+  onCancel: () => void
+}) {
+  const [value, setValue] = useState(initial?.value ?? '')
+  const [label, setLabel] = useState(initial?.label ?? '')
+  const submit = () => {
+    const v = value.trim()
+    if (!v) { onCancel(); return }
+    onSave(v, label.trim())
+  }
+  const keys = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') submit()
+    if (e.key === 'Escape') onCancel()
+  }
+  const inputCls = 'text-xs px-2 py-0.5 border border-indigo-300 dark:border-indigo-800 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white dark:bg-zinc-900'
+  return (
+    <span className="flex items-center gap-1 flex-wrap">
+      <input
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        onKeyDown={keys}
+        type={type === 'email' ? 'email' : 'tel'}
+        placeholder={type === 'email' ? 'vendor@email.com' : '+46701234567'}
+        className={`${inputCls} ${type === 'email' ? 'w-44' : 'w-36'}`}
+        autoFocus
+      />
+      <input
+        value={label}
+        onChange={e => setLabel(e.target.value)}
+        onKeyDown={keys}
+        placeholder="Smeknamn (valfritt)"
+        className={`${inputCls} w-36`}
+      />
+      <button onClick={submit} title="Spara" className="p-1 rounded-lg text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950 transition-colors">
+        <Check size={12} />
+      </button>
+      <button onClick={onCancel} title="Avbryt" className="p-1 rounded-lg text-slate-400 dark:text-zinc-500 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors">
+        <X size={12} />
+      </button>
+    </span>
+  )
+}
+
+function SortableVendorRow({ id, name, contacts, hide_unit, onDelete }: {
+  id: string; name: string; contacts: VendorContact[]; hide_unit?: boolean; onDelete: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }
@@ -152,10 +201,8 @@ function SortableVendorRow({ id, name, email, phone, hide_unit, onDelete }: {
 
   const [editName, setEditName] = useState(false)
   const [nameVal, setNameVal] = useState(name)
-  const [editEmail, setEditEmail] = useState(false)
-  const [editPhone, setEditPhone] = useState(false)
-  const [emailVal, setEmailVal] = useState(email ?? '')
-  const [phoneVal, setPhoneVal] = useState(phone ?? '')
+  const [editing, setEditing] = useState<string | null>(null)   // kontakt-id som redigeras
+  const [adding, setAdding] = useState<ContactType | null>(null)
 
   const saveName = () => {
     const trimmed = nameVal.trim()
@@ -164,14 +211,18 @@ function SortableVendorRow({ id, name, email, phone, hide_unit, onDelete }: {
     setEditName(false)
   }
 
-  const saveEmail = () => {
-    if (emailVal.trim() !== (email ?? '')) updateVendor.mutate({ id, email: emailVal.trim() || undefined })
-    setEditEmail(false)
+  const saveContacts = (next: VendorContact[]) => updateVendor.mutate({ id, contacts: next })
+  const addContact = (type: ContactType, value: string, label: string) => {
+    saveContacts([...contacts, { id: newContactId(), type, value, label: label || undefined }])
+    setAdding(null)
   }
-  const savePhone = () => {
-    if (phoneVal.trim() !== (phone ?? '')) updateVendor.mutate({ id, phone: phoneVal.trim() || undefined })
-    setEditPhone(false)
+  const editContact = (cid: string, value: string, label: string) => {
+    saveContacts(contacts.map(c => c.id === cid ? { ...c, value, label: label || undefined } : c))
+    setEditing(null)
   }
+  const removeContact = (cid: string) => saveContacts(contacts.filter(c => c.id !== cid))
+
+  const addBtnCls = 'flex items-center gap-1 text-xs text-slate-300 dark:text-zinc-600 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors'
 
   return (
     <div ref={setNodeRef} style={style} className="flex items-start gap-2 px-2 py-2 rounded-xl hover:bg-slate-50 dark:hover:bg-zinc-800 group">
@@ -199,54 +250,52 @@ function SortableVendorRow({ id, name, email, phone, hide_unit, onDelete }: {
             className="text-sm text-slate-700 dark:text-zinc-200 font-medium cursor-default select-none"
           >{nameVal}</span>
         )}
-        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
-          {/* Email */}
-          {editEmail ? (
-            <input
-              value={emailVal}
-              onChange={e => setEmailVal(e.target.value)}
-              onBlur={saveEmail}
-              onKeyDown={e => { if (e.key === 'Enter') saveEmail(); if (e.key === 'Escape') { setEmailVal(email ?? ''); setEditEmail(false) } }}
-              placeholder="vendor@email.com"
-              className="text-xs px-2 py-0.5 border border-indigo-300 dark:border-indigo-800 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-400 w-44"
-              autoFocus
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+          {/* Kontaktvägar — klick redigerar, X tar bort */}
+          {contacts.map(c => editing === c.id ? (
+            <ContactForm
+              key={c.id}
+              type={c.type}
+              initial={c}
+              onSave={(v, l) => editContact(c.id, v, l)}
+              onCancel={() => setEditing(null)}
             />
           ) : (
-            <span className="flex items-center gap-0.5">
-              <button onClick={() => setEditEmail(true)} className="flex items-center gap-1 text-xs text-slate-400 dark:text-zinc-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
-                <Mail size={10} />
-                {email || <span className="italic">Add email</span>}
+            <span key={c.id} className="flex items-center gap-0.5">
+              <button
+                onClick={() => { setAdding(null); setEditing(c.id) }}
+                title={c.label ? `${c.value} — klicka för att redigera` : 'Klicka för att redigera'}
+                className="flex items-center gap-1 text-xs text-slate-400 dark:text-zinc-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+              >
+                {c.type === 'email' ? <Mail size={10} /> : <Phone size={10} />}
+                {c.label ? (
+                  <>
+                    <span className="font-medium text-slate-600 dark:text-zinc-300">{c.label}</span>
+                    <span className="opacity-70">{c.value}</span>
+                  </>
+                ) : c.value}
               </button>
-              {email && (
-                <button onClick={() => { updateVendor.mutate({ id, email: null }); setEmailVal('') }} className="text-slate-300 dark:text-zinc-600 hover:text-red-500 dark:hover:text-red-400 transition-colors ml-0.5">
-                  <X size={9} />
-                </button>
-              )}
+              <button
+                onClick={() => removeContact(c.id)}
+                title="Ta bort"
+                className="text-slate-300 dark:text-zinc-600 hover:text-red-500 dark:hover:text-red-400 transition-colors ml-0.5"
+              >
+                <X size={9} />
+              </button>
             </span>
-          )}
-          {/* Phone */}
-          {editPhone ? (
-            <input
-              value={phoneVal}
-              onChange={e => setPhoneVal(e.target.value)}
-              onBlur={savePhone}
-              onKeyDown={e => { if (e.key === 'Enter') savePhone(); if (e.key === 'Escape') { setPhoneVal(phone ?? ''); setEditPhone(false) } }}
-              placeholder="+46701234567"
-              className="text-xs px-2 py-0.5 border border-indigo-300 dark:border-indigo-800 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-400 w-36"
-              autoFocus
-            />
+          ))}
+          {/* Lägg till ny */}
+          {adding ? (
+            <ContactForm type={adding} onSave={(v, l) => addContact(adding, v, l)} onCancel={() => setAdding(null)} />
           ) : (
-            <span className="flex items-center gap-0.5">
-              <button onClick={() => setEditPhone(true)} className="flex items-center gap-1 text-xs text-slate-400 dark:text-zinc-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
-                <Phone size={10} />
-                {phone || <span className="italic">Add phone</span>}
+            <>
+              <button onClick={() => { setEditing(null); setAdding('email') }} className={addBtnCls}>
+                <Mail size={10} /><span className="italic">+ email</span>
               </button>
-              {phone && (
-                <button onClick={() => { updateVendor.mutate({ id, phone: null }); setPhoneVal('') }} className="text-slate-300 dark:text-zinc-600 hover:text-red-500 dark:hover:text-red-400 transition-colors ml-0.5">
-                  <X size={9} />
-                </button>
-              )}
-            </span>
+              <button onClick={() => { setEditing(null); setAdding('phone') }} className={addBtnCls}>
+                <Phone size={10} /><span className="italic">+ tel</span>
+              </button>
+            </>
           )}
           {/* Hide unit toggle */}
           <button
@@ -332,8 +381,7 @@ function VendorSection() {
                       key={v.id}
                       id={v.id}
                       name={v.name}
-                      email={v.email}
-                      phone={v.phone}
+                      contacts={vendorContacts(v)}
                       hide_unit={v.hide_unit}
                       onDelete={async () => {
                         try { await deleteVendor.mutateAsync(v.id) }

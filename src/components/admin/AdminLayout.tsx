@@ -3,6 +3,7 @@ import { LayoutDashboard, ShoppingBag, Package, Settings, LogOut, ChefHat, Menu,
 import { useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { QoplaSalesWidget } from '../../plugins/qopla/QoplaSalesWidget'
+import { SendLogWidget } from './SendLogWidget'
 import { motion, AnimatePresence } from 'framer-motion'
 import PushSubscribeButton from './PushSubscribeButton'
 import ThemeToggle from '../ui/ThemeToggle'
@@ -78,6 +79,7 @@ export default function AdminLayout() {
         </nav>
 
         <QoplaSalesWidget />
+        <SendLogWidget />
 
         <div className="flex-1" />
       </aside>
@@ -178,6 +180,7 @@ export default function AdminLayout() {
                 </nav>
 
                 <QoplaSalesWidget />
+                <SendLogWidget />
 
                 <div className="flex-1" />
               </motion.div>

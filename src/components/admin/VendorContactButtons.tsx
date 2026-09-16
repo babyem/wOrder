@@ -3,6 +3,7 @@ import { Loader2, Mail } from 'lucide-react'
 import toast from 'react-hot-toast'
 import SmsLink from './SmsLink'
 import { sendEmail } from '../../lib/sendEmail'
+import { logSend } from '../../lib/sendLog'
 import { contactLabel, contactShortName, type VendorContact } from '../../lib/vendorContacts'
 
 interface Props {
@@ -17,6 +18,10 @@ interface Props {
   variant: 'card' | 'modal'
   /** Text när leverantören saknar kontaktvägar; utelämna för att inte visa något */
   emptyText?: string
+  /** Restauranger som ingår i utskicket — hamnar i loggen i sidomenyn */
+  locations: string[]
+  /** Ordrar som ingår i utskicket — hamnar i loggen i sidomenyn */
+  orderIds: string[]
 }
 
 const STYLES = {
@@ -32,7 +37,7 @@ const STYLES = {
 
 // En knapp per kontaktväg. Smeknamnet syns i knappen och i toasten så man vet
 // vilken adress som faktiskt fick meddelandet.
-export default function VendorContactButtons({ vendorName, contacts, body, subject, bccSubject, onSent, variant, emptyText }: Props) {
+export default function VendorContactButtons({ vendorName, contacts, body, subject, bccSubject, onSent, variant, emptyText, locations, orderIds }: Props) {
   const [sending, setSending] = useState<string | null>(null)
   const styles = STYLES[variant]
 
@@ -42,12 +47,18 @@ export default function VendorContactButtons({ vendorName, contacts, body, subje
       : null
   }
 
+  // Loggen skrivs efter lyckat mail / bekräftat SMS, innan leverantören markeras klar.
+  const sent = async (c: VendorContact) => {
+    await logSend({ vendorName, contact: c, locations, orderIds })
+    await onSent()
+  }
+
   const send = async (c: VendorContact) => {
     setSending(c.id)
     try {
       await sendEmail(c.value, subject, body, bccSubject)
       toast.success(`Email skickat till ${vendorName} (${contactShortName(c)})`)
-      await onSent()
+      await sent(c)
     } catch (err) {
       toast.error(`${vendorName}: ${err instanceof Error ? err.message : 'Misslyckades'}`)
     } finally {
@@ -78,7 +89,7 @@ export default function VendorContactButtons({ vendorName, contacts, body, subje
           label={contactLabel(c, contacts)}
           title={c.value}
           showIcon={variant === 'modal'}
-          onSent={onSent}
+          onSent={() => { void sent(c) }}
           className={styles.sms}
         />
       ))}

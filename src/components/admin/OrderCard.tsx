@@ -609,6 +609,8 @@ const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, 
         subject={`Order – ${order.location?.name ?? ''}`}
         bccSubject={`Order ${v.name} – ${order.location?.name ?? ''}`}
         onSent={() => { markVendorDone(v.name, true, allVendorNames); setShowNotifyVendor(null) }}
+        locations={[order.location?.name ?? '']}
+        orderIds={[order.id]}
         emptyText="Ingen kontaktinfo"
       />
     )

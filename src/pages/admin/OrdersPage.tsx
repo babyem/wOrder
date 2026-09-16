@@ -720,6 +720,8 @@ export default function OrdersPage() {
                     contacts={expressModal.contacts}
                     body={buildBatchBody(expressModal)}
                     subject={`Order – ${expressModal.name}`}
+                    locations={expressModal.locations.map(l => l.loc)}
+                    orderIds={[...(expressData.orderIdsByVendor.get(expressModal.name) ?? [])]}
                     onSent={async () => {
                       await markVendorDoneAcrossOrders(
                         expressModal.name,
@@ -783,6 +785,8 @@ export default function OrdersPage() {
                         contacts={v.contacts}
                         body={buildBatchBody(v)}
                         subject={`Order – ${v.name}`}
+                        locations={v.locations.map(l => l.loc)}
+                        orderIds={selectedPairs.filter(p => p.vendor === v.name).map(p => p.orderId)}
                         onSent={async () => { await markVendorDoneAcrossOrders(v.name); setShowBatchNotify(false); clearSelection() }}
                       />
                     </div>

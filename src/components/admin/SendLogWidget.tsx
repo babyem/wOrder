@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Mail, MessageSquare, ScrollText } from 'lucide-react'
+import { Mail, MessageSquare, ScrollText, CheckCircle2, XCircle } from 'lucide-react'
 import Modal from '../ui/Modal'
 import { useSendLog } from '../../hooks/useSendLog'
 import type { SendLogEntry } from '../../lib/sendLog'
@@ -61,6 +61,7 @@ export function SendLogWidget() {
             const Icon = e.channel === 'email' ? Mail : MessageSquare
             const verb = e.channel === 'email' ? 'Mail' : 'SMS'
             const where = e.location_names.join(', ')
+            const failed = e.status === 'failed'
             return (
               <li key={e.id}>
                 <button
@@ -72,7 +73,10 @@ export function SendLogWidget() {
                     <span className="tabular-nums text-slate-400 dark:text-zinc-500 shrink-0">{formatWhen(e.sent_at)}</span>
                     <span className="font-medium text-slate-700 dark:text-zinc-200 truncate">{where || e.vendor_name}</span>
                   </div>
-                  <div className="flex items-center gap-1 text-slate-500 dark:text-zinc-400 min-w-0">
+                  <div className={`flex items-center gap-1 min-w-0 ${failed ? 'text-red-500 dark:text-red-400' : 'text-slate-500 dark:text-zinc-400'}`}>
+                    {failed
+                      ? <XCircle size={10} className="shrink-0 text-red-500 dark:text-red-400" aria-label="Misslyckades" />
+                      : <CheckCircle2 size={10} className="shrink-0 text-emerald-500 dark:text-emerald-400" aria-label="Skickat" />}
                     <Icon size={10} className={`shrink-0 ${e.channel === 'email' ? 'text-indigo-500 dark:text-indigo-400' : 'text-emerald-500 dark:text-emerald-400'}`} />
                     <span className="truncate">
                       {where ? <>{e.vendor_name} · </> : null}{verb} till {recipient(e)}
@@ -92,8 +96,20 @@ export function SendLogWidget() {
           {selected && (
             <div className="space-y-4 text-sm">
               <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs">
-                <dt className="text-slate-400 dark:text-zinc-500">Skickat</dt>
+                <dt className="text-slate-400 dark:text-zinc-500">{selected.status === 'failed' ? 'Försök' : 'Skickat'}</dt>
                 <dd className="text-slate-700 dark:text-zinc-200">{formatFull(selected.sent_at)}</dd>
+                <dt className="text-slate-400 dark:text-zinc-500">Status</dt>
+                <dd className={`flex items-center gap-1 font-medium ${selected.status === 'failed' ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                  {selected.status === 'failed'
+                    ? <><XCircle size={12} /> Misslyckades</>
+                    : <><CheckCircle2 size={12} /> Skickat</>}
+                </dd>
+                {selected.error && (
+                  <>
+                    <dt className="text-slate-400 dark:text-zinc-500">Fel</dt>
+                    <dd className="text-red-600 dark:text-red-400 break-words">{selected.error}</dd>
+                  </>
+                )}
                 {selected.location_names.length > 0 && (
                   <>
                     <dt className="text-slate-400 dark:text-zinc-500">Restaurang</dt>

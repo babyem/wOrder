@@ -60,7 +60,10 @@ export default function VendorContactButtons({ vendorName, contacts, body, subje
       toast.success(`Email skickat till ${vendorName} (${contactShortName(c)})`)
       await sent(c)
     } catch (err) {
-      toast.error(`${vendorName}: ${err instanceof Error ? err.message : 'Misslyckades'}`)
+      const message = err instanceof Error ? err.message : 'Misslyckades'
+      toast.error(`${vendorName}: ${message}`)
+      // Misslyckade mail hamnar också i loggen (rött kryss) så man ser vad som inte gick fram
+      void logSend({ vendorName, contact: c, locations, orderIds, subject, body, error: message })
     } finally {
       setSending(null)
     }

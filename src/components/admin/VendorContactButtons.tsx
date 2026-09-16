@@ -49,7 +49,7 @@ export default function VendorContactButtons({ vendorName, contacts, body, subje
 
   // Loggen skrivs efter lyckat mail / bekräftat SMS, innan leverantören markeras klar.
   const sent = async (c: VendorContact) => {
-    await logSend({ vendorName, contact: c, locations, orderIds })
+    await logSend({ vendorName, contact: c, locations, orderIds, subject, body })
     await onSent()
   }
 

@@ -13,6 +13,8 @@ export interface SendLogEntry {
   contact_value: string
   contact_label: string | null
   order_ids: string[]
+  subject: string | null
+  body: string | null
 }
 
 export interface SendLogInput {
@@ -20,13 +22,17 @@ export interface SendLogInput {
   contact: VendorContact
   locations: string[]
   orderIds: string[]
+  /** Ämnesrad — bara för mail */
+  subject?: string
+  /** Meddelandetexten som skickades */
+  body: string
 }
 
 /**
  * Skriver en rad i order_send_log efter ett lyckat mail eller bekräftat SMS.
  * Loggen får aldrig stoppa själva utskicket — fel sväljs och skrivs bara i konsolen.
  */
-export async function logSend({ vendorName, contact, locations, orderIds }: SendLogInput): Promise<void> {
+export async function logSend({ vendorName, contact, locations, orderIds, subject, body }: SendLogInput): Promise<void> {
   const { error } = await supabase.from('order_send_log').insert({
     vendor_name: vendorName,
     location_names: [...new Set(locations.filter(Boolean))],
@@ -34,6 +40,8 @@ export async function logSend({ vendorName, contact, locations, orderIds }: Send
     contact_value: contact.value,
     contact_label: contact.label?.trim() || null,
     order_ids: [...new Set(orderIds.filter(Boolean))],
+    subject: contact.type === 'email' ? subject ?? null : null,
+    body,
   })
   if (error) {
     console.warn('order_send_log insert failed', error)

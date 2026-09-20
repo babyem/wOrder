@@ -124,7 +124,7 @@ export default function AdminLayout() {
                 onClick={() => setMobileOpen(false)}
               />
               <motion.div
-                className="fixed left-0 top-0 bottom-0 w-64 bg-white dark:bg-zinc-900 z-50 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:hidden flex flex-col overflow-y-auto overscroll-contain"
+                className="fixed left-0 top-0 bottom-0 w-64 bg-white dark:bg-zinc-900 z-50 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:hidden flex flex-col overflow-y-auto overscroll-contain no-scrollbar"
                 initial={{ x: -256 }}
                 animate={{ x: 0 }}
                 exit={{ x: -256 }}

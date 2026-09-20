@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { vendorContacts, contactLabel, legacyContactFields, type VendorContact } from '../vendorContacts'
+import { vendorContacts, contactLabel, legacyContactFields, withComment, type VendorContact } from '../vendorContacts'
 
 const email = (id: string, value: string, label?: string): VendorContact => ({ id, type: 'email', value, label })
 const phone = (id: string, value: string, label?: string): VendorContact => ({ id, type: 'phone', value, label })
@@ -41,5 +41,15 @@ describe('legacyContactFields', () => {
     expect(legacyContactFields([phone('p', '+1'), email('a', 'a@x.se'), email('b', 'b@x.se')]))
       .toEqual({ email: 'a@x.se', phone: '+1' })
     expect(legacyContactFields([])).toEqual({ email: null, phone: null })
+  })
+})
+
+describe('withComment', () => {
+  it('lägger kommentaren under orderlistan', () => {
+    expect(withComment('Chao\n\nTofu: 2 st', ' Leverera före 10 ')).toBe('Chao\n\nTofu: 2 st\n\nLeverera före 10')
+  })
+
+  it('lämnar meddelandet orört utan kommentar', () => {
+    expect(withComment('Chao\n\nTofu: 2 st', '  \n ')).toBe('Chao\n\nTofu: 2 st')
   })
 })

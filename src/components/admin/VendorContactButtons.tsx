@@ -4,7 +4,7 @@ import toast from 'react-hot-toast'
 import SmsLink from './SmsLink'
 import { sendEmail } from '../../lib/sendEmail'
 import { logSend } from '../../lib/sendLog'
-import { contactLabel, contactShortName, type VendorContact } from '../../lib/vendorContacts'
+import { contactLabel, contactShortName, withComment, type VendorContact } from '../../lib/vendorContacts'
 
 interface Props {
   vendorName: string
@@ -37,8 +37,10 @@ const STYLES = {
 
 // En knapp per kontaktväg. Smeknamnet syns i knappen och i toasten så man vet
 // vilken adress som faktiskt fick meddelandet.
-export default function VendorContactButtons({ vendorName, contacts, body, subject, bccSubject, onSent, variant, emptyText, locations, orderIds }: Props) {
+export default function VendorContactButtons({ vendorName, contacts, body: orderBody, subject, bccSubject, onSent, variant, emptyText, locations, orderIds }: Props) {
   const [sending, setSending] = useState<string | null>(null)
+  const [comment, setComment] = useState('')
+  const body = withComment(orderBody, comment)
   const styles = STYLES[variant]
 
   if (contacts.length === 0) {
@@ -71,6 +73,14 @@ export default function VendorContactButtons({ vendorName, contacts, body, subje
 
   return (
     <>
+      <textarea
+        value={comment}
+        onChange={e => setComment(e.target.value)}
+        rows={comment.includes('\n') || comment.length > 40 ? 3 : 1}
+        placeholder="Kommentar till leverantören (valfritt)"
+        aria-label={`Kommentar till ${vendorName}`}
+        className="basis-full w-full resize-none px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-slate-700 dark:text-zinc-200 placeholder:text-slate-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-300 dark:focus:ring-indigo-800"
+      />
       {contacts.map(c => c.type === 'email' ? (
         <button
           key={c.id}

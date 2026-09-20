@@ -62,3 +62,9 @@ export function newContactId(): string {
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2) + Date.now().toString(36)
 }
+
+// Kommentaren hamnar under orderlistan i meddelandet som skickas till leverantören.
+export function withComment(body: string, comment: string): string {
+  const c = comment.trim()
+  return c ? `${body}\n\n${c}` : body
+}

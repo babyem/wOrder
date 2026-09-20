@@ -80,6 +80,8 @@ const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, 
     }
   }
   const [editingVendorItem, setEditingVendorItem] = useState<string | null>(null)
+  const [editingVendorCard, setEditingVendorCard] = useState<string | null>(null)
+  const [vendorCardDropPos, setVendorCardDropPos] = useState<DropPos>({ left: 0 })
   const [editingQtyItem, setEditingQtyItem] = useState<string | null>(null)
   const [qtyDraft, setQtyDraft] = useState('')
   const [sendingChefs, setSendingChefs] = useState(false)
@@ -178,6 +180,25 @@ const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, 
     })
     updateOrderItem.mutate({ id: item.id, vendor_override: override })
     setEditingVendorItem(null)
+  }
+
+  // Byt leverantör på ett helt leverantörskort — alla rader i sektionen flyttas
+  const setCardVendor = (from: string, to: string) => {
+    setEditingVendorCard(null)
+    if (from === to) return
+    const items = order.items.filter(i => effectiveVendor(i) === from)
+    setVendorOverrides(prev => {
+      const next = { ...prev }
+      for (const item of items) {
+        if (to === item.product?.vendor) delete next[item.id]
+        else next[item.id] = to
+      }
+      return next
+    })
+    for (const item of items) {
+      updateOrderItem.mutate({ id: item.id, vendor_override: to === item.product?.vendor ? null : to })
+    }
+    toast.success(`${from} → ${to}`)
   }
 
   const handleComplete = async () => {
@@ -701,9 +722,31 @@ const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, 
   const selectIcon = (selected: boolean) =>
     selected ? <CheckSquare size={13} className="text-indigo-600 dark:text-indigo-400" /> : <Square size={13} className="text-slate-400 dark:text-zinc-500" />
 
-  const vendorLabel = (vendor: string) => (
-    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-zinc-500 truncate">{vendor}</p>
-  )
+  // Klick på leverantörsnamnet (bara pending) öppnar en lista för att flytta hela kortet
+  const vendorLabel = (vendor: string) => {
+    const labelClass = 'text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-zinc-500 truncate'
+    if (!isPending) return <p className={labelClass}>{vendor}</p>
+    return (
+      <>
+        <button
+          onClick={e => { e.stopPropagation(); if (editingVendorCard === vendor) { setEditingVendorCard(null) } else { setVendorCardDropPos(dropPosFromEvent(e, 138, 220)); setEditingVendorCard(vendor) } }}
+          title="Byt leverantör för hela kortet"
+          className={`${labelClass} min-w-0 text-left hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors [@media(hover:none)]:py-1.5 [@media(hover:none)]:-my-1.5`}
+        >{vendor}</button>
+        {editingVendorCard === vendor && createPortal(
+          <>
+            <div className="fixed inset-0 z-[9998]" onClick={e => { e.stopPropagation(); setEditingVendorCard(null) }} />
+            <div className="fixed z-[9999] bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl shadow-lg p-1.5 flex flex-col gap-0.5 min-w-[138px] max-h-[60vh] overflow-y-auto no-scrollbar" style={vendorCardDropPos} onClick={e => e.stopPropagation()}>
+              {(vendorList ?? []).map(v => (
+                <button key={v.id} onClick={() => setCardVendor(vendor, v.name)} className={`px-2.5 py-1 rounded-lg text-xs text-left transition-colors ${vendor === v.name ? 'bg-indigo-600 text-white' : 'hover:bg-slate-50 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-200'}`}>{v.name}</button>
+              ))}
+            </div>
+          </>,
+          document.body
+        )}
+      </>
+    )
+  }
 
   // One section per vendor inside a single card. Multi-vendor sections carry their own
   // select box, notify bell and "Mark done"; single-vendor cards keep those at card level.

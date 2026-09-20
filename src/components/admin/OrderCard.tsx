@@ -108,6 +108,7 @@ const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, 
   // Sync local override state when the server row changes (e.g. after a vendor-card merge from OrdersPage)
   useEffect(() => {
     setVendorOverrides(Object.fromEntries(order.items.filter(i => i.vendor_override).map(i => [i.id, i.vendor_override!])))
+    setExcluded(new Set(order.items.filter(i => i.notify_excluded).map(i => i.id)))
   }, [order.items])
   const [editingUnitItem, setEditingUnitItem] = useState<string | null>(null)
   const [unitDropPos, setUnitDropPos] = useState<Record<string, DropPos>>({})
@@ -298,12 +299,13 @@ const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, 
       toast.error(`ChefsCulinar-kundnummer saknas för ${order.location?.name ?? 'butiken'} — lägg till det under Butiker`)
       return
     }
-    const products = chefsItems.map(i => ({
+    const products = chefsItems.filter(i => !isExcluded(i.id)).map(i => ({
       chefsculinar_id: i.product!.chefsculinar_id,
       quantity: i.quantity,
       unit: i.product!.chefsculinar_unit ?? 'st',
       unit_qty: i.product!.chefsculinar_unit_qty ?? 1,
     }))
+    if (products.length === 0) { toast.error('Inga ChefsCulinar-artiklar i ordern'); return }
     setSendingChefs(true)
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 30_000)

@@ -12,8 +12,24 @@ describe('planMergedOrder', () => {
       order({ items: [item({ product: tofu, quantity: 3 })] }),
     ])
     expect(plan.items).toEqual([
-      { product_id: tofu.id, quantity: 5 },
-      { product_id: soja.id, quantity: 1 },
+      { product_id: tofu.id, quantity: 5, vendor_override: null, unit_override: null, notify_excluded: false },
+      { product_id: soja.id, quantity: 1, vendor_override: null, unit_override: null, notify_excluded: false },
+    ])
+  })
+
+  it('behåller bytt leverantör, enhet och struken status', () => {
+    const plan = planMergedOrder([
+      order({ items: [
+        item({ product: tofu, quantity: 2, vendor_override: 'FDC', unit_override: 'kg' }),
+        item({ product: soja, quantity: 1, notify_excluded: true }),
+      ] }),
+      order({ items: [item({ product: tofu, quantity: 3 }), item({ product: soja, quantity: 4 })] }),
+    ])
+    expect(plan.items).toEqual([
+      { product_id: tofu.id, quantity: 2, vendor_override: 'FDC', unit_override: 'kg', notify_excluded: false },
+      { product_id: soja.id, quantity: 1, vendor_override: null, unit_override: null, notify_excluded: true },
+      { product_id: tofu.id, quantity: 3, vendor_override: null, unit_override: null, notify_excluded: false },
+      { product_id: soja.id, quantity: 4, vendor_override: null, unit_override: null, notify_excluded: false },
     ])
   })
 

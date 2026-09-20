@@ -4,20 +4,36 @@ export interface MergedOrderPlan {
   locationId: string
   employeeId: string
   note: string | null
-  items: { product_id: string; quantity: number }[]
+  items: MergedOrderItem[]
+}
+
+export interface MergedOrderItem {
+  product_id: string
+  quantity: number
+  vendor_override: string | null
+  unit_override: string | null
+  notify_excluded: boolean
 }
 
 // Räknar ut den sammanslagna ordern: en rad per produkt med summerad kvantitet.
+// Rader med olika leverantör/enhet/struken-status hålls isär så att admins
+// ändringar (bytt leverantör, struken rad) följer med in i den nya ordern.
 // Anställd tas från en order som hör till målbutiken om det finns en.
 export function planMergedOrder(orders: OrderWithDetails[], targetLocationId?: string): MergedOrderPlan {
   if (orders.length === 0) throw new Error('Inga ordrar att slå ihop')
   const locationId = targetLocationId ?? orders[0].location_id
   const base = orders.find(o => o.location_id === locationId) ?? orders[0]
 
-  const merged = new Map<string, number>()
+  const merged = new Map<string, MergedOrderItem>()
   for (const order of orders) {
     for (const item of order.items) {
-      merged.set(item.product_id, (merged.get(item.product_id) ?? 0) + item.quantity)
+      const vendor_override = item.vendor_override ?? null
+      const unit_override = item.unit_override ?? null
+      const notify_excluded = !!item.notify_excluded
+      const key = JSON.stringify([item.product_id, vendor_override, unit_override, notify_excluded])
+      const existing = merged.get(key)
+      if (existing) existing.quantity += item.quantity
+      else merged.set(key, { product_id: item.product_id, quantity: item.quantity, vendor_override, unit_override, notify_excluded })
     }
   }
 
@@ -27,7 +43,7 @@ export function planMergedOrder(orders: OrderWithDetails[], targetLocationId?: s
     locationId,
     employeeId: base.employee_id,
     note: notes.length ? notes.join(' | ') : null,
-    items: [...merged.entries()].map(([product_id, quantity]) => ({ product_id, quantity })),
+    items: [...merged.values()],
   }
 }
 

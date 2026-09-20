@@ -61,12 +61,12 @@ const editMsg = (chat_id, message_id, text, reply_markup) =>
 async function showVendorList(orderId, locationName, chatId, msgId, headerText) {
   const [orders, items] = await Promise.all([
     orderId ? Promise.resolve(null) : Promise.resolve(null),
-    db(`order_items?select=quantity,unit_override,product:products(name,unit,vendor)&order_id=eq.${orderId}`),
+    db(`order_items?select=quantity,unit_override,vendor_override,product:products(name,unit,vendor)&order_id=eq.${orderId}&notify_excluded=eq.false`),
   ])
 
   const byVendor = {}
   for (const item of items) {
-    const v = item.product?.vendor || 'Okand'
+    const v = item.vendor_override || item.product?.vendor || 'Okand'
     if (!byVendor[v]) byVendor[v] = []
     byVendor[v].push(`- ${item.product?.name} - ${item.quantity} ${item.unit_override || item.product?.unit || ''}`)
   }
@@ -114,7 +114,7 @@ async function handleVendorPress(orderId, vendorName, chatId, msgId, cbId) {
   const [orders, vendorList, allItems] = await Promise.all([
     db(`orders?id=eq.${orderId}&select=id,locations(name)&limit=1`),
     db(`vendors?name=eq.${encodeURIComponent(vendorName)}&select=name,email,phone`),
-    db(`order_items?select=quantity,unit_override,product:products(name,unit,vendor)&order_id=eq.${orderId}`),
+    db(`order_items?select=quantity,unit_override,vendor_override,product:products(name,unit,vendor)&order_id=eq.${orderId}&notify_excluded=eq.false`),
   ])
 
   const order  = orders[0]
@@ -127,7 +127,7 @@ async function handleVendorPress(orderId, vendorName, chatId, msgId, cbId) {
     return
   }
 
-  const vendorItems = allItems.filter(i => i.product?.vendor === vendorName)
+  const vendorItems = allItems.filter(i => (i.vendor_override || i.product?.vendor) === vendorName)
   const itemLines   = vendorItems.map(i =>
     `- ${i.product?.name} - ${i.quantity} ${i.unit_override || i.product?.unit || ''}`
   )
@@ -167,9 +167,9 @@ async function handleSendEmail(orderId, vendorName, chatId, msgId, cbId) {
   if (!vendor?.email) { await answerCb(cbId, 'Ingen email registrerad.'); return }
 
   const items = await db(
-    `order_items?select=quantity,unit_override,product:products(name,unit,vendor)&order_id=eq.${orderId}`
+    `order_items?select=quantity,unit_override,vendor_override,product:products(name,unit,vendor)&order_id=eq.${orderId}&notify_excluded=eq.false`
   )
-  const vendorItems = items.filter(i => i.product?.vendor === vendorName)
+  const vendorItems = items.filter(i => (i.vendor_override || i.product?.vendor) === vendorName)
   const itemLines   = vendorItems.map(i =>
     `- ${i.product?.name} - ${i.quantity} ${i.unit_override || i.product?.unit || ''}`
   )

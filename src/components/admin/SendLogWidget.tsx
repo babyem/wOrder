@@ -11,13 +11,16 @@ function stockholmDay(d: Date): string {
   return new Intl.DateTimeFormat('sv-SE', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d)
 }
 
-// Idag → bara klockslag, annars "12/9 14:32" så äldre rader inte ser ut som dagens.
+// Idag → bara klockslag, igår → "Igår 14:32", äldre → "12/9 14:32".
 function formatWhen(iso: string): string {
   const d = new Date(iso)
   const time = new Intl.DateTimeFormat('sv-SE', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false }).format(d)
-  if (stockholmDay(d) === stockholmDay(new Date())) return time
-  const day = new Intl.DateTimeFormat('sv-SE', { timeZone: TZ, day: 'numeric', month: 'numeric' }).format(d)
-  return `${day} ${time}`
+  const day = stockholmDay(d)
+  const now = new Date()
+  if (day === stockholmDay(now)) return time
+  if (day === stockholmDay(new Date(now.getTime() - 86_400_000))) return `Igår ${time}`
+  const date = new Intl.DateTimeFormat('sv-SE', { timeZone: TZ, day: 'numeric', month: 'numeric' }).format(d)
+  return `${date} ${time}`
 }
 
 function formatFull(iso: string): string {
@@ -28,7 +31,7 @@ function recipient(e: SendLogEntry): string {
   return e.contact_label || e.contact_value
 }
 
-// Senaste utskicken till leverantörer — "Woso Izakai / Martin & Servera · Mail till Nassim".
+// Senaste utskicken till leverantörer — "12:40 ✉ ✓ / Martin & Servera". Detaljer i modalen.
 // Klick på en rad öppnar meddelandet som skickades.
 export function SendLogWidget() {
   const { data, isLoading, isError } = useSendLog(8)
@@ -66,21 +69,18 @@ export function SendLogWidget() {
               <li key={e.id}>
                 <button
                   onClick={() => setSelected(e)}
-                  title="Visa vad som skickades"
+                  title={`${where ? `${where} · ` : ''}${verb} till ${recipient(e)}${failed && e.error ? ` · ${e.error}` : ''}`}
                   className="w-full text-left text-xs leading-tight px-1 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-700/60 transition-colors"
                 >
-                  <div className="flex items-baseline gap-1.5 min-w-0">
-                    <span className="tabular-nums text-slate-400 dark:text-zinc-500 shrink-0">{formatWhen(e.sent_at)}</span>
-                    <span className="font-medium text-slate-700 dark:text-zinc-200 truncate">{where || e.vendor_name}</span>
-                  </div>
-                  <div className={`flex items-center gap-1 min-w-0 ${failed ? 'text-red-500 dark:text-red-400' : 'text-slate-500 dark:text-zinc-400'}`}>
+                  <div className="flex items-center gap-1.5">
+                    <span className="tabular-nums text-slate-400 dark:text-zinc-500">{formatWhen(e.sent_at)}</span>
+                    <Icon size={11} className={`shrink-0 ${e.channel === 'email' ? 'text-indigo-500 dark:text-indigo-400' : 'text-emerald-500 dark:text-emerald-400'}`} />
                     {failed
-                      ? <XCircle size={10} className="shrink-0 text-red-500 dark:text-red-400" aria-label="Misslyckades" />
-                      : <CheckCircle2 size={10} className="shrink-0 text-emerald-500 dark:text-emerald-400" aria-label="Skickat" />}
-                    <Icon size={10} className={`shrink-0 ${e.channel === 'email' ? 'text-indigo-500 dark:text-indigo-400' : 'text-emerald-500 dark:text-emerald-400'}`} />
-                    <span className="truncate">
-                      {where ? <>{e.vendor_name} · </> : null}{verb} till {recipient(e)}
-                    </span>
+                      ? <XCircle size={11} className="shrink-0 text-red-500 dark:text-red-400" aria-label="Misslyckades" />
+                      : <CheckCircle2 size={11} className="shrink-0 text-emerald-500 dark:text-emerald-400" aria-label="Skickat" />}
+                  </div>
+                  <div className={`truncate font-medium ${failed ? 'text-red-500 dark:text-red-400' : 'text-slate-700 dark:text-zinc-200'}`}>
+                    {e.vendor_name}
                   </div>
                 </button>
               </li>

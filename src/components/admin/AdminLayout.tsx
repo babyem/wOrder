@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { QoplaSalesWidget } from '../../plugins/qopla/QoplaSalesWidget'
 import { SendLogWidget } from './SendLogWidget'
+import { RosterWidget } from '../../plugins/schema/RosterWidget'
 import { motion, AnimatePresence } from 'framer-motion'
 import PushSubscribeButton from './PushSubscribeButton'
 import ThemeToggle from '../ui/ThemeToggle'
@@ -80,6 +81,7 @@ export default function AdminLayout() {
 
         <QoplaSalesWidget />
         <SendLogWidget />
+        <RosterWidget />
 
         <div className="flex-1" />
       </aside>
@@ -181,6 +183,7 @@ export default function AdminLayout() {
 
                 <QoplaSalesWidget />
                 <SendLogWidget />
+                <RosterWidget />
 
                 <div className="flex-1" />
               </motion.div>

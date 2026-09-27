@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, forwardRef } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CheckCircle, RotateCcw, Trash2, FileText, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag, AlertTriangle, AlertCircle, Copy, Ban, MoreHorizontal } from 'lucide-react'
+import { CheckCircle, RotateCcw, Trash2, FileText, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag, AlertTriangle, AlertCircle, Copy, Ban, MoreHorizontal, ChevronRight, ChevronUp } from 'lucide-react'
 import type { Order, OrderWithDetails } from '../../types'
 import { useUpdateOrderStatus, useDeleteOrder, useRestoreOrder, useUpdateOrderItem, useMarkVendorDone, useUpdateAdminNote, useDeleteOrderItems } from '../../hooks/useOrders'
 import { useVendors, useUnits } from '../../hooks/useMetadata'
@@ -52,6 +52,8 @@ const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, 
   const [editingNote, setEditingNote] = useState(false)
   const [noteVal, setNoteVal] = useState(order.admin_note ?? '')
   const [celebrate, setCelebrate] = useState(false)
+  // Klara ordrar visas som en rad; tryck vecklar ut hela kortet
+  const [expanded, setExpanded] = useState(false)
 
   const triggerCelebrate = () => {
     setCelebrate(true)
@@ -701,6 +703,30 @@ const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, 
 
   const isStale = isPending && Date.now() - new Date(order.created_at).getTime() > 24 * 60 * 60 * 1000
 
+  // Klar/stoppad order hopfälld: ✓ tid namn · leverantörer ›
+  if (!isPending && !expanded) {
+    const vendorsText = vendorEntries.map(([v]) => v).join(', ')
+    return (
+      <motion.div ref={ref} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.25 }} className="relative">
+        <button
+          onClick={() => setExpanded(true)}
+          title={`${vendorsText} — tryck för att öppna`}
+          className={`w-full text-left flex items-center gap-1.5 px-3 py-2 rounded-2xl border border-transparent dark:border-zinc-800 shadow-sm opacity-70 dark:opacity-80 hover:opacity-100 transition-opacity ${isStopped ? 'bg-slate-100 dark:bg-zinc-900 dark:shadow-[inset_3px_0_0_0_#52525b]' : 'bg-[#e2f6ec] dark:bg-emerald-950/40 dark:shadow-[inset_3px_0_0_0_#059669]'}`}
+        >
+          {isStopped
+            ? <Ban size={12} className="text-slate-400 dark:text-zinc-500 shrink-0" aria-label="Stoppad — ingen beställning" />
+            : <CheckCircle size={12} className="text-emerald-600 dark:text-emerald-400 shrink-0" aria-label="Klar" />}
+          <span className={`text-xs tabular-nums shrink-0 opacity-70 ${isStopped ? 'text-slate-500 dark:text-zinc-400' : 'text-emerald-700 dark:text-emerald-300'}`}>{time}</span>
+          <span className="text-sm font-semibold text-slate-900 dark:text-zinc-100 truncate">{order.employee?.name ?? 'Unknown'}</span>
+          {showLocation && <span className="text-xs text-slate-400 dark:text-zinc-500 truncate">· {locationName}</span>}
+          {order.admin_note && <AlertCircle size={12} className="text-red-400 shrink-0" aria-label="Har anteckning" />}
+          <span className="ml-auto text-[11px] text-slate-400 dark:text-zinc-500 truncate max-w-[45%] pl-2">{vendorsText}</span>
+          <ChevronRight size={13} className="text-slate-300 dark:text-zinc-600 shrink-0" />
+        </button>
+      </motion.div>
+    )
+  }
+
   // Card-level ring only for single-vendor selection; multi-vendor highlights the section instead
   const cardBorder = chefsOrderFailed
     ? 'border-red-400 ring-2 ring-red-100 dark:ring-red-900'
@@ -778,21 +804,35 @@ const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, 
               )}
               {vendorLabel(vendor)}
             </div>
+            {/* Klar leverantör: bara ✓ (tryck för att ångra). Annars kopiera / notifiera / Klar / ta bort. */}
             <div className="flex items-center gap-1 shrink-0">
-              {copyButton(vendor)}
-              {canNotify && (
-                <button onClick={() => toggleNotify(vendor)} title="Notify vendor"
-                  className={`p-1.5 rounded-lg transition-colors ${showNotifyVendor === vendor ? 'bg-indigo-600 text-white' : 'bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-900'}`}>
-                  <Bell size={13} />
+              {isVendorDone ? (
+                <button
+                  onClick={() => markVendorDone(vendor, false, allVendorNames)}
+                  title="Klar — tryck för att ångra"
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900 transition-colors"
+                >
+                  <CheckCircle size={11} /> Klar
                 </button>
+              ) : (
+                <>
+                  {copyButton(vendor)}
+                  {canNotify && (
+                    <button onClick={() => toggleNotify(vendor)} title="Notify vendor"
+                      className={`p-1.5 rounded-lg transition-colors ${showNotifyVendor === vendor ? 'bg-indigo-600 text-white' : 'bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-900'}`}>
+                      <Bell size={13} />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => markVendorDone(vendor, true, allVendorNames)}
+                    title="Markera som klar"
+                    className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-500 hover:bg-emerald-50 dark:hover:bg-emerald-950 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                  >
+                    <CheckCircle size={10} /> Klar
+                  </button>
+                </>
               )}
-              <button
-                onClick={() => markVendorDone(vendor, !isVendorDone, allVendorNames)}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium transition-colors ${isVendorDone ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-500 hover:bg-emerald-50 dark:hover:bg-emerald-950 hover:text-emerald-600 dark:hover:text-emerald-400'}`}
-              >
-                <CheckCircle size={10} /> {isVendorDone ? 'Done' : 'Mark done'}
-              </button>
-              {isPending && (
+              {isPending && !isVendorDone && (
                 <button
                   onClick={() => removeVendor(vendor, items)}
                   disabled={deleteItems.isPending}
@@ -861,6 +901,12 @@ const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, 
             className="p-1 [@media(hover:none)]:p-2 [@media(hover:none)]:-my-1 rounded-lg text-red-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-100/60 dark:hover:bg-red-900 disabled:opacity-50 transition-colors">
             <Trash2 size={13} />
           </button>
+          {!isPending && (
+            <button onClick={() => setExpanded(false)} title="Fäll ihop"
+              className="p-1 [@media(hover:none)]:p-2 [@media(hover:none)]:-my-1 rounded-lg text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-200/60 dark:hover:bg-zinc-700 transition-colors">
+              <ChevronUp size={13} />
+            </button>
+          )}
         </div>
 
         <div className="px-3 pb-3 pt-1 space-y-2">
@@ -938,7 +984,7 @@ const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, 
           </AnimatePresence>
           {isPending && (
             <button
-              onClick={() => { markAllVendorsDone(allVendorNames); handleComplete(); triggerCelebrate() }}
+              onClick={() => { setExpanded(true); markAllVendorsDone(allVendorNames); handleComplete(); triggerCelebrate(); setTimeout(() => setExpanded(false), 900) }}
               disabled={updateStatus.isPending}
               className="w-full flex items-center justify-center py-2 rounded-b-2xl bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-colors border-t border-black/5 dark:border-transparent"
             >

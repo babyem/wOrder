@@ -1,5 +1,6 @@
-import { motion } from 'framer-motion'
-import { AlertTriangle, Clock, CalendarCheck, Ban, EyeOff, Loader2 } from 'lucide-react'
+import { useState } from 'react'
+import { createPortal } from 'react-dom'
+import { AlertTriangle, Clock, Ban, EyeOff, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useQueryClient } from '@tanstack/react-query'
 import { useDismissGap, VENDOR_GAPS_KEY, type VendorGap } from '../../hooks/useVendorGaps'
@@ -22,12 +23,14 @@ interface Props {
   locationName: string
 }
 
-// Spökkort överst i kolumnen: "den här ordern borde ha kommit". Bara ikoner —
-// förklaringen ligger i tooltips. Försvinner av sig självt när ordern kommer in.
-export default function VendorGapCard({ gap, locationName }: Props) {
+// Liten chip under kolumnrubriken: "den här leverantören brukar beställas idag men
+// saknas". Tryck öppnar en meny med Ingen beställning / Dölj idag. Försvinner av
+// sig själv när ordern kommer in. Förklaringen ligger i tooltipen.
+export default function VendorGapChip({ gap, locationName }: Props) {
   const qc = useQueryClient()
   const dismiss = useDismissGap()
   const noOrder = useSubmitNoOrder()
+  const [menu, setMenu] = useState<{ top: number; left: number } | null>(null)
   const late = gapIsLate(gap)
   const weekday = WEEKDAY.format(new Date())
 
@@ -38,6 +41,7 @@ export default function VendorGapCard({ gap, locationName }: Props) {
     ' Ingen order idag.'
 
   const markNoOrder = async () => {
+    setMenu(null)
     const ok = await confirmDialog({
       title: `Ingen beställning från ${gap.vendor}?`,
       message: `${locationName} beställer inget från ${gap.vendor} idag. Syns som "ingen beställning" på tavlan.`,
@@ -53,51 +57,54 @@ export default function VendorGapCard({ gap, locationName }: Props) {
   }
 
   const hide = () => {
+    setMenu(null)
     dismiss.mutate({ locationId: gap.location_id, vendor: gap.vendor }, {
       onError: err => toast.error(err instanceof Error ? err.message : 'Kunde inte dölja'),
     })
   }
 
+  // Pekarkoordinater är riktiga viewport-pixlar även inne i den CSS-zoomade tavlan
+  const openMenu = (e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    setMenu({ top: (e.clientY || rect.bottom) + 6, left: e.clientX || rect.left })
+  }
+
   const busy = dismiss.isPending || noOrder.isPending
   const tone = late
-    ? 'border-red-300 dark:border-red-900 bg-red-50/70 dark:bg-red-950/30 text-red-700 dark:text-red-300'
-    : 'border-amber-300 dark:border-amber-900 bg-amber-50/70 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300'
-  const iconBtn = 'p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-50 transition-colors'
+    ? 'border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-950'
+    : 'border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-950'
 
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: -6 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.96 }}
-      transition={{ duration: 0.2 }}
-      title={explain}
-      className={`rounded-2xl border border-dashed px-3 py-2 ${tone}`}
-    >
-      <div className="flex items-center gap-2">
-        {late
-          ? <AlertTriangle size={14} className="shrink-0" />
-          : <Clock size={14} className="shrink-0" />}
-        <span className="text-sm font-semibold truncate">{gap.vendor}</span>
-        <span className="ml-auto flex items-center gap-0.5 -mr-1">
-          <button onClick={markNoOrder} disabled={busy} title="Ingen beställning idag" aria-label="Ingen beställning idag" className={iconBtn}>
-            {noOrder.isPending ? <Loader2 size={14} className="animate-spin" /> : <Ban size={14} />}
-          </button>
-          <button onClick={hide} disabled={busy} title="Dölj idag" aria-label="Dölj idag" className={iconBtn}>
-            {dismiss.isPending ? <Loader2 size={14} className="animate-spin" /> : <EyeOff size={14} />}
-          </button>
-        </span>
-      </div>
-      <div className="flex items-center gap-3 pl-[22px] mt-0.5 text-[10px] tabular-nums opacity-80">
-        {gap.usual_time && (
-          <span className="flex items-center gap-1" title={`Brukar komma runt ${gap.usual_time}`}>
-            <Clock size={10} /> {gap.usual_time}
-          </span>
-        )}
-        <span className="flex items-center gap-1" title={`Beställt ${gap.days_hit} av senaste ${gap.days_total} ${weekday}ar`}>
-          <CalendarCheck size={10} /> {gap.days_hit}/{gap.days_total}
-        </span>
-      </div>
-    </motion.div>
+    <>
+      <button
+        onClick={openMenu}
+        disabled={busy}
+        title={explain}
+        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border border-dashed text-[11px] font-semibold disabled:opacity-50 transition-colors ${tone}`}
+      >
+        {busy ? <Loader2 size={11} className="animate-spin" /> : late ? <AlertTriangle size={11} /> : <Clock size={11} />}
+        <span className="truncate max-w-[120px]">{gap.vendor}</span>
+      </button>
+      {menu && createPortal(
+        <>
+          <div className="fixed inset-0 z-[9998]" onClick={() => setMenu(null)} />
+          <div
+            className="fixed z-[9999] bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl shadow-lg p-1.5 flex flex-col gap-0.5 min-w-[170px]"
+            style={{ top: menu.top, left: menu.left }}
+          >
+            <div className="px-2.5 py-1 text-[10px] text-slate-400 dark:text-zinc-500 truncate">
+              {gap.usual_time ? `Brukar ~${gap.usual_time} · ` : ''}{gap.days_hit}/{gap.days_total} {weekday}ar
+            </div>
+            <button onClick={markNoOrder} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-left text-slate-700 dark:text-zinc-200 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors">
+              <Ban size={13} /> Ingen beställning idag
+            </button>
+            <button onClick={hide} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-left text-slate-700 dark:text-zinc-200 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors">
+              <EyeOff size={13} /> Dölj idag
+            </button>
+          </div>
+        </>,
+        document.body,
+      )}
+    </>
   )
 }

@@ -1,10 +1,12 @@
 import { useState, useEffect, useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Search, RefreshCw, GitMerge, Bell, X, GripVertical, ZoomIn, ZoomOut, Trash2, Undo2, Ban } from 'lucide-react'
+import { Search, RefreshCw, GitMerge, Bell, X, GripVertical, ZoomIn, ZoomOut, Trash2, Undo2, Ban, AlertTriangle } from 'lucide-react'
 import { useOrders, useMergeOrders, useMergeVendorCards, useDeletedOrders, useRestoreOrder } from '../../hooks/useOrders'
 import { useLocations, useReorderLocations } from '../../hooks/useLocations'
 import { useVendors } from '../../hooks/useMetadata'
 import OrderCard from '../../components/admin/OrderCard'
+import VendorGapCard, { gapIsLate } from '../../components/admin/VendorGapCard'
+import { useVendorGaps, type VendorGap } from '../../hooks/useVendorGaps'
 import VendorContactButtons from '../../components/admin/VendorContactButtons'
 import Spinner from '../../components/ui/Spinner'
 import Modal from '../../components/ui/Modal'
@@ -33,13 +35,16 @@ function SortableColumn({
   loc,
   count,
   pendingCount,
+  gaps,
   children,
 }: {
   loc: Location
   count: number
   pendingCount: number
+  gaps: VendorGap[]
   children: React.ReactNode
 }) {
+  const lateGaps = gaps.filter(gapIsLate).length
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: loc.id })
   return (
     <div
@@ -60,6 +65,14 @@ function SortableColumn({
           <h2 className="text-xs font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-widest">{loc.name}</h2>
         </div>
         <div className="flex items-center gap-1.5">
+          {gaps.length > 0 && (
+            <span
+              title={`${gaps.length} leverantör${gaps.length > 1 ? 'er' : ''} som brukar beställas idag saknas`}
+              className={`h-[18px] px-1.5 flex items-center gap-0.5 rounded-full text-[10px] font-bold tabular-nums ${lateGaps > 0 ? 'bg-red-100 dark:bg-red-950 text-red-600 dark:text-red-400' : 'bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400'}`}
+            >
+              <AlertTriangle size={10} /> {gaps.length}
+            </span>
+          )}
           {pendingCount > 0 && (
             <span className="min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold tabular-nums">{pendingCount}</span>
           )}
@@ -114,6 +127,12 @@ export default function OrdersPage() {
   }, [daysBack])
   const { data: orders, isLoading, refetch } = useOrders({ status, search, fromDate })
   const { data: locations } = useLocations()
+  const { data: vendorGaps } = useVendorGaps()
+  const gapsByLocation = useMemo(() => {
+    const m: Record<string, VendorGap[]> = {}
+    for (const g of vendorGaps ?? []) (m[g.location_id] ??= []).push(g)
+    return m
+  }, [vendorGaps])
   const { data: vendorList } = useVendors()
   const mergeOrders = useMergeOrders()
   const mergeVendorCards = useMergeVendorCards()
@@ -462,10 +481,17 @@ export default function OrdersPage() {
               <div className="flex gap-4 pb-4 max-md:h-full max-md:pb-0" style={{ minWidth: 'max-content' }}>
                 {sortedLocations.map(loc => {
                   const colOrders = ordersByLocation[loc.id] ?? []
+                  const colGaps = gapsByLocation[loc.id] ?? []
                   return (
-                    <SortableColumn key={loc.id} loc={loc} count={colOrders.length} pendingCount={colOrders.filter(o => o.status === 'pending').length}>
+                    <SortableColumn key={loc.id} loc={loc} count={colOrders.length} pendingCount={colOrders.filter(o => o.status === 'pending').length} gaps={colGaps}>
+                      {/* Spökkort: leverantörer som brukar beställas idag men saknas */}
+                      <AnimatePresence>
+                        {colGaps.map(g => (
+                          <VendorGapCard key={`gap-${g.vendor}`} gap={g} locationName={loc.name} />
+                        ))}
+                      </AnimatePresence>
                       <AnimatePresence mode="popLayout">
-                        {colOrders.length === 0 ? (
+                        {colOrders.length === 0 && colGaps.length === 0 ? (
                           <div className="rounded-2xl border-2 border-dashed border-slate-100 dark:border-zinc-800 h-20 flex items-center justify-center">
                             <span className="text-xs text-slate-300 dark:text-zinc-600">No orders</span>
                           </div>

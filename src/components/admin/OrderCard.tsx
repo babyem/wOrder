@@ -667,7 +667,7 @@ const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, 
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-slate-800 dark:text-zinc-200 truncate">Ingen beställning · {vendor}</p>
-                <p className="text-xs text-slate-400 dark:text-zinc-500 truncate">{order.employee?.name ?? 'Unknown'} · {order.location?.name ?? 'Unknown location'}</p>
+                <p className="text-xs text-slate-400 dark:text-zinc-500 truncate">{order.employee?.name ?? 'Backoffice'} · {order.location?.name ?? 'Unknown location'}</p>
               </div>
             </div>
             <div className="border-t border-black/5 dark:border-zinc-800">

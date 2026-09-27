@@ -102,7 +102,8 @@ export function useSubmitOrder() {
 export function useSubmitNoOrder() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ locationId, employeeId, vendor }: { locationId: string; employeeId: string; vendor: string }) => {
+    // employeeId null = backoffice skapade beskedet från spökkortet på tavlan
+    mutationFn: async ({ locationId, employeeId, vendor }: { locationId: string; employeeId: string | null; vendor: string }) => {
       const { error } = await supabase
         .from('orders')
         .insert({ location_id: locationId, employee_id: employeeId, status: 'pending', no_order_vendor: vendor })

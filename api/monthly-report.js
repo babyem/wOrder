@@ -10,11 +10,15 @@
 //   GET /api/monthly-report?token=XXX&month=2026-05      → JSON, specifik månad
 //   GET /api/monthly-report?token=XXX&action=send&dry=1  → visa vilka mejl som SKULLE skickas
 //   GET /api/monthly-report?token=XXX&action=send        → skicka rapport-mejl via Resend
+//   GET /api/monthly-report?token=XXX&action=jernhusen&dry=1     → visa vad som SKULLE rapporteras
+//   GET /api/monthly-report?token=XXX&action=jernhusen&dry=form  → logga in + fyll i, skicka inte
+//   GET /api/monthly-report?token=XXX&action=jernhusen           → rapportera till Jernhusen (headless Chromium)
 //
 // För action=send krävs RESEND_API_KEY i miljövariabler (samma nyckel som send-email).
 
 import { gql, getSession, fetchOverviewRaw, dayRangeISO } from "./_lib/qopla.js";
 import { sbSelect } from "./_lib/supabaseAdmin.js";
+import { jernhusenBrowserReport } from "./_lib/jernhusen-browser.js";
 
 // Pos-butiker (dinkassa) lagrar bara brutto (inkl moms). För netto exkl moms delar
 // vi med momssatsen. Chao är 100% takeaway (6%), så netto = brutto / 1,06.
@@ -23,10 +27,9 @@ const POS_NET_VAT_DIVISOR = {
   "dinkassa-chao": 1.06, // Chao Oriental Express — takeaway 6%
 };
 
-// Jernhusen: inloggning via webbformuläret + POST /turnover/Create per verksamhet.
-// Inga API-nycklar behövs. Login med JERNHUSEN_USER / JERNHUSEN_PASS (Vercel env).
+// Jernhusen (omsa.jernhusen.se, Blazor Server sedan okt 2026): headless Chromium fyller i
+// formuläret — se api/_lib/jernhusen-browser.js. Login med JERNHUSEN_USER / JERNHUSEN_PASS.
 // Rapporterar EXKL moms (salesNet) + antal kvitton (orders).
-const JERNHUSEN_BASE = "https://omsa.jernhusen.se";
 
 // Emporia (Mallcomm/Let's Join): login → byt profil → hämta plugin-token → POSTa Month_Total.
 // Rapporterar INKL moms (salesGross) i fältet "Month_Total". Login med LETSJOIN_USER / LETSJOIN_PASS.
@@ -351,100 +354,6 @@ function planJernhusen(report) {
   return planned;
 }
 
-const jhToken = (html) => {
-  const m = /name="__RequestVerificationToken"[^>]*value="([^"]+)"/.exec(html || "");
-  return m ? m[1] : null;
-};
-const jhForm = (o) => Object.entries(o).map(([k, v]) => encodeURIComponent(k) + "=" + encodeURIComponent(v)).join("&");
-
-// Fetch med timeout + retry — Jernhusens portal kan vara mycket seg, och utan
-// per-anrop-timeout riskerar hela Vercel-funktionen att dödas vid maxDuration.
-const JH_TIMEOUT_MS = 15000;
-async function jhFetch(url, opts = {}, tries = 2) {
-  let lastErr;
-  for (let i = 0; i < tries; i++) {
-    try {
-      return await fetch(url, { ...opts, signal: AbortSignal.timeout(JH_TIMEOUT_MS) });
-    } catch (err) { lastErr = err; }
-  }
-  throw lastErr;
-}
-
-// Extrahera ASP.NET-valideringsfel ur en svarskropp (så vi ser VARFÖR det misslyckades).
-function jhValidationErrors(body) {
-  const msgs = [];
-  const summary = /class="[^"]*validation-summary-errors[^"]*"[\s\S]*?<\/(?:div|ul)>/.exec(body);
-  if (summary) msgs.push(summary[0]);
-  for (const m of body.matchAll(/class="[^"]*field-validation-error[^"]*"[^>]*>([\s\S]*?)<\/span>/g)) msgs.push(m[1]);
-  for (const m of body.matchAll(/class="[^"]*(?:alert-danger|text-danger)[^"]*"[^>]*>([\s\S]*?)<\//g)) msgs.push(m[1]);
-  const clean = msgs.map((s) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()).filter(Boolean);
-  return [...new Set(clean)].join(" | ").slice(0, 500);
-}
-
-// Logga in på Jernhusen (webbformulär, ASP.NET anti-forgery) och POSTa omsättning per verksamhet.
-// Verksamheterna körs PARALLELLT med varsin cookie-kopia (anti-forgery-token hör ihop med cookien).
-async function jernhusenWebReport(report) {
-  const USER = process.env.JERNHUSEN_USER;
-  const PASS = process.env.JERNHUSEN_PASS;
-  if (!USER || !PASS) return { error: "JERNHUSEN_USER / JERNHUSEN_PASS saknas i miljövariabler" };
-
-  const [Year, Month] = report.month.split("-").map(Number);
-  const byId = new Map(report.shops.map((s) => [s.shopId, s]));
-  const parseCookies = (res) => {
-    const out = {};
-    const sc = typeof res.headers.getSetCookie === "function" ? res.headers.getSetCookie() : [];
-    for (const c of sc) { const p = c.split(";")[0]; const i = p.indexOf("="); if (i > 0) out[p.slice(0, i).trim()] = p.slice(i + 1); }
-    return out;
-  };
-  const cookieStr = (jar) => Object.entries(jar).map(([k, v]) => k + "=" + v).join("; ");
-
-  // 1) Login GET → token + cookie, 2) Login POST (måste vara sekventiellt)
-  const lg = await jhFetch(`${JERNHUSEN_BASE}/Account/Login`, { redirect: "manual" });
-  const baseJar = parseCookies(lg);
-  const loginToken = jhToken(await lg.text());
-  const lp = await jhFetch(`${JERNHUSEN_BASE}/Account/Login`, {
-    method: "POST", redirect: "manual",
-    headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: cookieStr(baseJar) },
-    body: jhForm({ __RequestVerificationToken: loginToken, Username: USER, Password: PASS, RememberMe: "false" }),
-  });
-  Object.assign(baseJar, parseCookies(lp));
-
-  // 3) Per verksamhet (parallellt): GET create (nytt token) → POST create
-  const results = await Promise.all(JERNHUSEN_BUSINESSES.map(async (b) => {
-    const shop = byId.get(b.shopId);
-    if (!shop || shop.salesNet == null) return { name: b.name, status: "skip", reason: "saknar netto" };
-    try {
-      const jar = { ...baseJar };
-      const gc = await jhFetch(`${JERNHUSEN_BASE}/turnover/Create?BusinessId=${b.businessId}`, { headers: { Cookie: cookieStr(jar) }, redirect: "manual" });
-      Object.assign(jar, parseCookies(gc));
-      const gcBody = await gc.text();
-      if (/name="Username"/.test(gcBody)) return { name: b.name, status: "error", reason: "inte inloggad (kontrollera JERNHUSEN_USER/PASS)" };
-      const formToken = jhToken(gcBody);
-      const pc = await jhFetch(`${JERNHUSEN_BASE}/turnover/Create`, {
-        method: "POST", redirect: "manual",
-        headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: cookieStr(jar) },
-        body: jhForm({
-          __RequestVerificationToken: formToken, BusinessId: b.businessId,
-          Year, Month, MonthlyTurnOverExVat: Math.round(shop.salesNet), NumberOfReceipts: shop.orders || 0, Comment: "",
-        }),
-      });
-      const base = { name: b.name, code: pc.status, exVat: Math.round(shop.salesNet), receipts: shop.orders || 0 };
-      // success = redirect till verksamhetssidan
-      if (pc.status >= 300 && pc.status < 400) return { ...base, status: "sent" };
-      const pcBody = await pc.text().catch(() => "");
-      // Dubblettspärr = månaden är redan rapporterad. Räknas som OK (idempotent omkörning).
-      if (/finns redan en rapporterad uppgift/i.test(pcBody)) {
-        return { ...base, status: "already_reported", reason: "Det finns redan en rapporterad uppgift för denna månad" };
-      }
-      const reason = jhValidationErrors(pcBody);
-      return { ...base, status: "error", reason: reason || "okänt (inga valideringsfel hittade i svaret)" };
-    } catch (err) {
-      return { name: b.name, status: "error", reason: String((err && err.message) || err) };
-    }
-  }));
-  return { results };
-}
-
 // ---------- Emporia (Mallcomm / Let's Join) ----------
 
 // Enkel cookie-jar per domän.
@@ -695,10 +604,12 @@ export default async function handler(req, res) {
       });
     }
 
-    // ----- action=jernhusen: logga in och rapportera till Jernhusen (eller dry-run) -----
+    // ----- action=jernhusen: rapportera till Jernhusen via headless Chromium -----
+    //   &dry=1     → bara planen (ingen inloggning)
+    //   &dry=form  → logga in, fyll i och verifiera formuläret, men skicka inte
     if (req.query.action === "jernhusen") {
-      const dry = req.query.dry === "1" || req.query.dry === "true";
-      if (dry) {
+      const dry = req.query.dry;
+      if (dry === "1" || dry === "true") {
         return res.status(200).json({
           dryRun: true,
           month: report.month,
@@ -706,15 +617,26 @@ export default async function handler(req, res) {
           reports: planJernhusen(report),
         });
       }
-      const out = await jernhusenWebReport(report);
-      if (out.error) return res.status(500).json({ error: out.error });
-      const isOk = (r) => r.status === "sent" || r.status === "already_reported";
+      const formDry = dry === "form";
+      const businesses = planJernhusen(report).map((p) => ({
+        ...JERNHUSEN_BUSINESSES.find((b) => b.name === p.name),
+        exVat: p.MonthlyTurnOverExVat,
+        receipts: p.NumberOfReceipts,
+      }));
+      const out = await jernhusenBrowserReport({
+        month: report.month, businesses, dry: formDry,
+        user: process.env.JERNHUSEN_USER, pass: process.env.JERNHUSEN_PASS,
+      });
+      if (out.error) return res.status(500).json({ month: report.month, error: out.error });
+      const isOk = (r) => r.status === "sent" || r.status === "already_reported" || r.status === "dry";
       const allOk = out.results.length > 0 && out.results.every(isOk);
       return res.status(allOk ? 200 : 207).json({
         month: report.month,
+        dryRun: formDry || undefined,
         sent: out.results.filter((r) => r.status === "sent").length,
         alreadyReported: out.results.filter((r) => r.status === "already_reported").length,
         failed: out.results.filter((r) => !isOk(r)).length,
+        missingBefore: out.missingBefore,
         results: out.results,
       });
     }

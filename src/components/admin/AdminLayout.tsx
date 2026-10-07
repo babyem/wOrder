@@ -80,8 +80,8 @@ export default function AdminLayout() {
         </nav>
 
         <QoplaSalesWidget />
-        <SendLogWidget />
         <RosterWidget />
+        <SendLogWidget />
 
         <div className="flex-1" />
       </aside>
@@ -182,8 +182,8 @@ export default function AdminLayout() {
                 </nav>
 
                 <QoplaSalesWidget />
-                <SendLogWidget />
                 <RosterWidget />
+                <SendLogWidget />
 
                 <div className="flex-1" />
               </motion.div>

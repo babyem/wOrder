@@ -3,7 +3,7 @@ Bygger genvägen "wOrder SMS" (Genvägar på iPhone/Mac) och signerar den så at
 den kan importeras: public/wOrder SMS.shortcut. Se docs/sms-genvag.md.
 
 Genvägen tar JSON {id, phone, body, confirm} från SmsLink, skickar SMS:et
-utan att visa Meddelanden och POST:ar {id} till confirm (/api/sms-sent).
+utan att visa Meddelanden och POST:ar {id} till confirm (RPC:n sms_confirm).
 
 Kör på en Mac (kräver `shortcuts sign`, inloggad på iCloud):
     python3 scripts/build-sms-shortcut.py

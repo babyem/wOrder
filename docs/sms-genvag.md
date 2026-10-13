@@ -48,7 +48,7 @@ så gör det på varje iPhone/Mac där genvägen finns.
 
 ## 3. Första körningen
 
-Första gången frågar Genvägar om genvägen får skicka meddelanden och kontakta `worder.woso.se`
+Första gången frågar Genvägar om genvägen får skicka meddelanden och kontakta `cjrzeoswkzenwlftsahp.supabase.co`
 → välj **Tillåt alltid**. På Macen frågar webbläsaren om den får öppna Genvägar → **Tillåt**.
 
 ## Så ser det ut

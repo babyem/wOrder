@@ -23,7 +23,7 @@ const BTN_NO = 'px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-
 
 // Två lägen:
 // - Genväg (påslaget per enhet i Settings): kör genvägen "wOrder SMS" som skickar
-//   SMS:et och bekräftar via /api/sms-sent. Vi pollar loggraden och markerar
+//   SMS:et och bekräftar via RPC:n sms_confirm. Vi pollar loggraden och markerar
 //   leverantören klar när den blivit 'sent'.
 // - Annars: öppnar SMS-appen och frågar "Skickat?". Leverantören markeras inte
 //   klar förrän användaren bekräftat, så ett avbrutet SMS lämnar inte tavlan grön.

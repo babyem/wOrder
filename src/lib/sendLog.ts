@@ -31,7 +31,7 @@ export interface SendLogInput {
   body: string
   /** Felmeddelande — sätts bara när utskicket misslyckades */
   error?: string
-  /** Rad-id skapat i appen — SMS-genvägen bekräftar raden med det via /api/sms-sent */
+  /** Rad-id skapat i appen — SMS-genvägen bekräftar raden med det via RPC:n sms_confirm */
   id?: string
   /** Skriv raden som 'pending' (SMS-genvägen startad, inte bekräftad än) */
   pending?: boolean

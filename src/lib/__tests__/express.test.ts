@@ -13,8 +13,8 @@ describe('buildExpressData', () => {
       order({ locationName: 'Woso Triangeln', items: [item({ product: tofu, quantity: 3 })] }),
     ])
     expect([...data.itemsByVendor.keys()].sort()).toEqual(['Kho', 'Tingstad'])
-    expect(data.itemsByVendor.get('Kho')!.get('Woso Emporia')).toEqual([{ product: 'Tofu', quantity: 2, unit: 'låda', artnr: undefined }])
-    expect(data.itemsByVendor.get('Kho')!.get('Woso Triangeln')).toEqual([{ product: 'Tofu', quantity: 3, unit: 'låda', artnr: undefined }])
+    expect(data.itemsByVendor.get('Kho')!.get('Woso Emporia')).toEqual([{ product: 'Tofu', quantity: 2, unit: 'låda', artnr: undefined, product_id: tofu.id }])
+    expect(data.itemsByVendor.get('Kho')!.get('Woso Triangeln')).toEqual([{ product: 'Tofu', quantity: 3, unit: 'låda', artnr: undefined, product_id: tofu.id }])
     expect(data.itemsByVendor.get('Tingstad')!.get('Woso Emporia')![0].artnr).toBe('12345')
   })
 
@@ -23,7 +23,7 @@ describe('buildExpressData', () => {
       order({ locationName: 'Chao', items: [item({ product: tofu, quantity: 2 })] }),
       order({ locationName: 'Chao', items: [item({ product: tofu, quantity: 5 })] }),
     ])
-    expect(data.itemsByVendor.get('Kho')!.get('Chao')).toEqual([{ product: 'Tofu', quantity: 7, unit: 'låda', artnr: undefined }])
+    expect(data.itemsByVendor.get('Kho')!.get('Chao')).toEqual([{ product: 'Tofu', quantity: 7, unit: 'låda', artnr: undefined, product_id: tofu.id }])
     expect(expressOrderCount(data, 'Kho')).toBe(2)
   })
 
@@ -45,7 +45,7 @@ describe('buildExpressData', () => {
         item({ product: soja, quantity: 1, unit_override: '' }),
       ] }),
     ])
-    expect(data.itemsByVendor.get('Tingstad')!.get('Woso Emporia')).toEqual([{ product: 'Tofu', quantity: 1, unit: 'pall', artnr: undefined }])
+    expect(data.itemsByVendor.get('Tingstad')!.get('Woso Emporia')).toEqual([{ product: 'Tofu', quantity: 1, unit: 'pall', artnr: undefined, product_id: tofu.id }])
     expect(data.itemsByVendor.get('Kho')!.get('Woso Emporia')![0].unit).toBe('st')
   })
 

@@ -8,6 +8,8 @@
  *   BACK:{orderId}        -- ga tillbaka till leverantorslistan for ordern
  */
 
+import { splitLines } from '../src/lib/vendorSplit.js'
+
 const SUPABASE_URL = process.env.SUPABASE_URL
 const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY
 const BOT_TOKEN    = process.env.TELEGRAM_TOKEN
@@ -57,23 +59,34 @@ const answerCb = (id, text = '') =>
 const editMsg = (chat_id, message_id, text, reply_markup) =>
   tg('editMessageText', { chat_id, message_id, text, parse_mode: 'HTML', reply_markup })
 
+const itemLine = i => `- ${i.product?.name} - ${i.quantity} ${i.unit_override || i.product?.unit || ''}`
+
+// Leverantörens delningsregler (vendors.split_rules): utan regel bara raderna,
+// annars ett block per mottagare ("Letsgrab:" ... "Woso Triangeln:" ...).
+function splitItemText(rules, locationName, items) {
+  const blocks = splitLines(rules, locationName, items)
+  if (blocks.length === 1 && blocks[0].label === locationName) return blocks[0].lines.map(itemLine).join('\n')
+  return blocks.map(b => `${b.label}:\n${b.lines.map(itemLine).join('\n')}`).join('\n\n')
+}
+
 // Builds and shows the vendor list for an order (used by handleLocationPress and handleBack)
 async function showVendorList(orderId, locationName, chatId, msgId, headerText) {
-  const [orders, items] = await Promise.all([
-    orderId ? Promise.resolve(null) : Promise.resolve(null),
-    db(`order_items?select=quantity,unit_override,vendor_override,product:products(name,unit,vendor)&order_id=eq.${orderId}&notify_excluded=eq.false`),
+  const [items, vendors] = await Promise.all([
+    db(`order_items?select=product_id,quantity,unit_override,vendor_override,product:products(name,unit,vendor)&order_id=eq.${orderId}&notify_excluded=eq.false`),
+    db(`vendors?select=name,split_rules`),
   ])
+  const rulesByVendor = Object.fromEntries(vendors.map(v => [v.name, v.split_rules]))
 
   const byVendor = {}
   for (const item of items) {
     const v = item.vendor_override || item.product?.vendor || 'Okand'
     if (!byVendor[v]) byVendor[v] = []
-    byVendor[v].push(`- ${item.product?.name} - ${item.quantity} ${item.unit_override || item.product?.unit || ''}`)
+    byVendor[v].push(item)
   }
 
   let text = `<b>${locationName}</b>\n\n`
-  for (const [v, lines] of Object.entries(byVendor)) {
-    text += `<b>${v}:</b>\n${lines.join('\n')}\n\n`
+  for (const [v, vItems] of Object.entries(byVendor)) {
+    text += `<b>${v}:</b>\n${splitItemText(rulesByVendor[v], locationName, vItems)}\n\n`
   }
   if (headerText) text += headerText + '\n\n'
   text += 'Valj leverantor att notifiera:'
@@ -113,8 +126,8 @@ async function handleVendorPress(orderId, vendorName, chatId, msgId, cbId) {
 
   const [orders, vendorList, allItems] = await Promise.all([
     db(`orders?id=eq.${orderId}&select=id,locations(name)&limit=1`),
-    db(`vendors?name=eq.${encodeURIComponent(vendorName)}&select=name,email,phone`),
-    db(`order_items?select=quantity,unit_override,vendor_override,product:products(name,unit,vendor)&order_id=eq.${orderId}&notify_excluded=eq.false`),
+    db(`vendors?name=eq.${encodeURIComponent(vendorName)}&select=name,email,phone,split_rules`),
+    db(`order_items?select=product_id,quantity,unit_override,vendor_override,product:products(name,unit,vendor)&order_id=eq.${orderId}&notify_excluded=eq.false`),
   ])
 
   const order  = orders[0]
@@ -128,12 +141,10 @@ async function handleVendorPress(orderId, vendorName, chatId, msgId, cbId) {
   }
 
   const vendorItems = allItems.filter(i => (i.vendor_override || i.product?.vendor) === vendorName)
-  const itemLines   = vendorItems.map(i =>
-    `- ${i.product?.name} - ${i.quantity} ${i.unit_override || i.product?.unit || ''}`
-  )
   const locationName = order.locations?.name || 'Woso Group'
+  const itemText = splitItemText(vendor.split_rules, locationName, vendorItems)
 
-  const msgText = `<b>${vendorName}</b> - ${locationName}\n\n${itemLines.join('\n')}\n\nHur vill du notifiera?`
+  const msgText = `<b>${vendorName}</b> - ${locationName}\n\n${itemText}\n\nHur vill du notifiera?`
 
   const row = []
   if (vendor.email) {
@@ -141,7 +152,7 @@ async function handleVendorPress(orderId, vendorName, chatId, msgId, cbId) {
   }
   if (vendor.phone) {
     const phone = vendor.phone.replace(/[\s\-()+ ]/g, '')
-    const smsBody = `Hej ${vendorName}, bestallning fran ${locationName}:\n${itemLines.join('\n')}\nMvh Woso`
+    const smsBody = `Hej ${vendorName}, bestallning fran ${locationName}:\n${itemText}\nMvh Woso`
     // /sms.html redirects https -> sms: scheme (Telegram blocks sms:/tel: in button URLs)
     const redirectUrl = `https://worder.woso.se/sms.html?to=%2B${phone}&body=${encodeURIComponent(smsBody)}`
     row.push({ text: `SMS till ${vendor.phone}`, url: redirectUrl })
@@ -158,7 +169,7 @@ async function handleVendorPress(orderId, vendorName, chatId, msgId, cbId) {
 async function handleSendEmail(orderId, vendorName, chatId, msgId, cbId) {
   const [orders, vendorList] = await Promise.all([
     db(`orders?id=eq.${orderId}&select=id,locations(name)&limit=1`),
-    db(`vendors?name=eq.${encodeURIComponent(vendorName)}&select=name,email`),
+    db(`vendors?name=eq.${encodeURIComponent(vendorName)}&select=name,email,split_rules`),
   ])
 
   const order  = orders[0]
@@ -167,20 +178,21 @@ async function handleSendEmail(orderId, vendorName, chatId, msgId, cbId) {
   if (!vendor?.email) { await answerCb(cbId, 'Ingen email registrerad.'); return }
 
   const items = await db(
-    `order_items?select=quantity,unit_override,vendor_override,product:products(name,unit,vendor)&order_id=eq.${orderId}&notify_excluded=eq.false`
+    `order_items?select=product_id,quantity,unit_override,vendor_override,product:products(name,unit,vendor)&order_id=eq.${orderId}&notify_excluded=eq.false`
   )
   const vendorItems = items.filter(i => (i.vendor_override || i.product?.vendor) === vendorName)
-  const itemLines   = vendorItems.map(i =>
-    `- ${i.product?.name} - ${i.quantity} ${i.unit_override || i.product?.unit || ''}`
-  )
   const locationName = order?.locations?.name || 'Woso Group'
+  const blocks = splitLines(vendor.split_rules, locationName, vendorItems)
+  const isSplit = !(blocks.length === 1 && blocks[0].label === locationName)
 
-  const plainText = `Hej ${vendorName},\n\nVi onskar bestalla foljande:\n${itemLines.join('\n')}\n\nVanliga halsningar,\n${locationName}`
-  const htmlBody  = `<h2>Bestallning</h2><p>Hej ${vendorName},</p><p>Vi onskar bestalla foljande:</p><ul>` +
-    vendorItems.map(i =>
-      `<li>${i.product?.name} - ${i.quantity} ${i.unit_override || i.product?.unit || ''}</li>`
+  const plainText = `Hej ${vendorName},\n\nVi onskar bestalla foljande:\n${splitItemText(vendor.split_rules, locationName, vendorItems)}\n\nVanliga halsningar,\n${locationName}`
+  const htmlBody  = `<h2>Bestallning</h2><p>Hej ${vendorName},</p><p>Vi onskar bestalla foljande:</p>` +
+    blocks.map(b =>
+      (isSplit ? `<p><b>${b.label}</b></p>` : '') + '<ul>' +
+      b.lines.map(i => `<li>${i.product?.name} - ${i.quantity} ${i.unit_override || i.product?.unit || ''}</li>`).join('') +
+      '</ul>'
     ).join('') +
-    `</ul><p>Vanliga halsningar,<br>${locationName}</p>`
+    `<p>Vanliga halsningar,<br>${locationName}</p>`
 
   const emailRes = await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
     method: 'POST',

@@ -16,6 +16,7 @@ import toast from 'react-hot-toast'
 import type { OrderWithDetails } from '../../types'
 import { vendorContacts } from '../../lib/vendorContacts'
 import { buildExpressData, expressOrderCount, mergeExpressLocations, type VendorItem } from '../../lib/express'
+import { splitLocations } from '../../lib/vendorSplit'
 import type { Location } from '../../types/database'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -233,7 +234,7 @@ export default function OrdersPage() {
         if (!existing.unit && unit) existing.unit = unit
       } else {
         const artnr = item.product?.tingstad_id || item.product?.tingstad_alt_id || undefined
-        list.push({ product: displayName, quantity: item.quantity, unit, artnr })
+        list.push({ product: displayName, quantity: item.quantity, unit, artnr, product_id: item.product_id })
       }
       locMap.set(loc, list)
     }
@@ -291,9 +292,10 @@ export default function OrdersPage() {
         contacts: vendorContacts(vendorMap[name]),
         // Antal ordercard (inte artiklar) som går med i utskicket
         orderCount: expressOrderCount(expressData, name),
-        locations: [...locMap.entries()]
+        // Delning (t.ex. Letsgrab ur Woso Triangeln) efter sorteringen, så att blocket hamnar före sin butik
+        locations: splitLocations(vendorMap[name]?.split_rules, [...locMap.entries()]
           .map(([loc, items]) => ({ loc, items }))
-          .sort((a, b) => (locationRank[a.loc] ?? 999) - (locationRank[b.loc] ?? 999)),
+          .sort((a, b) => (locationRank[a.loc] ?? 999) - (locationRank[b.loc] ?? 999))),
         // Visas bara i modalen som info till backoffice — går inte med i meddelandet
         noOrderLocations: [...(expressData.noOrderByVendor.get(name) ?? [])]
           .sort((a, b) => (locationRank[a] ?? 999) - (locationRank[b] ?? 999)),
@@ -309,7 +311,7 @@ export default function OrdersPage() {
   const batchNotifiableVendors = Array.from(vendorLocItems.entries())
     .map(([name, locMap]) => {
       const meta = vendorMap[name]
-      const locations = Array.from(locMap.entries()).map(([loc, items]) => ({ loc, items }))
+      const locations = splitLocations(meta?.split_rules, Array.from(locMap.entries()).map(([loc, items]) => ({ loc, items })))
       return { name, contacts: vendorContacts(meta), locations }
     })
     .filter(v => v.contacts.length > 0)

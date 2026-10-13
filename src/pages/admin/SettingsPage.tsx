@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Trash2, MapPin, Users, Pencil, Tag, Layers, Ruler, ChevronRight, Link2, GripVertical, Mail, Phone, X, Check } from 'lucide-react'
+import { Plus, Trash2, MapPin, Users, Pencil, Tag, Layers, Ruler, ChevronRight, Link2, GripVertical, Mail, Phone, X, Check, Split } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent,
 } from '@dnd-kit/core'
@@ -8,6 +8,8 @@ import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } 
 import { CSS } from '@dnd-kit/utilities'
 import { toSlug } from '../../lib/slug'
 import { vendorContacts, newContactId, type VendorContact, type ContactType } from '../../lib/vendorContacts'
+import type { SplitRule } from '../../lib/vendorSplit'
+import { useProducts } from '../../hooks/useProducts'
 import {
   useAdminLocations, useAdminEmployees,
   useCreateLocation, useCreateEmployee, useUpdateEmployee, useDeleteEmployee, useDeleteLocation,
@@ -191,8 +193,108 @@ function ContactForm({ type, initial, onSave, onCancel }: {
   )
 }
 
-function SortableVendorRow({ id, name, contacts, hide_unit, onDelete }: {
-  id: string; name: string; contacts: VendorContact[]; hide_unit?: boolean; onDelete: () => void
+// Delningsregler: varor i en butiks order som listas under en annan mottagare
+// i samma meddelande (t.ex. Easy Asia: Letsgrab ur Woso Triangeln). Logik i src/lib/vendorSplit.js.
+function SplitRulesModal({ open, onClose, vendorId, vendorName, rules }: {
+  open: boolean; onClose: () => void; vendorId: string; vendorName: string; rules: SplitRule[]
+}) {
+  const updateVendor = useUpdateVendor()
+  const { data: locations } = useAdminLocations()
+  const { data: allProducts } = useProducts()
+  const [draft, setDraft] = useState<SplitRule[]>(rules)
+  const [prevOpen, setPrevOpen] = useState(open)
+  if (open !== prevOpen) { setPrevOpen(open); if (open) setDraft(rules) }
+
+  const products = (allProducts ?? []).filter(p => p.vendor === vendorName)
+  const productLabel = (id: string) => {
+    const p = products.find(x => x.id === id) ?? allProducts?.find(x => x.id === id)
+    return p ? (p.vendor_name ? `${p.vendor_name} (${p.name})` : p.name) : 'Okänd produkt'
+  }
+  const patch = (idx: number, next: Partial<SplitRule>) =>
+    setDraft(d => d.map((r, i) => i === idx ? { ...r, ...next } : r))
+
+  const save = async () => {
+    const clean = draft
+      .map(r => ({ ...r, label: r.label.trim() }))
+      .filter(r => r.location && r.label && r.items.length)
+    try {
+      await updateVendor.mutateAsync({ id: vendorId, split_rules: clean })
+      toast.success('Delning sparad')
+      onClose()
+    } catch {
+      toast.error('Kunde inte spara — är migration 038 körd?')
+    }
+  }
+
+  const fieldCls = 'text-sm px-2 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500'
+
+  return (
+    <Modal open={open} onClose={onClose} title={`Dela upp — ${vendorName}`}>
+      <div className="space-y-4">
+        <p className="text-xs text-slate-500 dark:text-zinc-400">
+          Valda varor från butikens order listas under en egen rubrik överst i samma meddelande. Hälften avrundas uppåt till rubriken.
+        </p>
+        {draft.map((rule, idx) => (
+          <div key={idx} className="rounded-xl border border-slate-200 dark:border-zinc-800 p-3 space-y-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <select value={rule.location} onChange={e => patch(idx, { location: e.target.value })} className={fieldCls}>
+                <option value="">Butik…</option>
+                {(locations ?? []).map(l => <option key={l.id} value={l.name}>{l.name}</option>)}
+              </select>
+              <span className="text-xs text-slate-400 dark:text-zinc-500">→ rubrik</span>
+              <input value={rule.label} onChange={e => patch(idx, { label: e.target.value })} placeholder="t.ex. Letsgrab" className={`${fieldCls} w-32`} />
+              <button onClick={() => setDraft(d => d.filter((_, i) => i !== idx))} title="Ta bort regel"
+                className="ml-auto p-1 rounded-lg text-slate-300 dark:text-zinc-600 hover:text-red-500 dark:hover:text-red-400 transition-colors">
+                <Trash2 size={14} />
+              </button>
+            </div>
+            <div className="space-y-1">
+              {rule.items.map(it => (
+                <div key={it.product_id} className="flex items-center gap-2 text-sm">
+                  <span className="flex-1 min-w-0 truncate text-slate-700 dark:text-zinc-200">{productLabel(it.product_id)}</span>
+                  <div className="flex rounded-lg border border-slate-200 dark:border-zinc-800 p-0.5 text-xs">
+                    {[{ v: 1, l: 'Allt' }, { v: 0.5, l: 'Hälften' }].map(o => (
+                      <button key={o.v}
+                        onClick={() => patch(idx, { items: rule.items.map(x => x.product_id === it.product_id ? { ...x, share: o.v } : x) })}
+                        className={`px-2 py-0.5 rounded-md transition-colors ${it.share === o.v ? 'bg-indigo-600 text-white' : 'text-slate-500 dark:text-zinc-400'}`}>
+                        {o.l}
+                      </button>
+                    ))}
+                  </div>
+                  <button onClick={() => patch(idx, { items: rule.items.filter(x => x.product_id !== it.product_id) })} title="Ta bort"
+                    className="p-1 text-slate-300 dark:text-zinc-600 hover:text-red-500 dark:hover:text-red-400 transition-colors">
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+              <select value="" onChange={e => e.target.value && patch(idx, { items: [...rule.items, { product_id: e.target.value, share: 1 }] })}
+                className={`${fieldCls} w-full text-slate-500 dark:text-zinc-400`}>
+                <option value="">+ Lägg till produkt…</option>
+                {products.filter(p => !rule.items.some(x => x.product_id === p.id)).map(p => (
+                  <option key={p.id} value={p.id}>{p.vendor_name ? `${p.vendor_name} (${p.name})` : p.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        ))}
+        <button onClick={() => setDraft(d => [...d, { location: '', label: '', items: [] }])}
+          className="flex items-center gap-1 text-sm text-indigo-600 dark:text-indigo-400 hover:underline">
+          <Plus size={14} /> Ny regel
+        </button>
+        <div className="flex justify-end gap-2 pt-2">
+          <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800">Avbryt</button>
+          <button onClick={save} disabled={updateVendor.isPending}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-40">
+            Spara
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+function SortableVendorRow({ id, name, contacts, hide_unit, split_rules, onDelete }: {
+  id: string; name: string; contacts: VendorContact[]; hide_unit?: boolean; split_rules: SplitRule[]; onDelete: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }
@@ -203,6 +305,7 @@ function SortableVendorRow({ id, name, contacts, hide_unit, onDelete }: {
   const [nameVal, setNameVal] = useState(name)
   const [editing, setEditing] = useState<string | null>(null)   // kontakt-id som redigeras
   const [adding, setAdding] = useState<ContactType | null>(null)
+  const [splitOpen, setSplitOpen] = useState(false)
 
   const saveName = () => {
     const trimmed = nameVal.trim()
@@ -306,6 +409,16 @@ function SortableVendorRow({ id, name, contacts, hide_unit, onDelete }: {
             <span className="tabular-nums">#</span>
             {hide_unit ? 'Antal only' : 'Antal only'}
           </button>
+          {/* Delningsregler */}
+          <button
+            onClick={() => setSplitOpen(true)}
+            title="Dela upp en butiks varor under en egen rubrik i meddelandet"
+            className={`flex items-center gap-1 text-xs transition-colors rounded px-1 ${split_rules.length ? 'text-indigo-600 dark:text-indigo-400 font-medium' : 'text-slate-300 dark:text-zinc-600 hover:text-slate-500 dark:hover:text-zinc-400'}`}
+          >
+            <Split size={10} />
+            {split_rules.length ? split_rules.map(r => r.label).join(', ') : 'Dela upp'}
+          </button>
+          <SplitRulesModal open={splitOpen} onClose={() => setSplitOpen(false)} vendorId={id} vendorName={name} rules={split_rules} />
         </div>
       </div>
       <button
@@ -383,6 +496,7 @@ function VendorSection() {
                       name={v.name}
                       contacts={vendorContacts(v)}
                       hide_unit={v.hide_unit}
+                      split_rules={v.split_rules ?? []}
                       onDelete={async () => {
                         try { await deleteVendor.mutateAsync(v.id) }
                         catch { toast.error('Delete failed — vendor may be in use') }

@@ -3,7 +3,8 @@ import type { OrderWithDetails } from '../types'
 // Ren logik bakom Express-knapparna i backoffice. Ingen React här — testas i
 // src/lib/__tests__/express.test.ts.
 
-export interface VendorItem { product: string; quantity: number; unit: string; artnr?: string }
+// product_id behövs för leverantörernas delningsregler (src/lib/vendorSplit.js)
+export interface VendorItem { product: string; quantity: number; unit: string; artnr?: string; product_id?: string }
 export type LocationItems = Map<string, VendorItem[]> // butik -> varor
 
 export interface ExpressData {
@@ -67,6 +68,7 @@ export function buildExpressData(orders: OrderWithDetails[]): ExpressData {
         // || (inte ??) så tom unit_override faller tillbaka på produktens enhet
         unit: item.unit_override || item.product?.unit || '',
         artnr: item.product?.tingstad_id || item.product?.tingstad_alt_id || undefined,
+        product_id: item.product_id,
       })
       locMap.set(loc, list)
       trackOrder(v, order.id)

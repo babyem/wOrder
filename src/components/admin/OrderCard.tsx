@@ -7,6 +7,7 @@ import { useUpdateOrderStatus, useDeleteOrder, useRestoreOrder, useUpdateOrderIt
 import { useVendors, useUnits } from '../../hooks/useMetadata'
 import VendorContactButtons from './VendorContactButtons'
 import { vendorContacts } from '../../lib/vendorContacts'
+import { formatSplitText } from '../../lib/vendorSplit'
 import { supabase } from '../../lib/supabase'
 import toast from 'react-hot-toast'
 import { confirmDialog } from '../../store/confirmStore'
@@ -138,13 +139,11 @@ const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, 
   })
 
   const copyVendor = (vendorName: string) => {
-    const lines = order.items
-      .filter(i => effectiveVendor(i) === vendorName && !isExcluded(i.id))
-      .map(i => {
-        const unit = effectiveUnit(i)
-        return `${i.product?.name ?? '?'}: ${i.quantity}${unit ? ` ${unit}` : ''}`
-      })
-    const text = `${order.location?.name ?? ''}\n\n${lines.join('\n')}`
+    const items = order.items.filter(i => effectiveVendor(i) === vendorName && !isExcluded(i.id))
+    const text = formatSplitText(vendorMap[vendorName]?.split_rules, order.location?.name ?? '', items, i => {
+      const unit = effectiveUnit(i)
+      return `${i.product?.name ?? '?'}: ${i.quantity}${unit ? ` ${unit}` : ''}`
+    })
     navigator.clipboard.writeText(text)
       .then(() => toast.success(`${vendorName} kopierad`))
       .catch(() => toast.error('Kunde inte kopiera'))
@@ -156,14 +155,13 @@ const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, 
     )
     const hideUnit = vendorMap[vendorName]?.hide_unit ?? false
     const isTingstad = vendorName.toLowerCase().includes('tingstad')
-    const lines = items.map(i => {
+    return formatSplitText(vendorMap[vendorName]?.split_rules, order.location?.name ?? '', items, i => {
       const unit = hideUnit ? '' : ` ${effectiveUnit(i)}`
       const name = i.product?.vendor_name ?? i.product?.name ?? '?'
       const artnr = i.product?.tingstad_id || i.product?.tingstad_alt_id
       const prefix = isTingstad && artnr ? `${artnr} — ` : ''
       return `${prefix}${name}: ${i.quantity}${unit}`
     })
-    return `${order.location?.name ?? ''}\n\n${lines.join('\n')}`
   }
 
   const toggleExclude = (item: typeof order.items[0]) => {

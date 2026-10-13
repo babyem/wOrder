@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Mail, MessageSquare, ScrollText, CheckCircle2, XCircle, ChevronRight } from 'lucide-react'
+import { Mail, MessageSquare, ScrollText, CheckCircle2, XCircle, ChevronRight, Clock } from 'lucide-react'
 import Modal from '../ui/Modal'
 import Spinner from '../ui/Spinner'
 import { useSendLog } from '../../hooks/useSendLog'
@@ -51,7 +51,9 @@ function StatusIcons({ e, size = 11 }: { e: SendLogEntry; size?: number }) {
       <Icon size={size} className={`shrink-0 ${e.channel === 'email' ? 'text-indigo-500 dark:text-indigo-400' : 'text-emerald-500 dark:text-emerald-400'}`} />
       {e.status === 'failed'
         ? <XCircle size={size} className="shrink-0 text-red-500 dark:text-red-400" aria-label="Misslyckades" />
-        : <CheckCircle2 size={size} className="shrink-0 text-emerald-500 dark:text-emerald-400" aria-label="Skickat" />}
+        : e.status === 'pending'
+          ? <Clock size={size} className="shrink-0 text-slate-400 dark:text-zinc-500" aria-label="Inte bekräftat" />
+          : <CheckCircle2 size={size} className="shrink-0 text-emerald-500 dark:text-emerald-400" aria-label="Skickat" />}
     </>
   )
 }
@@ -194,13 +196,15 @@ function SendLogDetailModal({ entry, onClose }: { entry: SendLogEntry | null; on
       {entry && (
         <div className="space-y-4 text-sm">
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs">
-            <dt className="text-slate-400 dark:text-zinc-500">{entry.status === 'failed' ? 'Försök' : 'Skickat'}</dt>
+            <dt className="text-slate-400 dark:text-zinc-500">{entry.status === 'sent' ? 'Skickat' : 'Försök'}</dt>
             <dd className="text-slate-700 dark:text-zinc-200">{formatFull(entry.sent_at)}</dd>
             <dt className="text-slate-400 dark:text-zinc-500">Status</dt>
-            <dd className={`flex items-center gap-1 font-medium ${entry.status === 'failed' ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+            <dd className={`flex items-center gap-1 font-medium ${entry.status === 'failed' ? 'text-red-600 dark:text-red-400' : entry.status === 'pending' ? 'text-slate-500 dark:text-zinc-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
               {entry.status === 'failed'
                 ? <><XCircle size={12} /> Misslyckades</>
-                : <><CheckCircle2 size={12} /> Skickat</>}
+                : entry.status === 'pending'
+                  ? <><Clock size={12} /> Inte bekräftat av genvägen</>
+                  : <><CheckCircle2 size={12} /> Skickat</>}
             </dd>
             {entry.error && (
               <>

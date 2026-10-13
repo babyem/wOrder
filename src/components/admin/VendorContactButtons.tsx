@@ -12,7 +12,7 @@ interface Props {
   body: string
   subject: string
   bccSubject?: string
-  /** Körs efter lyckat mail eller när användaren bekräftat att SMS:et skickades */
+  /** Körs efter lyckat mail eller när SMS:et bekräftats (av genvägen eller användaren) */
   onSent: () => void | Promise<void>
   /** 'card' = textknappar som fyller raden (OrderCard), 'modal' = ikonknappar (batch/express) */
   variant: 'card' | 'modal'
@@ -49,7 +49,7 @@ export default function VendorContactButtons({ vendorName, contacts, body: order
       : null
   }
 
-  // Loggen skrivs efter lyckat mail / bekräftat SMS, innan leverantören markeras klar.
+  // Loggen skrivs efter lyckat mail, innan leverantören markeras klar. SMS loggas i SmsLink.
   const sent = async (c: VendorContact) => {
     await logSend({ vendorName, contact: c, locations, orderIds, subject, body })
     await onSent()
@@ -102,7 +102,9 @@ export default function VendorContactButtons({ vendorName, contacts, body: order
           label={contactLabel(c, contacts)}
           title={c.value}
           showIcon={variant === 'modal'}
-          onSent={() => { void sent(c) }}
+          // SmsLink skriver loggraden själv (pending via genvägen eller efter "Ja")
+          log={{ vendorName, contact: c, locations, orderIds }}
+          onSent={() => { void onSent() }}
           className={styles.sms}
         />
       ))}

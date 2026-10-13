@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Trash2, MapPin, Users, Pencil, Tag, Layers, Ruler, ChevronRight, Link2, GripVertical, Mail, Phone, X, Check, Split } from 'lucide-react'
+import { Plus, Trash2, MapPin, Users, Pencil, Tag, Layers, Ruler, ChevronRight, Link2, GripVertical, Mail, Phone, X, Check, Split, MessageSquare } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent,
 } from '@dnd-kit/core'
@@ -9,6 +9,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { toSlug } from '../../lib/slug'
 import { vendorContacts, newContactId, type VendorContact, type ContactType } from '../../lib/vendorContacts'
 import type { SplitRule } from '../../lib/vendorSplit'
+import { SMS_SHORTCUT_NAME, smsShortcutEnabled, setSmsShortcutEnabled } from '../../lib/smsShortcut'
 import { useProducts } from '../../hooks/useProducts'
 import {
   useAdminLocations, useAdminEmployees,
@@ -514,6 +515,34 @@ function VendorSection() {
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
+// Per enhet: SMS-knappen kör genvägen "wOrder SMS" i stället för att öppna Meddelanden.
+// Bara meningsfullt på iPhone/Mac där genvägen är installerad.
+function SmsShortcutSection() {
+  const [on, setOn] = useState(smsShortcutEnabled)
+  const toggle = () => { setSmsShortcutEnabled(!on); setOn(!on) }
+
+  return (
+    <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-sm">
+      <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-50 dark:border-zinc-800">
+        <span className="text-slate-400 dark:text-zinc-500"><MessageSquare size={18} /></span>
+        <h2 className="font-semibold text-slate-900 dark:text-zinc-100">SMS via genväg</h2>
+        <span className="text-xs text-slate-400 dark:text-zinc-500">den här enheten</span>
+      </div>
+      <div className="flex items-start gap-3 px-5 py-4">
+        <button onClick={toggle} role="switch" aria-checked={on} aria-label="SMS via genväg"
+          className={`relative shrink-0 w-10 h-6 rounded-full transition-colors ${on ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-zinc-800'}`}>
+          <span className={`absolute top-1 w-4 h-4 bg-white dark:bg-zinc-900 rounded-full shadow transition-transform ${on ? 'translate-x-5' : 'translate-x-1'}`} />
+        </button>
+        <p className="text-sm text-slate-500 dark:text-zinc-400">
+          SMS-knappen kör genvägen <span className="font-medium text-slate-700 dark:text-zinc-200">{SMS_SHORTCUT_NAME}</span>, som
+          skickar SMS:et direkt och bekräftar till wOrder — ingen &quot;Skickat?&quot;-fråga. Slå bara på här om genvägen är
+          installerad på den här iPhonen/Macen.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export default function SettingsPage() {
   const { data: locations, isLoading: loadingLocs } = useAdminLocations()
   const { data: employees, isLoading: loadingEmps } = useAdminEmployees()
@@ -652,6 +681,9 @@ export default function SettingsPage() {
 
       {/* Vendors */}
       <VendorSection />
+
+      {/* SMS via genväg (per enhet) */}
+      <SmsShortcutSection />
 
       {/* Categories */}
       <MetaSection icon={<Layers size={18} />} title="Categories" items={categories} loading={loadingCats}

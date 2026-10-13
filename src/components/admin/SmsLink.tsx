@@ -1,10 +1,15 @@
-import { useState } from 'react'
-import { Phone } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Loader2, Phone } from 'lucide-react'
+import toast from 'react-hot-toast'
+import { logSend, sendLogStatus, settlePendingSms, type SendLogInput } from '../../lib/sendLog'
+import { smsShortcutEnabled, smsShortcutUrl } from '../../lib/smsShortcut'
 
 interface Props {
   phone: string
   body: string
-  /** Körs först när användaren bekräftat att SMS:et faktiskt skickades */
+  /** Loggraden för utskicket (allt utom texten) — skrivs av SmsLink själv */
+  log: Omit<SendLogInput, 'body' | 'id' | 'pending' | 'error'>
+  /** Körs först när SMS:et bevisligen skickats (genvägen bekräftat eller användaren svarat "Ja") */
   onSent: () => void
   className: string
   showIcon?: boolean
@@ -13,28 +18,108 @@ interface Props {
   title?: string
 }
 
-// Öppnar SMS-appen och frågar sedan "Skickat?" — leverantören markeras inte
-// klar förrän användaren bekräftat, så ett avbrutet SMS lämnar inte tavlan grön.
-export default function SmsLink({ phone, body, onSent, className, showIcon = true, label = 'SMS', title }: Props) {
+const BTN_YES = 'px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 transition-colors'
+const BTN_NO = 'px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 font-medium hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors'
+
+// Två lägen:
+// - Genväg (påslaget per enhet i Settings): kör genvägen "wOrder SMS" som skickar
+//   SMS:et och bekräftar via /api/sms-sent. Vi pollar loggraden och markerar
+//   leverantören klar när den blivit 'sent'.
+// - Annars: öppnar SMS-appen och frågar "Skickat?". Leverantören markeras inte
+//   klar förrän användaren bekräftat, så ett avbrutet SMS lämnar inte tavlan grön.
+export default function SmsLink({ phone, body, log, onSent, className, showIcon = true, label = 'SMS', title }: Props) {
   const [asking, setAsking] = useState(false)
+  const [waitingId, setWaitingId] = useState<string | null>(null)
+
+  // Senaste callback/namn utan att starta om pollningen vid varje render
+  const latest = useRef({ onSent, vendorName: log.vendorName })
+  latest.current = { onSent, vendorName: log.vendorName }
+
+  useEffect(() => {
+    if (!waitingId) return
+    let stopped = false
+    let inFlight = false
+    const check = async () => {
+      if (stopped || inFlight || document.visibilityState !== 'visible') return
+      inFlight = true
+      const status = await sendLogStatus(waitingId)
+      inFlight = false
+      if (stopped || status !== 'sent') return
+      stopped = true
+      setWaitingId(null)
+      toast.success(`SMS skickat till ${latest.current.vendorName}`)
+      latest.current.onSent()
+    }
+    // Kolla direkt när appen syns igen efter genvägen, och sedan varannan sekund
+    const timer = setInterval(check, 2000)
+    document.addEventListener('visibilitychange', check)
+    return () => {
+      stopped = true
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', check)
+    }
+  }, [waitingId])
+
+  const startShortcut = () => {
+    const id = crypto.randomUUID()
+    // Raden skrivs parallellt — genvägen hinner inte bekräfta innan insert är klar
+    void logSend({ ...log, body, id, pending: true })
+    setWaitingId(id)
+    window.location.href = smsShortcutUrl({ id, phone, body })
+  }
+
+  // "Klar" när genvägen skickat men bekräftelsen inte nådde fram (t.ex. utan nät)
+  const confirmManually = async (id: string) => {
+    setWaitingId(null)
+    const status = await sendLogStatus(id)
+    if (status === 'pending') await settlePendingSms(id, true)
+    else if (status === null) await logSend({ ...log, body })
+    onSent()
+  }
+
+  const cancel = (id: string) => {
+    setWaitingId(null)
+    void settlePendingSms(id, false)
+  }
+
+  if (waitingId) {
+    return (
+      <span className="flex items-center gap-1 text-xs">
+        <span className="flex items-center gap-1 text-slate-500 dark:text-zinc-400 px-1">
+          <Loader2 size={11} className="animate-spin" /> Väntar på SMS…
+        </span>
+        <button onClick={() => { void confirmManually(waitingId) }} className={BTN_YES} title="SMS:et gick iväg — markera klar">
+          Klar
+        </button>
+        <button onClick={() => cancel(waitingId)} className={BTN_NO} title="SMS:et skickades inte">
+          Avbryt
+        </button>
+      </span>
+    )
+  }
 
   if (asking) {
     return (
       <span className="flex items-center gap-1 text-xs">
         <span className="text-slate-500 dark:text-zinc-400 px-1">Skickat?</span>
         <button
-          onClick={() => { setAsking(false); onSent() }}
-          className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 transition-colors"
+          onClick={async () => { setAsking(false); await logSend({ ...log, body }); onSent() }}
+          className={BTN_YES}
         >
           Ja
         </button>
-        <button
-          onClick={() => setAsking(false)}
-          className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 font-medium hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors"
-        >
+        <button onClick={() => setAsking(false)} className={BTN_NO}>
           Nej
         </button>
       </span>
+    )
+  }
+
+  if (smsShortcutEnabled()) {
+    return (
+      <button onClick={startShortcut} className={className} title={title}>
+        {showIcon && <Phone size={11} />} {label}
+      </button>
     )
   }
 

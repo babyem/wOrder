@@ -43,8 +43,10 @@ kolla att steg 6 använder `body`/`phone` och steg 7 använder `confirm`/`id`).
 
 ## 2. Slå på i wOrder
 
-wOrder → **Settings** → **SMS via genväg** → slå på. Inställningen gäller bara den enheten,
-så gör det på varje iPhone/Mac där genvägen finns.
+wOrder → **Settings** → **SMS-utskick** → välj **Genväg**. Inställningen gäller bara den enheten,
+så gör det på varje iPhone där genvägen finns.
+
+På Mac är **Mac-hjälpare** bättre — se [sms-mac-hjalpare.md](sms-mac-hjalpare.md).
 
 ## 3. Första körningen
 

@@ -1,23 +1,9 @@
 // SMS via Genvägar: i stället för att öppna Meddelanden startar SMS-knappen
 // genvägen "wOrder SMS", som skickar SMS:et automatiskt och sedan anropar
 // RPC:n sms_confirm (migration 040) så att appen vet att det faktiskt gick
-// iväg. Inställningen är per enhet (localStorage) eftersom genvägen måste vara
-// installerad på enheten.
+// iväg. Används när SMS-läget är 'shortcut' (smsMode.ts).
 
 export const SMS_SHORTCUT_NAME = 'wOrder SMS'
-
-const STORAGE_KEY = 'sms-shortcut'
-
-export function smsShortcutEnabled(): boolean {
-  try { return localStorage.getItem(STORAGE_KEY) === '1' } catch { return false }
-}
-
-export function setSmsShortcutEnabled(on: boolean): void {
-  try {
-    if (on) localStorage.setItem(STORAGE_KEY, '1')
-    else localStorage.removeItem(STORAGE_KEY)
-  } catch { /* ignore */ }
-}
 
 /**
  * shortcuts://-länk som kör genvägen med ett JSON-objekt som indata.

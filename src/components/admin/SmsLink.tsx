@@ -2,14 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import { Loader2, Phone } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { logSend, sendLogStatus, settlePendingSms, type SendLogInput } from '../../lib/sendLog'
-import { smsShortcutEnabled, smsShortcutUrl } from '../../lib/smsShortcut'
+import { smsShortcutUrl } from '../../lib/smsShortcut'
+import { getSmsMode, macHelperSend } from '../../lib/smsMode'
 
 interface Props {
   phone: string
   body: string
   /** Loggraden för utskicket (allt utom texten) — skrivs av SmsLink själv */
   log: Omit<SendLogInput, 'body' | 'id' | 'pending' | 'error'>
-  /** Körs först när SMS:et bevisligen skickats (genvägen bekräftat eller användaren svarat "Ja") */
+  /** Körs först när SMS:et bevisligen skickats (Mac-hjälparen/genvägen bekräftat eller användaren svarat "Ja") */
   onSent: () => void
   className: string
   showIcon?: boolean
@@ -21,8 +22,10 @@ interface Props {
 const BTN_YES = 'px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 transition-colors'
 const BTN_NO = 'px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 font-medium hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors'
 
-// Två lägen:
-// - Genväg (påslaget per enhet i Settings): kör genvägen "wOrder SMS" som skickar
+// Tre lägen, valda per enhet i Settings (smsMode.ts):
+// - Mac-hjälpare: POST till hjälparen på 127.0.0.1 som skickar via AppleScript.
+//   Inget öppnas; svaret säger direkt om det gick, och loggas som ett mail.
+// - Genväg: kör genvägen "wOrder SMS" som skickar
 //   SMS:et och bekräftar via RPC:n sms_confirm. Vi pollar loggraden och markerar
 //   leverantören klar när den blivit 'sent'.
 // - Annars: öppnar SMS-appen och frågar "Skickat?". Leverantören markeras inte
@@ -30,6 +33,7 @@ const BTN_NO = 'px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-
 export default function SmsLink({ phone, body, log, onSent, className, showIcon = true, label = 'SMS', title }: Props) {
   const [asking, setAsking] = useState(false)
   const [waitingId, setWaitingId] = useState<string | null>(null)
+  const [sendingMac, setSendingMac] = useState(false)
 
   // Senaste callback/namn utan att starta om pollningen vid varje render
   const latest = useRef({ onSent, vendorName: log.vendorName })
@@ -66,6 +70,23 @@ export default function SmsLink({ phone, body, log, onSent, className, showIcon 
     void logSend({ ...log, body, id, pending: true })
     setWaitingId(id)
     window.location.href = smsShortcutUrl({ id, phone, body })
+  }
+
+  const sendViaMac = async () => {
+    setSendingMac(true)
+    try {
+      await macHelperSend(phone, body)
+      await logSend({ ...log, body })
+      toast.success(`SMS skickat till ${log.vendorName}`)
+      onSent()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Misslyckades'
+      toast.error(`${log.vendorName}: ${message}`)
+      // Som för mail: misslyckade försök syns med rött kryss i loggen
+      void logSend({ ...log, body, error: message })
+    } finally {
+      setSendingMac(false)
+    }
   }
 
   // "Klar" när genvägen skickat men bekräftelsen inte nådde fram (t.ex. utan nät)
@@ -115,7 +136,17 @@ export default function SmsLink({ phone, body, log, onSent, className, showIcon 
     )
   }
 
-  if (smsShortcutEnabled()) {
+  const mode = getSmsMode()
+
+  if (mode === 'mac') {
+    return (
+      <button onClick={() => { void sendViaMac() }} disabled={sendingMac} className={`${className} disabled:opacity-50`} title={title}>
+        {sendingMac ? <Loader2 size={11} className="animate-spin inline" /> : showIcon && <Phone size={11} />} {label}
+      </button>
+    )
+  }
+
+  if (mode === 'shortcut') {
     return (
       <button onClick={startShortcut} className={className} title={title}>
         {showIcon && <Phone size={11} />} {label}

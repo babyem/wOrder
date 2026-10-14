@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, Trash2, MapPin, Users, Pencil, Tag, Layers, Ruler, ChevronRight, Link2, GripVertical, Mail, Phone, X, Check, Split, MessageSquare } from 'lucide-react'
 import {
@@ -9,7 +9,8 @@ import { CSS } from '@dnd-kit/utilities'
 import { toSlug } from '../../lib/slug'
 import { vendorContacts, newContactId, type VendorContact, type ContactType } from '../../lib/vendorContacts'
 import type { SplitRule } from '../../lib/vendorSplit'
-import { SMS_SHORTCUT_NAME, smsShortcutEnabled, setSmsShortcutEnabled } from '../../lib/smsShortcut'
+import { SMS_SHORTCUT_NAME } from '../../lib/smsShortcut'
+import { getSmsMode, setSmsMode, macHelperHealth, type SmsMode } from '../../lib/smsMode'
 import { useProducts } from '../../hooks/useProducts'
 import {
   useAdminLocations, useAdminEmployees,
@@ -515,29 +516,59 @@ function VendorSection() {
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
-// Per enhet: SMS-knappen kör genvägen "wOrder SMS" i stället för att öppna Meddelanden.
-// Bara meningsfullt på iPhone/Mac där genvägen är installerad.
-function SmsShortcutSection() {
-  const [on, setOn] = useState(smsShortcutEnabled)
-  const toggle = () => { setSmsShortcutEnabled(!on); setOn(!on) }
+// Per enhet: hur SMS-knappen skickar (smsMode.ts). Genvägen måste vara installerad
+// på enheten, Mac-hjälparen måste köras på datorn (scripts/mac-sms-helper).
+const SMS_MODES: { mode: SmsMode; label: string; help: ReactNode }[] = [
+  { mode: 'messages', label: 'Meddelanden', help: <>Öppnar Meddelanden med texten ifylld och frågar &quot;Skickat?&quot;. Fungerar överallt.</> },
+  { mode: 'shortcut', label: 'Genväg', help: <>Kör genvägen <span className="font-medium text-slate-700 dark:text-zinc-200">{SMS_SHORTCUT_NAME}</span>, som skickar SMS:et och bekräftar till wOrder. Genvägar blinkar förbi. För iPhone.</> },
+  { mode: 'mac', label: 'Mac-hjälpare', help: <>Skickar helt i bakgrunden via Meddelanden på den här Macen. Kräver att Mac-hjälparen är installerad.</> },
+]
+
+function SmsModeSection() {
+  const [mode, setMode] = useState(getSmsMode)
+  const [helper, setHelper] = useState<'idle' | 'checking' | 'ok' | 'missing'>('idle')
+
+  const check = async () => {
+    setHelper('checking')
+    setHelper(await macHelperHealth() ? 'ok' : 'missing')
+  }
+
+  const choose = (m: SmsMode) => {
+    setSmsMode(m)
+    setMode(m)
+    if (m === 'mac') void check()
+  }
 
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-sm">
       <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-50 dark:border-zinc-800">
         <span className="text-slate-400 dark:text-zinc-500"><MessageSquare size={18} /></span>
-        <h2 className="font-semibold text-slate-900 dark:text-zinc-100">SMS via genväg</h2>
+        <h2 className="font-semibold text-slate-900 dark:text-zinc-100">SMS-utskick</h2>
         <span className="text-xs text-slate-400 dark:text-zinc-500">den här enheten</span>
       </div>
-      <div className="flex items-start gap-3 px-5 py-4">
-        <button onClick={toggle} role="switch" aria-checked={on} aria-label="SMS via genväg"
-          className={`relative shrink-0 w-10 h-6 rounded-full transition-colors ${on ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-zinc-800'}`}>
-          <span className={`absolute top-1 w-4 h-4 bg-white dark:bg-zinc-900 rounded-full shadow transition-transform ${on ? 'translate-x-5' : 'translate-x-1'}`} />
-        </button>
-        <p className="text-sm text-slate-500 dark:text-zinc-400">
-          SMS-knappen kör genvägen <span className="font-medium text-slate-700 dark:text-zinc-200">{SMS_SHORTCUT_NAME}</span>, som
-          skickar SMS:et direkt och bekräftar till wOrder — ingen &quot;Skickat?&quot;-fråga. Slå bara på här om genvägen är
-          installerad på den här iPhonen/Macen.
-        </p>
+      <div className="px-5 py-4 space-y-3">
+        <div role="radiogroup" aria-label="SMS-utskick" className="flex gap-1 p-1 rounded-xl bg-slate-100 dark:bg-zinc-800">
+          {SMS_MODES.map(o => (
+            <button key={o.mode} role="radio" aria-checked={mode === o.mode} onClick={() => choose(o.mode)}
+              className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-medium transition-colors ${mode === o.mode
+                ? 'bg-white dark:bg-zinc-900 text-indigo-700 dark:text-indigo-300 shadow-sm'
+                : 'text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-zinc-200'}`}>
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-sm text-slate-500 dark:text-zinc-400">{SMS_MODES.find(o => o.mode === mode)?.help}</p>
+        {mode === 'mac' && (
+          <div className="flex items-center gap-2 text-xs">
+            <button onClick={() => { void check() }} disabled={helper === 'checking'}
+              className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 font-medium hover:bg-slate-200 dark:hover:bg-zinc-700 disabled:opacity-50 transition-colors">
+              Testa anslutning
+            </button>
+            {helper === 'checking' && <Spinner size={14} />}
+            {helper === 'ok' && <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400"><Check size={13} /> Mac-hjälparen svarar</span>}
+            {helper === 'missing' && <span className="text-red-500 dark:text-red-400">Ingen Mac-hjälpare hittades på den här datorn</span>}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -682,8 +713,8 @@ export default function SettingsPage() {
       {/* Vendors */}
       <VendorSection />
 
-      {/* SMS via genväg (per enhet) */}
-      <SmsShortcutSection />
+      {/* SMS-utskick (per enhet) */}
+      <SmsModeSection />
 
       {/* Categories */}
       <MetaSection icon={<Layers size={18} />} title="Categories" items={categories} loading={loadingCats}

@@ -17,6 +17,7 @@ import type { OrderWithDetails } from '../../types'
 import { vendorContacts } from '../../lib/vendorContacts'
 import { buildExpressData, expressOrderCount, mergeExpressLocations, type VendorItem } from '../../lib/express'
 import { splitLocations } from '../../lib/vendorSplit'
+import { normalizeSearch, orderMatchesSearch } from '../../lib/orderSearch'
 import type { Location } from '../../types/database'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -128,7 +129,10 @@ export default function OrdersPage() {
     d.setHours(0, 0, 0, 0)
     return d.toISOString()
   }, [daysBack])
-  const { data: orders, isLoading, refetch } = useOrders({ status, search, fromDate })
+  const { data: orders, isLoading, refetch } = useOrders({ status, fromDate })
+  // Sökningen styr bara vilka kort som visas — express, val och sammanslagning går på alla ordrar
+  const q = normalizeSearch(search)
+  const visibleOrders = useMemo(() => (orders ?? []).filter(o => orderMatchesSearch(o, q)), [orders, q])
   const { data: locations } = useLocations()
   const { data: vendorGaps } = useVendorGaps()
   const gapsByLocation = useMemo(() => {
@@ -187,7 +191,7 @@ export default function OrdersPage() {
 
   // Group orders by location_id
   const ordersByLocation: Record<string, OrderWithDetails[]> = {}
-  for (const order of orders ?? []) {
+  for (const order of visibleOrders) {
     const lid = order.location_id
     if (!ordersByLocation[lid]) ordersByLocation[lid] = []
     ordersByLocation[lid].push(order)
@@ -370,11 +374,28 @@ export default function OrdersPage() {
         <div className="basis-full md:basis-auto md:flex-1 relative">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-zinc-500" />
           <input
+            type="search"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search..."
-            className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-zinc-900"
+            onKeyDown={e => { if (e.key === 'Escape') setSearch('') }}
+            placeholder="Sök produkt, personal eller butik…"
+            className={`w-full pl-9 ${q ? 'pr-28' : 'pr-4'} py-2 rounded-xl border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-zinc-900 [&::-webkit-search-cancel-button]:hidden`}
           />
+          {q && (
+            <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              <span className="text-xs tabular-nums text-slate-400 dark:text-zinc-500 whitespace-nowrap">
+                {visibleOrders.length} {visibleOrders.length === 1 ? 'träff' : 'träffar'}
+              </span>
+              <button
+                onClick={() => setSearch('')}
+                title="Rensa sökningen"
+                aria-label="Rensa sökningen"
+                className="p-1 rounded-lg text-slate-400 dark:text-zinc-500 hover:bg-slate-100 dark:hover:bg-zinc-800 hover:text-slate-700 dark:hover:text-zinc-200 transition-colors"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
         </div>
         <div className="flex-1 md:flex-none flex items-center gap-0.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-1">
           {STATUS_VIEWS.map(v => (
@@ -486,7 +507,8 @@ export default function OrdersPage() {
               <div className="flex gap-4 pb-4 max-md:h-full max-md:pb-0" style={{ minWidth: 'max-content' }}>
                 {sortedLocations.map(loc => {
                   const colOrders = ordersByLocation[loc.id] ?? []
-                  const colGaps = gapsByLocation[loc.id] ?? []
+                  // Spökkorten säger inget om sökningen — dölj dem medan man söker
+                  const colGaps = q ? [] : gapsByLocation[loc.id] ?? []
                   return (
                     <SortableColumn key={loc.id} loc={loc} count={colOrders.length} pendingCount={colOrders.filter(o => o.status === 'pending').length}>
                       {/* Saknas idag: leverantörer som brukar beställas den här veckodagen */}
@@ -498,7 +520,7 @@ export default function OrdersPage() {
                       <AnimatePresence mode="popLayout">
                         {colOrders.length === 0 && colGaps.length === 0 ? (
                           <div className="rounded-2xl border-2 border-dashed border-slate-100 dark:border-zinc-800 h-20 flex items-center justify-center">
-                            <span className="text-xs text-slate-300 dark:text-zinc-600">No orders</span>
+                            <span className="text-xs text-slate-300 dark:text-zinc-600">{q ? 'Inga träffar' : 'No orders'}</span>
                           </div>
                         ) : (
                           colOrders.map(order => {
@@ -512,6 +534,7 @@ export default function OrdersPage() {
                               selectedVendors={orderSelectedVendors}
                               onToggle={(vendor) => toggleSelect(order.id, vendor)}
                               showLocation={false}
+                              highlight={q}
                             />
                             )
                           })

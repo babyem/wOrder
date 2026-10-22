@@ -8,6 +8,7 @@ import { useVendors, useUnits } from '../../hooks/useMetadata'
 import VendorContactButtons from './VendorContactButtons'
 import { vendorContacts } from '../../lib/vendorContacts'
 import { formatSplitText } from '../../lib/vendorSplit'
+import { itemMatchesSearch, orderHasItemMatch } from '../../lib/orderSearch'
 import { supabase } from '../../lib/supabase'
 import toast from 'react-hot-toast'
 import { confirmDialog } from '../../store/confirmStore'
@@ -17,6 +18,7 @@ interface Props {
   selectedVendors?: Set<string>   // which vendor cards of this order are selected
   onToggle?: (vendor: string) => void
   showLocation?: boolean          // false when the surrounding column is already the location
+  highlight?: string              // normaliserad sökning — matchande rader markeras, hopfälld order vecklas ut
 }
 
 // Coarse pointer / no hover: phones and tablets. Double-click is unreliable there.
@@ -37,7 +39,7 @@ function dropPosFromEvent(e: React.MouseEvent, width: number, height: number): D
 
 // forwardRef: the column's <AnimatePresence mode="popLayout"> needs a DOM ref on each card
 // to pop it out of flow and run the exit animation. Without it a deleted card stayed on screen.
-const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, selectedVendors, onToggle, showLocation = true }, ref) {
+const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, selectedVendors, onToggle, showLocation = true, highlight = '' }, ref) {
   const updateStatus = useUpdateOrderStatus()
   const deleteOrder = useDeleteOrder()
   const restoreOrder = useRestoreOrder()
@@ -458,6 +460,7 @@ const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, 
       {items.map(item => {
         const excluded_ = isExcluded(item.id)
         const isOverridden = !!vendorOverrides[item.id]
+        const isHit = itemMatchesSearch(item, highlight)
         return (
           <motion.div
             key={item.id}
@@ -466,14 +469,14 @@ const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, 
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.2 }}
-            className="flex items-center justify-between text-sm group cursor-default select-none py-0.5 overflow-hidden"
+            className={`flex items-center justify-between text-sm group cursor-default select-none py-0.5 overflow-hidden ${isHit ? '-mx-1.5 px-1.5 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 ring-1 ring-indigo-300 dark:ring-indigo-700' : ''}`}
             onDoubleClick={() => toggleExclude(item)}
             onTouchStart={() => { if (!isTouch) return; longPress.current = setTimeout(() => { longPress.current = null; toggleExclude(item) }, 550) }}
             onTouchEnd={() => { if (longPress.current) { clearTimeout(longPress.current); longPress.current = null } }}
             onTouchMove={() => { if (longPress.current) { clearTimeout(longPress.current); longPress.current = null } }}
             title={isTouch ? 'Håll in för att exkludera från beställningen' : 'Double-click to exclude from notification'}
           >
-            <span className={excluded_ ? 'line-through text-red-400' : 'text-slate-700 dark:text-zinc-200'}>
+            <span className={excluded_ ? 'line-through text-red-400' : isHit ? 'font-semibold text-indigo-900 dark:text-indigo-100' : 'text-slate-700 dark:text-zinc-200'}>
               {item.product?.name ?? 'Deleted product'}
             </span>
             <div className="flex items-center gap-1 [@media(hover:none)]:gap-2 shrink-0">
@@ -702,7 +705,8 @@ const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, 
   const isStale = isPending && Date.now() - new Date(order.created_at).getTime() > 24 * 60 * 60 * 1000
 
   // Klar/stoppad order hopfälld: ✓ tid namn · leverantörer ›
-  if (!isPending && !expanded) {
+  // Vid produktträff visas hela kortet, annars syns inte varan man sökte på
+  if (!isPending && !expanded && !orderHasItemMatch(order, highlight)) {
     const vendorsText = vendorEntries.map(([v]) => v).join(', ')
     return (
       <motion.div ref={ref} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.25 }} className="relative">

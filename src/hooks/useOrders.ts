@@ -9,7 +9,8 @@ const MIGRATION_HINT = 'kolumnen deleted_at saknas — kör migration 027 i Supa
 const missingDeletedAt = (error: { message?: string; code?: string }) =>
   !!error.message?.includes('deleted_at')
 
-export function useOrders(filters?: { locationId?: string; status?: string; search?: string; fromDate?: string }) {
+// Sökning sker i klienten (src/lib/orderSearch.ts) — annars hämtas allt om vid varje tangenttryck
+export function useOrders(filters?: { locationId?: string; status?: string; fromDate?: string }) {
   return useQuery({
     queryKey: ['orders', filters],
     queryFn: async (): Promise<OrderWithDetails[]> => {
@@ -45,19 +46,7 @@ export function useOrders(filters?: { locationId?: string; status?: string; sear
         ({ data, error } = await build(false))
       }
       if (error) throw error
-
-      let result = data as OrderWithDetails[]
-
-      if (filters?.search) {
-        const s = filters.search.toLowerCase()
-        result = result.filter(o =>
-          o.employee?.name.toLowerCase().includes(s) ||
-          o.location?.name.toLowerCase().includes(s) ||
-          o.items.some(i => i.product?.name.toLowerCase().includes(s))
-        )
-      }
-
-      return result
+      return data as OrderWithDetails[]
     },
     placeholderData: keepPreviousData,
   })

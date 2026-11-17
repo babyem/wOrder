@@ -17,6 +17,7 @@
 //   GET /api/monthly-report?token=XXX&action=jernhusen           → rapportera till Jernhusen (headless Chromium)
 //
 // För action=send krävs RESEND_API_KEY i miljövariabler (samma nyckel som send-email).
+// För leveransstatus krävs RESEND_STATUS_KEY (Resend-nyckel med "Full access"), annars blir delivery "unknown".
 
 import { gql, getSession, fetchOverviewRaw, dayRangeISO } from "./_lib/qopla.js";
 import { sbSelect } from "./_lib/supabaseAdmin.js";
@@ -623,7 +624,7 @@ export default async function handler(req, res) {
 
   // ----- action=delivery: läs leveransstatus för givna Resend-id (skickar inget) -----
   if (req.query.action === "delivery") {
-    const apiKey = process.env.RESEND_API_KEY;
+    const apiKey = process.env.RESEND_STATUS_KEY || process.env.RESEND_API_KEY;
     if (!apiKey) return res.status(500).json({ error: "RESEND_API_KEY saknas i miljövariabler" });
     const ids = String(req.query.ids || "").split(",").map((x) => x.trim()).filter(Boolean).slice(0, 20);
     if (ids.length === 0) return res.status(400).json({ error: "ange ids=ID1,ID2" });
@@ -672,7 +673,9 @@ export default async function handler(req, res) {
       // Leveransstatus för mejlen till mottagaren (inte kopiorna).
       const sentIds = results.filter((r) => r.status === "sent").map((r) => r.id);
       if (sentIds.length) {
-        const st = await waitForDelivery(apiKey, sentIds);
+        // Läsning av status kräver en Resend-nyckel med "Full access"; den vanliga
+        // RESEND_API_KEY är "Sending access". Sätt RESEND_STATUS_KEY i Vercel.
+        const st = await waitForDelivery(process.env.RESEND_STATUS_KEY || apiKey, sentIds);
         for (const r of results) {
           if (r.status !== "sent") continue;
           const s = st.get(r.id);

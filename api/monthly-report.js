@@ -10,6 +10,8 @@
 //   GET /api/monthly-report?token=XXX&month=2026-05      → JSON, specifik månad
 //   GET /api/monthly-report?token=XXX&action=send&dry=1  → visa vilka mejl som SKULLE skickas
 //   GET /api/monthly-report?token=XXX&action=send        → skicka rapport-mejl via Resend
+//       (+ en kvittokopia per mejl till copyTo, och leveransstatus från Resend i svaret)
+//   GET /api/monthly-report?token=XXX&action=delivery&ids=ID1,ID2 → läs leveransstatus (skickar inget)
 //   GET /api/monthly-report?token=XXX&action=jernhusen&dry=1     → visa vad som SKULLE rapporteras
 //   GET /api/monthly-report?token=XXX&action=jernhusen&dry=form  → logga in + fyll i, skicka inte
 //   GET /api/monthly-report?token=XXX&action=jernhusen           → rapportera till Jernhusen (headless Chromium)
@@ -113,6 +115,9 @@ const EMAIL_DESTINATIONS = [
     center: "Triangeln",
     to: "omsattning.malmo@vasakronan.se",
     from: "rapport@woso.se",
+    // Kvitto: en separat kopia av varje mejl skickas hit (inte som bcc, så att
+    // leveransstatusen för Vasakronan-mejlet förblir entydig i Resend).
+    copyTo: "rapport@woso.se",
     separate: true,
     shops: [
       "61cc937c0746cf344f514c64", // LETS GRAB
@@ -318,7 +323,7 @@ function planEmails(report) {
     if (dest.separate) {
       for (const row of rows) {
         planned.push({
-          center: dest.center, to: dest.to, from: dest.from,
+          center: dest.center, to: dest.to, from: dest.from, copyTo: dest.copyTo,
           subject: `Omsättning ${monthLabel} – ${row.shopName}`,
           text: buildBody(monthLabel, [row]),
           shops: [row.shopName],
@@ -326,7 +331,7 @@ function planEmails(report) {
       }
     } else {
       planned.push({
-        center: dest.center, to: dest.to, from: dest.from,
+        center: dest.center, to: dest.to, from: dest.from, copyTo: dest.copyTo,
         subject: `Omsättning ${monthLabel} – ${dest.center}`,
         text: buildBody(monthLabel, rows),
         shops: rows.map((r) => r.shopName),
@@ -548,6 +553,50 @@ async function sendViaResend({ apiKey, from, to, subject, text }) {
   return data.id;
 }
 
+// Leveransstatus från Resend: last_event = sent | delivered | delivery_delayed |
+// bounced | complained | failed | ... ("sent" = accepterat av Resend, ännu ej levererat).
+async function resendStatus(apiKey, id) {
+  try {
+    const res = await fetch(`https://api.resend.com/emails/${encodeURIComponent(id)}`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { id, delivery: "unknown", error: data?.message || `Resend ${res.status}` };
+    return { id, delivery: data.last_event || "unknown", to: data.to, subject: data.subject, createdAt: data.created_at };
+  } catch (err) {
+    return { id, delivery: "unknown", error: err.message };
+  }
+}
+
+const SETTLED = new Set(["delivered", "bounced", "complained", "failed", "suppressed", "canceled"]);
+
+// Polla tills alla mejl har ett slutligt läge eller tiden tar slut (håll under maxDuration 60 s).
+async function waitForDelivery(apiKey, ids, { timeoutMs = 25000, intervalMs = 4000 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  let statuses = [];
+  do {
+    await new Promise((r) => setTimeout(r, intervalMs));
+    statuses = await Promise.all(ids.map((id) => resendStatus(apiKey, id)));
+    if (statuses.every((s) => SETTLED.has(s.delivery))) break;
+  } while (Date.now() < deadline);
+  return new Map(statuses.map((s) => [s.id, s]));
+}
+
+function buildCopyBody(p, id) {
+  return [
+    `KVITTO – kopia av rapportmejl skickat via wOrder.`,
+    ``,
+    `Till: ${p.to}`,
+    `Ämne: ${p.subject}`,
+    `Skickat: ${new Date().toISOString()}`,
+    `Resend-id: ${id}`,
+    ``,
+    `----- Mejlets innehåll -----`,
+    ``,
+    p.text,
+  ].join("\n");
+}
+
 // ---------- Handler ----------
 export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).end();
@@ -572,6 +621,16 @@ export default async function handler(req, res) {
     ({ year, month } = previousMonth());
   }
 
+  // ----- action=delivery: läs leveransstatus för givna Resend-id (skickar inget) -----
+  if (req.query.action === "delivery") {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) return res.status(500).json({ error: "RESEND_API_KEY saknas i miljövariabler" });
+    const ids = String(req.query.ids || "").split(",").map((x) => x.trim()).filter(Boolean).slice(0, 20);
+    if (ids.length === 0) return res.status(400).json({ error: "ange ids=ID1,ID2" });
+    const results = await Promise.all(ids.map((id) => resendStatus(apiKey, id)));
+    return res.status(200).json({ results });
+  }
+
   try {
     const report = await computeReport(year, month);
 
@@ -588,18 +647,47 @@ export default async function handler(req, res) {
 
       const results = [];
       for (const p of planned) {
+        let r;
         try {
           const id = await sendViaResend({ apiKey, from: p.from, to: p.to, subject: p.subject, text: p.text });
-          results.push({ to: p.to, subject: p.subject, status: "sent", id });
+          r = { to: p.to, subject: p.subject, status: "sent", id };
         } catch (err) {
-          results.push({ to: p.to, subject: p.subject, status: "error", error: err.message });
+          r = { to: p.to, subject: p.subject, status: "error", error: err.message };
+        }
+        // Kvittokopia (separat mejl). Ett fel här påverkar inte huvudutskicket.
+        if (r.status === "sent" && p.copyTo) {
+          try {
+            r.copyId = await sendViaResend({
+              apiKey, from: p.from, to: p.copyTo,
+              subject: `[Kvitto] ${p.subject}`, text: buildCopyBody(p, r.id),
+            });
+            r.copyTo = p.copyTo;
+          } catch (err) {
+            r.copyError = err.message;
+          }
+        }
+        results.push(r);
+      }
+
+      // Leveransstatus för mejlen till mottagaren (inte kopiorna).
+      const sentIds = results.filter((r) => r.status === "sent").map((r) => r.id);
+      if (sentIds.length) {
+        const st = await waitForDelivery(apiKey, sentIds);
+        for (const r of results) {
+          if (r.status !== "sent") continue;
+          const s = st.get(r.id);
+          r.delivery = s?.delivery || "unknown";
+          if (s?.error) r.deliveryError = s.error;
         }
       }
+
       const allOk = results.every((r) => r.status === "sent");
       return res.status(allOk ? 200 : 207).json({
         month: report.month, monthLabel,
         sent: results.filter((r) => r.status === "sent").length,
         failed: results.filter((r) => r.status === "error").length,
+        delivered: results.filter((r) => r.delivery === "delivered").length,
+        notDelivered: results.filter((r) => r.status === "sent" && r.delivery !== "delivered").length,
         results,
       });
     }

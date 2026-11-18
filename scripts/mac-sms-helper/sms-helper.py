@@ -7,7 +7,7 @@ SMS-läget "Mac-hjälpprogram" är valt i Settings. SMS:et skickas via
 Meddelanden med AppleScript — inga fönster, ingen Genvägar-app.
 
   GET  /health                     -> {"ok": true, "version": ...}
-  POST /send  {"phone", "body"}    -> {"ok": true} | {"error": "..."}
+  POST /send  {"phone", "body"}    -> {"ok": true, "service": "iMessage"|"SMS"} | {"error": "..."}
 
 Startas av launchd (se install.sh). Logg: ~/Library/Logs/worder-sms.log
 
@@ -22,7 +22,7 @@ import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = 1
+VERSION = 2
 PORT = 47821
 ALLOWED_ORIGINS = {
     'https://worder.woso.se',
@@ -31,18 +31,34 @@ ALLOWED_ORIGINS = {
 ALLOWED_HOSTS = {f'127.0.0.1:{PORT}', f'localhost:{PORT}'}
 MAX_BODY = 4000
 
-# Skicka som SMS om vidarebefordran från iPhonen är påslagen, annars iMessage.
+# iMessage om det redan finns en iMessage-tråd med numret (tråd-id "any;-;+46…",
+# äldre macOS "iMessage;-;+46…"), annars SMS. På Mac faller iMessage inte
+# tillbaka till SMS av sig själv, så ett nytt/okänt nummer får alltid SMS.
+# Tredje argumentet "dry" = välj tjänst men skicka inte (för test).
+# Returnerar tjänsten som användes: "iMessage" eller "SMS".
 APPLESCRIPT = '''
 on run argv
   set phoneNum to item 1 of argv
   set msg to item 2 of argv
+  set dryRun to ((count of argv) > 2 and item 3 of argv is "dry")
   tell application "Messages"
+    set useIMessage to false
+    repeat with chatId in {"any;-;" & phoneNum, "iMessage;-;" & phoneNum}
+      try
+        set c to chat id (contents of chatId)
+        if (service type of account of c) is iMessage then set useIMessage to true
+      end try
+      if useIMessage then exit repeat
+    end repeat
     set svc to missing value
-    try
-      set svc to 1st account whose service type = SMS and enabled is true
-    end try
+    if not useIMessage then
+      try
+        set svc to 1st account whose service type = SMS and enabled is true
+      end try
+    end if
     if svc is missing value then set svc to 1st account whose service type = iMessage
-    send msg to participant phoneNum of svc
+    if not dryRun then send msg to participant phoneNum of svc
+    return (service type of svc) as text
   end tell
 end run
 '''
@@ -51,15 +67,23 @@ send_lock = threading.Lock()
 
 
 def normalize_phone(raw):
-    """'+46 76-219 17 89' -> '+46762191789'. None om det inte ser ut som ett nummer."""
+    """'+46 76-219 17 89' / '076-219 17 89' -> '+46762191789' (samma form som
+    Meddelandens tråd-id). Svenska nummer antas när landsnummer saknas.
+    None om det inte ser ut som ett nummer."""
     phone = re.sub(r'[\s\-().]', '', str(raw or ''))
-    return phone if re.fullmatch(r'\+?\d{6,15}', phone) else None
+    if phone.startswith('00'):
+        phone = '+' + phone[2:]
+    elif phone.startswith('0'):
+        phone = '+46' + phone[1:]
+    return phone if re.fullmatch(r'\+\d{6,15}', phone) else None
 
 
-def send_sms(phone, body):
+def send_sms(phone, body, dry_run=False):
+    """Skickar och returnerar tjänsten som användes ("iMessage"/"SMS")."""
+    args = ['/usr/bin/osascript', '-', phone, body] + (['dry'] if dry_run else [])
     with send_lock:
         r = subprocess.run(
-            ['/usr/bin/osascript', '-', phone, body],
+            args,
             input=APPLESCRIPT, capture_output=True, text=True, timeout=30,
         )
     if r.returncode != 0:
@@ -67,6 +91,7 @@ def send_sms(phone, body):
         if '-1743' in err:
             err = 'Mac-hjälparen saknar behörighet att styra Meddelanden (Systeminställningar → Integritet och säkerhet → Automatisering)'
         raise RuntimeError(err or f'osascript exit {r.returncode}')
+    return r.stdout.strip()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -131,14 +156,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._reply(400, {'error': 'Tomt eller för långt meddelande'})
 
         try:
-            send_sms(phone, body)
+            service = send_sms(phone, body)
         except subprocess.TimeoutExpired:
             return self._reply(504, {'error': 'Meddelanden svarade inte'})
         except RuntimeError as e:
             sys.stderr.write(f'send to {phone} failed: {e}\n')
             return self._reply(500, {'error': str(e)})
-        sys.stderr.write(f'sent to {phone} ({len(body)} chars)\n')
-        self._reply(200, {'ok': True})
+        sys.stderr.write(f'sent to {phone} via {service} ({len(body)} chars)\n')
+        self._reply(200, {'ok': True, 'service': service})
 
 
 if __name__ == '__main__':

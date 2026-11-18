@@ -75,9 +75,9 @@ export default function SmsLink({ phone, body, log, onSent, className, showIcon 
   const sendViaMac = async () => {
     setSendingMac(true)
     try {
-      await macHelperSend(phone, body)
+      const service = await macHelperSend(phone, body)
       await logSend({ ...log, body })
-      toast.success(`SMS skickat till ${log.vendorName}`)
+      toast.success(`${service} skickat till ${log.vendorName}`)
       onSent()
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Misslyckades'

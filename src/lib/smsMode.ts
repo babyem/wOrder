@@ -41,8 +41,11 @@ export async function macHelperHealth(): Promise<boolean> {
   }
 }
 
-/** Skickar SMS:et via Mac-hjälparen. Kastar med ett läsbart fel om det inte gick. */
-export async function macHelperSend(phone: string, body: string): Promise<void> {
+/**
+ * Skickar via Mac-hjälparen och returnerar tjänsten den valde ("iMessage" om det
+ * finns en iMessage-tråd med numret, annars "SMS"). Kastar med ett läsbart fel.
+ */
+export async function macHelperSend(phone: string, body: string): Promise<string> {
   let res: Response
   try {
     res = await fetch(`${MAC_HELPER_URL}/send`, {
@@ -59,4 +62,6 @@ export async function macHelperSend(phone: string, body: string): Promise<void> 
     const data = await res.json().catch(() => null) as { error?: string } | null
     throw new Error(data?.error ?? `Mac-hjälparen svarade ${res.status}`)
   }
+  const data = await res.json().catch(() => null) as { service?: string } | null
+  return data?.service || 'SMS'
 }

@@ -26,6 +26,12 @@ Systeminställningar → Integritet och säkerhet → Automatisering → python3
 
 Chrome kan fråga om sidan får komma åt enheter på det lokala nätverket → **Tillåt**.
 
+## iMessage eller SMS?
+
+Finns det redan en iMessage-tråd med numret i Meddelanden skickas **iMessage**, annars **SMS**.
+Mac faller inte tillbaka från iMessage till SMS av sig själv (iPhone gör det), så ett nytt nummer
+får SMS tills ni har iMessagat varandra. Nummer utan landsnummer (`07…`) tolkas som svenska.
+
 ## Krav
 
 - Vanliga SMS går via iPhonen: iPhone → Inställningar → Meddelanden → Vidarebefordra SMS → Macen på.

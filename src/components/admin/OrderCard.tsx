@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, forwardRef } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CheckCircle, RotateCcw, Trash2, FileText, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag, AlertTriangle, AlertCircle, Copy, Ban, MoreHorizontal, ChevronRight, ChevronUp } from 'lucide-react'
+import { CheckCircle, RotateCcw, Trash2, FileText, X, Bell, CheckSquare, Square, Loader2, Tag, ShoppingBag, AlertTriangle, AlertCircle, Copy, Ban, MoreHorizontal, ChevronRight, ChevronUp, Plus } from 'lucide-react'
 import type { Order, OrderWithDetails } from '../../types'
 import { useUpdateOrderStatus, useDeleteOrder, useRestoreOrder, useUpdateOrderItem, useMarkVendorDone, useUpdateAdminNote, useDeleteOrderItems } from '../../hooks/useOrders'
 import { useVendors, useUnits } from '../../hooks/useMetadata'
 import VendorContactButtons from './VendorContactButtons'
+import AddItemModal from './AddItemModal'
 import { vendorContacts } from '../../lib/vendorContacts'
 import { formatSplitText } from '../../lib/vendorSplit'
 import { itemMatchesSearch, orderHasItemMatch } from '../../lib/orderSearch'
@@ -57,6 +58,8 @@ const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, 
   const [celebrate, setCelebrate] = useState(false)
   // Klara ordrar visas som en rad; tryck vecklar ut hela kortet
   const [expanded, setExpanded] = useState(false)
+  // Modal för att lägga till en produkt i ordern (bara pending)
+  const [adding, setAdding] = useState(false)
 
   const triggerCelebrate = () => {
     setCelebrate(true)
@@ -894,6 +897,12 @@ const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, 
           {/* Single vendor without a label row: copy lives up here instead of on an otherwise empty row */}
           {!isMultiVendor && !showVendorLabel(firstVendor) && copyButton(firstVendor)}
           {isPending && (
+            <button onClick={e => { e.stopPropagation(); setAdding(true) }} title="Lägg till produkt" aria-label="Lägg till produkt"
+              className="p-1 [@media(hover:none)]:p-2 [@media(hover:none)]:-my-1 rounded-lg text-slate-400 dark:text-zinc-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950 transition-colors">
+              <Plus size={14} />
+            </button>
+          )}
+          {isPending && (
             <button onClick={handleStop} disabled={updateStatus.isPending} title="Stoppa — ingen beställning"
               className="p-1 [@media(hover:none)]:p-2 [@media(hover:none)]:-my-1 rounded-lg text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-200/60 dark:hover:bg-zinc-700 disabled:opacity-50 transition-colors">
               <Ban size={13} />
@@ -1054,6 +1063,18 @@ const OrderCard = forwardRef<HTMLDivElement, Props>(function OrderCard({ order, 
         </motion.div>
       )}
     </AnimatePresence>
+
+    {isPending && (
+      <AddItemModal
+        order={order}
+        open={adding}
+        onClose={() => setAdding(false)}
+        orderVendors={allVendorNames}
+        effectiveVendor={effectiveVendor}
+        // Leverantören var redan klarmarkerad — nya raden är inte beställd, så den ska skickas igen
+        onAdded={vendor => { if (doneVendors.has(vendor)) markVendorDone(vendor, false) }}
+      />
+    )}
     </motion.div>
   )
 })

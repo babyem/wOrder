@@ -146,6 +146,36 @@ export function useUpdateOrderItem() {
   })
 }
 
+// Backoffice lägger till en rad i en befintlig order. mergeInto = produkten finns
+// redan på ordern, då ökas antalet på den raden i stället för att skapa en dubblett.
+export function useAddOrderItem() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ orderId, productId, quantity, mergeInto }: {
+      orderId: string
+      productId: string
+      quantity: number
+      mergeInto?: { id: string; quantity: number }
+    }) => {
+      if (mergeInto) {
+        const { data, error } = await supabase
+          .from('order_items')
+          .update({ quantity: mergeInto.quantity + quantity })
+          .eq('id', mergeInto.id)
+          .select('id')
+        if (error) throw error
+        if (!data?.length) throw new Error('RLS blocked the update — add an update policy for order_items')
+        return
+      }
+      const { error } = await supabase
+        .from('order_items')
+        .insert({ order_id: orderId, product_id: productId, quantity })
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['orders'] }),
+  })
+}
+
 export function useMarkVendorDone() {
   const qc = useQueryClient()
   return useMutation({
